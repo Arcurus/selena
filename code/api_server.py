@@ -463,10 +463,14 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.send_json({'error': 'Unauthorized'}, 401)
                 return
             # Get all todos
-            status = parsed.query.split('status=')[1].split('&')[0] if 'status=' in parsed.query else None
-            sort_by = parsed.query.split('sort_by=')[1].split('&')[0] if 'sort_by=' in parsed.query else 'priority'
-            todos = todo_manager.get_all_todos(status=status, sort_by=sort_by)
-            summary = todo_manager.get_summary()
+            query = parse_qs(parsed.query)
+            status = query.get('status', [None])[0]
+            sort_by = query.get('sort_by', ['priority'])[0]
+            sensitive = None
+            if 'sensitive' in query:
+                sensitive = query['sensitive'][0].lower() == 'true'
+            todos = todo_manager.get_all_todos(status=status, sort_by=sort_by, sensitive=sensitive)
+            summary = todo_manager.get_summary(sensitive=sensitive)
             self.send_json({'todos': todos, 'summary': summary})
             return
         
@@ -474,7 +478,10 @@ class RequestHandler(BaseHTTPRequestHandler):
             if not self.authenticate():
                 self.send_json({'error': 'Unauthorized'}, 401)
                 return
-            self.send_json(todo_manager.get_summary())
+            sensitive = None
+            if 'sensitive' in parsed.query:
+                sensitive = parsed.query.split('sensitive=')[1].split('&')[0].lower() == 'true'
+            self.send_json(todo_manager.get_summary(sensitive=sensitive))
             return
         
         if path == '/api/todos/add':
@@ -486,10 +493,13 @@ class RequestHandler(BaseHTTPRequestHandler):
             short_desc = query.get('short_desc', [''])[0]
             long_desc = query.get('long_desc', [''])[0]
             priority = int(query.get('priority', ['5'])[0])
+            sensitive = query.get('sensitive', ['false'])[0].lower() == 'true'
+            parent_id = query.get('parent_id', [None])[0] if 'parent_id=' in parsed.query else None
+            estimated_llm_calls = int(query.get('estimated_llm_calls', ['0'])[0]) if 'estimated_llm_calls=' in parsed.query else None
             if not short_desc:
                 self.send_json({'success': False, 'error': 'short_desc required'}, 400)
                 return
-            todo = todo_manager.add_todo(short_desc, long_desc, priority)
+            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls)
             self.send_json({'success': True, 'todo': todo})
             return
         
@@ -508,11 +518,52 @@ class RequestHandler(BaseHTTPRequestHandler):
             if 'long_desc' in query: updates['long_desc'] = query['long_desc'][0]
             if 'priority' in query: updates['priority'] = int(query['priority'][0])
             if 'status' in query: updates['status'] = query['status'][0]
+            if 'sensitive' in query: updates['sensitive'] = query['sensitive'][0].lower() == 'true'
+            if 'parent_id' in query: updates['parent_id'] = query['parent_id'][0] if query['parent_id'][0] else None
+            if 'estimated_llm_calls' in query: updates['estimated_llm_calls'] = int(query['estimated_llm_calls'][0]) if query['estimated_llm_calls'][0] else None
             todo = todo_manager.update_todo(todo_id, **updates)
             if todo:
                 self.send_json({'success': True, 'todo': todo})
             else:
                 self.send_json({'success': False, 'error': 'Todo not found'}, 404)
+            return
+        
+        if path == '/api/todos/children':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            query = parse_qs(parsed.query)
+            parent_id = query.get('parent_id', [''])[0]
+            if not parent_id:
+                self.send_json({'success': False, 'error': 'parent_id required'}, 400)
+                return
+            children = todo_manager.get_children(parent_id)
+            self.send_json({'children': children})
+            return
+        
+        if path == '/api/todos/split':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            query = parse_qs(parsed.query)
+            todo_id = query.get('id', [''])[0]
+            if not todo_id:
+                self.send_json({'success': False, 'error': 'id required'}, 400)
+                return
+            # Parse subtasks from query
+            subtask_titles = query.get('subtasks', [''])[0].split('|||') if 'subtasks=' in parsed.query else []
+            if not subtask_titles or not subtask_titles[0]:
+                self.send_json({'success': False, 'error': 'subtasks required (comma or ||| separated)'}, 400)
+                return
+            subtasks = []
+            for title in subtask_titles:
+                if title.strip():
+                    subtasks.append({'short_desc': title.strip()})
+            created = todo_manager.split_todo(todo_id, subtasks)
+            if created is None:
+                self.send_json({'success': False, 'error': 'Todo not found'}, 404)
+            else:
+                self.send_json({'success': True, 'subtasks': created})
             return
         
         if path == '/api/todos/delete':

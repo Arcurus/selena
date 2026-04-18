@@ -355,7 +355,60 @@
             <div class="tab-content" id="tab-looseends">
                 <div class="services-panel">
                     <h2>🎯 Loose Ends / Todos</h2>
-                    <div id="todoSummary" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px;"></div>
+                    
+                    <!-- Filter Controls -->
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                        <select id="todoFilter" onchange="loadTodos()" style="padding: 8px 12px; background: var(--bg-dark); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
+                            <option value="">All Status</option>
+                            <option value="open">Open</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="done">Done</option>
+                        </select>
+                        <select id="todoSensitive" onchange="loadTodos()" style="padding: 8px 12px; background: var(--bg-dark); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
+                            <option value="">All Types</option>
+                            <option value="false">Non-Sensitive</option>
+                            <option value="true">Sensitive</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Add Todo Form -->
+                    <div style="background: var(--bg-dark); border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid var(--accent-glow);">
+                        <h3 style="color: var(--accent-lunar); margin-bottom: 15px;">Add New Todo</h3>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                            <div class="setting-item" style="margin-bottom: 0;">
+                                <label>Title *</label>
+                                <input type="text" id="todoTitle" placeholder="What needs to be done?" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
+                            </div>
+                            <div class="setting-item" style="margin-bottom: 0;">
+                                <label>Priority (1-10)</label>
+                                <input type="number" id="todoPriority" value="5" min="1" max="10" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
+                            </div>
+                            <div class="setting-item" style="margin-bottom: 0;">
+                                <label>Parent Todo ID</label>
+                                <input type="text" id="todoParentId" placeholder="Optional parent ID" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                            <div class="setting-item" style="margin-bottom: 0;">
+                                <label>Estimated LLM Calls</label>
+                                <input type="number" id="todoLlmCalls" placeholder="0" min="0" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
+                            </div>
+                            <div class="setting-item" style="margin-bottom: 0;">
+                                <label>Sensitive?</label>
+                                <select id="todoSensitiveFlag" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
+                                    <option value="false">No (public)</option>
+                                    <option value="true">Yes (private)</option>
+                                </select>
+                            </div>
+                            <div class="setting-item" style="margin-bottom: 0;">
+                                <label>Description</label>
+                                <input type="text" id="todoDesc" placeholder="Optional description" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
+                            </div>
+                        </div>
+                        <button onclick="addTodo()" style="padding: 10px 20px; background: var(--accent-lunar); border: none; border-radius: 8px; color: white; cursor: pointer;">Add Todo</button>
+                    </div>
+                    
+                    <div id="todoSummary" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px;"></div>
                     <div id="todoList" style="max-height: 600px; overflow-y: auto;"></div>
                 </div>
             </div>
@@ -593,13 +646,79 @@
         
         async function loadTodos() {
             try {
-                const response = await fetch('/api/todos', {
+                const status = document.getElementById('todoFilter').value;
+                const sensitive = document.getElementById('todoSensitive').value;
+                let url = '/api/todos?';
+                if (status) url += `status=${status}&`;
+                if (sensitive) url += `sensitive=${sensitive}&`;
+                const response = await fetch(url, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json();
                 renderTodos(data.todos, data.summary);
             } catch (e) {
                 console.error('Failed to load todos:', e);
+            }
+        }
+        
+        async function addTodo() {
+            const title = document.getElementById('todoTitle').value.trim();
+            const priority = parseInt(document.getElementById('todoPriority').value) || 5;
+            const parentId = document.getElementById('todoParentId').value.trim() || null;
+            const llmCalls = parseInt(document.getElementById('todoLlmCalls').value) || null;
+            const sensitive = document.getElementById('todoSensitiveFlag').value === 'true';
+            const desc = document.getElementById('todoDesc').value.trim();
+            
+            if (!title) {
+                alert('Title is required!');
+                return;
+            }
+            
+            try {
+                let url = `/api/todos/add?short_desc=${encodeURIComponent(title)}&priority=${priority}`;
+                if (parentId) url += `&parent_id=${encodeURIComponent(parentId)}`;
+                if (llmCalls) url += `&estimated_llm_calls=${llmCalls}`;
+                if (sensitive) url += `&sensitive=true`;
+                if (desc) url += `&long_desc=${encodeURIComponent(desc)}`;
+                
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    // Clear form
+                    document.getElementById('todoTitle').value = '';
+                    document.getElementById('todoDesc').value = '';
+                    document.getElementById('todoParentId').value = '';
+                    document.getElementById('todoLlmCalls').value = '';
+                    // Reload todos
+                    loadTodos();
+                } else {
+                    alert('Failed to add todo: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                console.error('Failed to add todo:', e);
+                alert('Failed to add todo');
+            }
+        }
+        
+        async function splitTodo(todoId) {
+            const subtasks = prompt('Enter subtasks (separated by comma or |||):');
+            if (!subtasks) return;
+            
+            try {
+                const encoded = encodeURIComponent(subtasks.replace(/,/g, '|||'));
+                const response = await fetch(`/api/todos/split?id=${todoId}&subtasks=${encoded}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    loadTodos();
+                } else {
+                    alert('Failed to split todo: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                console.error('Failed to split todo:', e);
             }
         }
         
@@ -623,32 +742,45 @@
                         <h3>Done</h3>
                         <div class="value" style="color: var(--success)">${summary.done}</div>
                     </div>
+                    <div class="cost-card">
+                        <h3>LLM Calls</h3>
+                        <div class="value" style="color: var(--accent-lunar)">${summary.open_llm_calls || 0}</div>
+                    </div>
                 `;
             }
             
             // Render todo list
             if (todos && todos.length > 0) {
-                const todoHtml = todos.map(todo => `
-                    <div class="todo-card" style="margin-bottom: 15px; padding: 15px; background: var(--bg-dark); border-radius: 10px; border: 1px solid ${getPriorityColor(todo.priority)}">
+                const todoHtml = todos.map(todo => {
+                    const indent = todo.parent_id ? 'margin-left: 20px; border-left: 3px solid var(--accent-glow);' : '';
+                    const isChild = todo.parent_id;
+                    return `
+                    <div class="todo-card" style="margin-bottom: 15px; padding: 15px; background: var(--bg-dark); border-radius: 10px; border: 1px solid ${getPriorityColor(todo.priority)}; ${indent}">
                         <div style="display: flex; justify-content: space-between; align-items: start;">
                             <div style="flex: 1;">
-                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap;">
                                     <span class="priority-badge" style="background: ${getPriorityColor(todo.priority)}; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">P${todo.priority}</span>
                                     <span class="status-badge" style="background: ${getStatusColor(todo.status)}; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">${todo.status}</span>
+                                    ${todo.sensitive ? '<span style="background: var(--danger); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">🔒 Sensitive</span>' : ''}
+                                    ${isChild ? '<span style="background: var(--accent-glow); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">↳ Child</span>' : ''}
+                                    ${todo.estimated_llm_calls ? `<span style="background: var(--working); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">🤖 ${todo.estimated_llm_calls} calls</span>` : ''}
                                 </div>
                                 <h4 style="margin-bottom: 5px;">${todo.short_desc}</h4>
                                 ${todo.long_desc ? `<p style="color: var(--text-secondary); font-size: 0.85rem;">${todo.long_desc}</p>` : ''}
-                                <div style="margin-top: 10px; font-size: 0.75rem; color: var(--text-secondary);">
-                                    ID: ${todo.id} | Created: ${new Date(todo.created_at).toLocaleString()}
+                                <div style="margin-top: 10px; font-size: 0.75rem; color: var(--text-secondary); flex-wrap: wrap; display: flex; gap: 10px;">
+                                    <span>ID: ${todo.id}</span>
+                                    ${todo.parent_id ? `<span>Parent: ${todo.parent_id}</span>` : ''}
+                                    <span>Created: ${new Date(todo.created_at).toLocaleString()}</span>
                                 </div>
                             </div>
-                            <div style="display: flex; gap: 5px;">
+                            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                                ${!isChild ? `<button onclick="splitTodo('${todo.id}')" style="background: var(--shiba-orange); border: none; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;" title="Split into subtasks">⟷</button>` : ''}
                                 <button onclick="markTodoStatus('${todo.id}', 'in_progress')" style="background: var(--working); border: none; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">▶</button>
                                 <button onclick="markTodoStatus('${todo.id}', 'done')" style="background: var(--success); border: none; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">✓</button>
                             </div>
                         </div>
                     </div>
-                `).join('');
+                `}).join('');
                 document.getElementById('todoList').innerHTML = todoHtml;
             } else {
                 document.getElementById('todoList').innerHTML = '<p style="color: var(--text-secondary);">No loose ends! Everything is under control. 🌙</p>';

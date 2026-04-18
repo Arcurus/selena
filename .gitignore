@@ -2,6 +2,7 @@
 .env
 .env.*
 *.env
+todos.env  # Sensitive todos (stored separately from public todos.json)
 
 # Data files (project operational data - SAFE to commit for backup)
 # Note: Only .env files contain sensitive data, other data can be in git

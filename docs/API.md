@@ -74,6 +74,9 @@ Get all todos, optionally filtered by status and sorted.
       "long_desc": "Display loose ends in web interface...",
       "priority": 9,
       "status": "open",
+      "sensitive": false,
+      "parent_id": null,
+      "estimated_llm_calls": 10,
       "created_at": "2026-04-19T00:05:56.318686",
       "updated_at": "2026-04-19T00:05:56.318698"
     }
@@ -83,15 +86,20 @@ Get all todos, optionally filtered by status and sorted.
     "open": 4,
     "in_progress": 0,
     "done": 1,
+    "total_llm_calls": 50,
+    "open_llm_calls": 30,
     "top_priority": [...]
   }
 }
 ```
 
 ### Get Todo Summary
-**GET** `/api/todos/summary`
+**GET** `/api/todos/summary?sensitive=true|false`
 
 Get a quick summary of all todos.
+
+**Parameters:**
+- `sensitive` (optional): Filter by sensitive status - `true` or `false`
 
 **Response:**
 ```json
@@ -100,12 +108,14 @@ Get a quick summary of all todos.
   "open": 4,
   "in_progress": 0,
   "done": 1,
+  "total_llm_calls": 50,
+  "open_llm_calls": 30,
   "top_priority": [...]
 }
 ```
 
 ### Add Todo
-**POST** `/api/todos/add?short_desc=TITLE&long_desc=DESCRIPTION&priority=9`
+**POST** `/api/todos/add?short_desc=TITLE&long_desc=DESCRIPTION&priority=9&sensitive=false&parent_id=ID&estimated_llm_calls=10`
 
 Add a new todo.
 
@@ -113,6 +123,9 @@ Add a new todo.
 - `short_desc` (required): Brief title (1-200 chars)
 - `long_desc` (optional): Detailed description
 - `priority` (optional): 1-10, 10 is highest (default: 5)
+- `sensitive` (optional): If `true`, stored in `todos.env` NOT in git (default: false)
+- `parent_id` (optional): Parent todo ID for hierarchical todos
+- `estimated_llm_calls` (optional): Estimated LLM calls for this task
 
 **Response:**
 ```json
@@ -124,6 +137,9 @@ Add a new todo.
     "long_desc": "Detailed description",
     "priority": 9,
     "status": "open",
+    "sensitive": false,
+    "parent_id": null,
+    "estimated_llm_calls": 10,
     "created_at": "2026-04-19T00:00:00.000000",
     "updated_at": "2026-04-19T00:00:00.000000"
   }
@@ -131,7 +147,7 @@ Add a new todo.
 ```
 
 ### Update Todo
-**POST** `/api/todos/update?id=ID&short_desc=TITLE&long_desc=DESCRIPTION&priority=9&status=status`
+**POST** `/api/todos/update?id=ID&short_desc=TITLE&long_desc=DESCRIPTION&priority=9&status=status&sensitive=true&parent_id=ID&estimated_llm_calls=20`
 
 Update an existing todo.
 
@@ -141,12 +157,57 @@ Update an existing todo.
 - `long_desc` (optional): New description
 - `priority` (optional): New priority (1-10)
 - `status` (optional): New status (`open`, `in_progress`, `done`)
+- `sensitive` (optional): If `true`, moves to `todos.env`
+- `parent_id` (optional): New parent ID (use empty to remove hierarchy)
+- `estimated_llm_calls` (optional): Updated estimate
 
 **Response:**
 ```json
 {
   "success": true,
   "todo": { ... updated todo ... }
+}
+```
+
+### Get Children
+**GET** `/api/todos/children?parent_id=ID`
+
+Get all child todos of a parent todo.
+
+**Parameters:**
+- `parent_id` (required): Parent todo ID
+
+**Response:**
+```json
+{
+  "children": [
+    {
+      "id": "child123",
+      "short_desc": "Subtask 1",
+      "parent_id": "parent123",
+      ...
+    }
+  ]
+}
+```
+
+### Split Todo
+**POST** `/api/todos/split?id=ID&subtasks=TASK1|||TASK2|||TASK3`
+
+Split a big todo into smaller subtasks.
+
+**Parameters:**
+- `id` (required): Parent todo ID to split
+- `subtasks` (required): Subtask titles separated by `|||` (or comma which auto-converts)
+
+**Response:**
+```json
+{
+  "success": true,
+  "subtasks": [
+    { "id": "sub1", "short_desc": "Subtask 1", "parent_id": "parent123", ... },
+    { "id": "sub2", "short_desc": "Subtask 2", "parent_id": "parent123", ... }
+  ]
 }
 ```
 
@@ -166,7 +227,7 @@ Mark a todo as done.
 ### Delete Todo
 **POST** `/api/todos/delete?id=ID`
 
-Delete a todo.
+Delete a todo (and optionally all its children).
 
 **Response:**
 ```json
