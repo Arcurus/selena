@@ -311,6 +311,7 @@
                 <div class="tab active" onclick="showTab('services')">Services</div>
                 <div class="tab" onclick="showTab('projects')">Projects</div>
                 <div class="tab" onclick="showTab('looseends')">🎯 Loose Ends</div>
+                <div class="tab" onclick="showTab('knowledge')">📚 Knowledge</div>
                 <div class="tab" onclick="showTab('activity')">Activity</div>
                 <div class="tab" onclick="showTab('cost')">💰 Cost</div>
                 <div class="tab" onclick="showTab('settings')">Settings</div>
@@ -356,6 +357,54 @@
                     <h2>🎯 Loose Ends / Todos</h2>
                     <div id="todoSummary" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px;"></div>
                     <div id="todoList" style="max-height: 600px; overflow-y: auto;"></div>
+                </div>
+            </div>
+            
+            <!-- Knowledge Base Tab -->
+            <div class="tab-content" id="tab-knowledge">
+                <div class="services-panel">
+                    <h2>📚 Knowledge Base</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 20px;">Lessons learned, skills, patterns, and references</p>
+                    
+                    <!-- Add Entry Form -->
+                    <div style="background: var(--bg-dark); border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid var(--accent-glow);">
+                        <h3 style="color: var(--accent-lunar); margin-bottom: 15px;">Add New Entry</h3>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                            <div class="setting-item" style="margin-bottom: 0;">
+                                <label>Category</label>
+                                <select id="kbCategory" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
+                                    <option value="lessons">Lessons</option>
+                                    <option value="skills">Skills</option>
+                                    <option value="patterns">Patterns</option>
+                                    <option value="references">References</option>
+                                </select>
+                            </div>
+                            <div class="setting-item" style="margin-bottom: 0;">
+                                <label>Title</label>
+                                <input type="text" id="kbTitle" placeholder="Entry title" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
+                            </div>
+                        </div>
+                        <div class="setting-item" style="margin-bottom: 15px;">
+                            <label>Content</label>
+                            <textarea id="kbContent" placeholder="Detailed content..." rows="3" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary); resize: vertical;"></textarea>
+                        </div>
+                        <div class="setting-item" style="margin-bottom: 15px;">
+                            <label>Tags (comma-separated)</label>
+                            <input type="text" id="kbTags" placeholder="api, error-handling, best-practices" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
+                        </div>
+                        <button onclick="addKnowledgeEntry()" style="padding: 10px 20px; background: var(--accent-lunar); border: none; border-radius: 8px; color: white; cursor: pointer;">Add Entry</button>
+                    </div>
+                    
+                    <!-- Category Filters -->
+                    <div id="kbCategories" style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;"></div>
+                    
+                    <!-- Search -->
+                    <div style="margin-bottom: 20px;">
+                        <input type="text" id="kbSearch" placeholder="Search knowledge base..." onkeyup="if(event.key==='Enter')loadKnowledge()" style="width: 100%; padding: 10px; background: var(--bg-dark); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
+                    </div>
+                    
+                    <!-- Knowledge Entries -->
+                    <div id="kbEntries" style="max-height: 600px; overflow-y: auto;"></div>
                 </div>
             </div>
             
@@ -537,6 +586,9 @@
             if (tabName === 'looseends') {
                 loadTodos();
             }
+            if (tabName === 'knowledge') {
+                loadKnowledge();
+            }
         }
         
         async function loadTodos() {
@@ -629,6 +681,127 @@
                 }
             } catch (e) {
                 console.error('Failed to update todo:', e);
+            }
+        }
+        
+        // Knowledge Base functions
+        async function loadKnowledge(category) {
+            try {
+                const search = document.getElementById('kbSearch').value;
+                let url = '/api/knowledge';
+                const params = [];
+                if (category && category !== 'all') params.push(`category=${category}`);
+                if (search) params.push(`search=${encodeURIComponent(search)}`);
+                if (params.length > 0) url += '?' + params.join('&');
+                
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                renderKnowledge(data.entries, data.categories);
+            } catch (e) {
+                console.error('Failed to load knowledge:', e);
+            }
+        }
+        
+        function renderKnowledge(entries, categories) {
+            // Render category counts
+            const categoryColors = {
+                lessons: 'var(--warning)',
+                skills: 'var(--success)',
+                patterns: 'var(--accent-lunar)',
+                references: 'var(--working)'
+            };
+            const catHtml = Object.entries(categories || {}).map(([cat, count]) => `
+                <div class="category-badge" onclick="loadKnowledge('${cat}')" 
+                     style="background: ${categoryColors[cat] || 'var(--accent-glow)'}; padding: 8px 15px; border-radius: 20px; cursor: pointer; font-size: 0.85rem;">
+                    ${cat.charAt(0).toUpperCase() + cat.slice(1)}: ${count}
+                </div>
+            `).join('');
+            document.getElementById('kbCategories').innerHTML = `
+                <div class="category-badge" onclick="loadKnowledge('all')" 
+                     style="background: var(--accent-glow); padding: 8px 15px; border-radius: 20px; cursor: pointer; font-size: 0.85rem;">
+                    All
+                </div>
+                ${catHtml}
+            `;
+            
+            // Render entries
+            if (entries && entries.length > 0) {
+                const entriesHtml = entries.map(entry => `
+                    <div class="kb-entry" style="background: var(--bg-dark); border-radius: 12px; padding: 20px; margin-bottom: 15px; border-left: 4px solid ${categoryColors[entry.category] || 'var(--accent-lunar)'}">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                            <div>
+                                <span style="background: ${categoryColors[entry.category] || 'var(--accent-glow)'}; padding: 3px 10px; border-radius: 4px; font-size: 0.75rem;">${entry.category}</span>
+                                <h3 style="margin-top: 10px;">${entry.title}</h3>
+                            </div>
+                            <button onclick="deleteKnowledgeEntry('${entry.id}')" style="background: var(--danger); border: none; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">Delete</button>
+                        </div>
+                        ${entry.content ? `<p style="color: var(--text-secondary); margin-bottom: 10px;">${entry.content}</p>` : ''}
+                        ${entry.tags && entry.tags.length > 0 ? `
+                            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                                ${entry.tags.map(tag => `<span style="background: var(--bg-card); padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; color: var(--text-secondary);">#${tag}</span>`).join('')}
+                            </div>
+                        ` : ''}
+                        <div style="margin-top: 10px; font-size: 0.75rem; color: var(--text-secondary);">
+                            ID: ${entry.id} | Created: ${new Date(entry.created_at).toLocaleString()}
+                        </div>
+                    </div>
+                `).join('');
+                document.getElementById('kbEntries').innerHTML = entriesHtml;
+            } else {
+                document.getElementById('kbEntries').innerHTML = '<p style="color: var(--text-secondary);">No knowledge entries yet. Add your first entry above! 📚</p>';
+            }
+        }
+        
+        async function addKnowledgeEntry() {
+            const category = document.getElementById('kbCategory').value;
+            const title = document.getElementById('kbTitle').value;
+            const content = document.getElementById('kbContent').value;
+            const tags = document.getElementById('kbTags').value;
+            
+            if (!title) {
+                alert('Title is required!');
+                return;
+            }
+            
+            try {
+                const tagsParam = tags ? `&tags=${encodeURIComponent(tags)}` : '';
+                const response = await fetch(`/api/knowledge/add?category=${category}&title=${encodeURIComponent(title)}&content=${encodeURIComponent(content)}${tagsParam}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    // Clear form
+                    document.getElementById('kbTitle').value = '';
+                    document.getElementById('kbContent').value = '';
+                    document.getElementById('kbTags').value = '';
+                    // Reload knowledge
+                    loadKnowledge();
+                } else {
+                    alert('Failed to add entry: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                console.error('Failed to add knowledge entry:', e);
+                alert('Failed to add entry');
+            }
+        }
+        
+        async function deleteKnowledgeEntry(entryId) {
+            if (!confirm('Are you sure you want to delete this entry?')) return;
+            
+            try {
+                const response = await fetch(`/api/knowledge/delete?id=${entryId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    loadKnowledge();
+                } else {
+                    alert('Failed to delete entry');
+                }
+            } catch (e) {
+                console.error('Failed to delete knowledge entry:', e);
             }
         }
         

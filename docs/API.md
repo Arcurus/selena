@@ -211,6 +211,122 @@ Clear all priority tasks.
 
 ---
 
+## Knowledge Base
+
+Knowledge base for lessons learned, skills, patterns, and references.
+
+**Categories:** `lessons`, `skills`, `patterns`, `references`
+
+### Get All Knowledge Entries
+**GET** `/api/knowledge?category=lessons&search=error`
+
+Get all knowledge entries, optionally filtered by category or search term.
+
+**Parameters:**
+- `category` (optional): Filter by category - `lessons`, `skills`, `patterns`, `references`
+- `search` (optional): Search in title, content, and tags
+
+**Response:**
+```json
+{
+  "entries": [
+    {
+      "id": "abc123",
+      "category": "lessons",
+      "title": "Handle API errors gracefully",
+      "content": "Always check return values and handle...",
+      "tags": ["api", "error-handling"],
+      "created_at": "2026-04-19T00:00:00",
+      "updated_at": "2026-04-19T00:00:00"
+    }
+  ],
+  "categories": {
+    "lessons": 5,
+    "skills": 3,
+    "patterns": 2,
+    "references": 1
+  }
+}
+```
+
+### Get Categories
+**GET** `/api/knowledge/categories`
+
+Get category counts.
+
+**Response:**
+```json
+{
+  "categories": {
+    "lessons": 5,
+    "skills": 3,
+    "patterns": 2,
+    "references": 1
+  }
+}
+```
+
+### Add Knowledge Entry
+**POST** `/api/knowledge/add?category=lessons&title=TITLE&content=CONTENT&tags=tag1,tag2`
+
+Add a new knowledge entry.
+
+**Parameters:**
+- `category` (required): Category - `lessons`, `skills`, `patterns`, `references`
+- `title` (required): Entry title (1-200 chars)
+- `content` (optional): Detailed content
+- `tags` (optional): Comma-separated tags
+
+**Response:**
+```json
+{
+  "success": true,
+  "entry": {
+    "id": "abc123",
+    "category": "lessons",
+    "title": "Handle API errors gracefully",
+    "content": "Always check return values...",
+    "tags": ["api", "error-handling"],
+    "created_at": "2026-04-19T00:00:00",
+    "updated_at": "2026-04-19T00:00:00"
+  }
+}
+```
+
+### Update Knowledge Entry
+**POST** `/api/knowledge/update?id=ID&title=NEW_TITLE&content=NEW_CONTENT`
+
+Update an existing knowledge entry.
+
+**Parameters:**
+- `id` (required): Entry ID
+- `title` (optional): New title
+- `content` (optional): New content
+- `category` (optional): New category
+- `tags` (optional): Comma-separated new tags
+
+**Response:**
+```json
+{
+  "success": true,
+  "entry": { ... updated entry ... }
+}
+```
+
+### Delete Knowledge Entry
+**POST** `/api/knowledge/delete?id=ID`
+
+Delete a knowledge entry.
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+---
+
 ## Self-Evolution Loop
 
 ### Get Evolution Status

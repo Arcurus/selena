@@ -39,6 +39,7 @@ from scheduled_actions import scheduler
 from priority_reflector import reflector, PriorityTask, PriorityReflector
 from self_evolution import evolution_loop
 from todo_manager import todo_manager
+from knowledge_base import knowledge_base as kb
 
 # Configuration
 PORT = int(os.getenv('SELENA_PORT', '8765'))
@@ -560,6 +561,81 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.send_json({'success': True, 'message': 'Restored from latest backup'})
             else:
                 self.send_json({'success': False, 'error': 'No backups available'}, 404)
+            return
+        
+        # Knowledge Base endpoints
+        if path == '/api/knowledge':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            # Get query params
+            query = parse_qs(parsed.query)
+            category = query.get('category', [None])[0] if 'category=' in parsed.query else None
+            search = query.get('search', [None])[0] if 'search=' in parsed.query else None
+            entries = kb.get_all_entries(category=category, search=search)
+            categories = kb.get_categories()
+            self.send_json({'entries': entries, 'categories': categories})
+            return
+        
+        if path == '/api/knowledge/categories':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            categories = kb.get_categories()
+            self.send_json({'categories': categories})
+            return
+        
+        if path == '/api/knowledge/add':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            query = parse_qs(parsed.query)
+            category = query.get('category', [''])[0]
+            title = query.get('title', [''])[0]
+            content = query.get('content', [''])[0]
+            tags = query.get('tags', [''])[0].split(',') if 'tags=' in parsed.query else []
+            if not category or not title:
+                self.send_json({'success': False, 'error': 'category and title required'}, 400)
+                return
+            entry = kb.add_entry(category, title, content, tags)
+            if entry:
+                self.send_json({'success': True, 'entry': entry})
+            else:
+                self.send_json({'success': False, 'error': 'Invalid category or save failed'}, 400)
+            return
+        
+        if path == '/api/knowledge/delete':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            query = parse_qs(parsed.query)
+            entry_id = query.get('id', [''])[0]
+            if not entry_id:
+                self.send_json({'success': False, 'error': 'id required'}, 400)
+                return
+            deleted = kb.delete_entry(entry_id)
+            self.send_json({'success': deleted})
+            return
+        
+        if path == '/api/knowledge/update':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            query = parse_qs(parsed.query)
+            entry_id = query.get('id', [''])[0]
+            if not entry_id:
+                self.send_json({'success': False, 'error': 'id required'}, 400)
+                return
+            # Extract update fields
+            title = query.get('title', [None])[0] if 'title=' in parsed.query else None
+            content = query.get('content', [None])[0] if 'content=' in parsed.query else None
+            category = query.get('category', [None])[0] if 'category=' in parsed.query else None
+            tags = query.get('tags', [''])[0].split(',') if 'tags=' in parsed.query else None
+            entry = kb.update_entry(entry_id, title=title, content=content, tags=tags, category=category)
+            if entry:
+                self.send_json({'success': True, 'entry': entry})
+            else:
+                self.send_json({'success': False, 'error': 'Entry not found or update failed'}, 404)
             return
         
         if path == '/api/relations':

@@ -79,3 +79,27 @@ ACTIONS_PER_CYCLE = 3
 - [ ] Priority system improvements (priority_reflector.py)
 - [ ] Agent loop improvements (agent_loop.py)
 - [ ] Add more world events and mysteries
+
+---
+
+## 🔥 PRIORITY: Knowledge Base System
+
+**Goal:** Build a comprehensive knowledge base that captures:
+- Lessons learned (from successes and failures)
+- Skills (abilities and capabilities)
+- Patterns (reusable solutions)
+- Best practices
+- Reference information
+
+**Requirements:**
+1. API endpoints to add/query knowledge entries
+2. Web client display of knowledge base
+3. Categories: lessons, skills, patterns, references
+4. Searchable and filterable
+5. Persistent storage (git-friendly, non-sensitive)
+
+**Files to create/update:**
+- `code/knowledge_base.py` - Knowledge base module
+- `data/knowledge/` - Knowledge entries storage
+- `web/index.html` - Update web client
+- `docs/API.md` - Document new endpoints
