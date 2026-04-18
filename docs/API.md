@@ -485,6 +485,121 @@ Stop the world scheduler.
 
 ---
 
+## Knowledge Base
+
+The Knowledge Base stores lessons, skills, patterns, and reference information.
+
+### Get Knowledge Entries
+**GET** `/api/knowledge?category=lesson&search=keyword`
+
+Get all knowledge entries, optionally filtered.
+
+**Parameters:**
+- `category` (optional): Filter by category - `lesson`, `skill`, `pattern`, `reference`
+- `search` (optional): Search in title and content
+
+**Response:**
+```json
+{
+  "entries": [
+    {
+      "id": "abc123",
+      "category": "lesson",
+      "title": "Always check the API first",
+      "content": "Before implementing, always check what the API expects...",
+      "tags": ["api", "workflow"],
+      "created_at": "2026-04-19T00:00:00.000000"
+    }
+  ],
+  "categories": [
+    {"name": "lesson", "count": 5},
+    {"name": "skill", "count": 3},
+    {"name": "pattern", "count": 2},
+    {"name": "reference", "count": 1}
+  ]
+}
+```
+
+### Get Categories
+**GET** `/api/knowledge/categories`
+
+Get all knowledge categories with entry counts.
+
+**Response:**
+```json
+{
+  "categories": [
+    {"name": "lesson", "count": 5},
+    {"name": "skill", "count": 3},
+    {"name": "pattern", "count": 2},
+    {"name": "reference", "count": 1}
+  ]
+}
+```
+
+### Add Knowledge Entry
+**POST** `/api/knowledge/add?category=lesson&title=TITLE&content=CONTENT&tags=tag1,tag2`
+
+Add a new knowledge entry.
+
+**Parameters:**
+- `category` (required): Category - `lesson`, `skill`, `pattern`, `reference`
+- `title` (required): Brief title
+- `content` (required): The knowledge content
+- `tags` (optional): Comma-separated tags
+
+**Response:**
+```json
+{
+  "success": true,
+  "entry": {
+    "id": "abc123",
+    "category": "lesson",
+    "title": "Test Lesson",
+    "content": "This is a test lesson...",
+    "tags": ["test"],
+    "created_at": "2026-04-19T00:00:00.000000"
+  }
+}
+```
+
+### Update Knowledge Entry
+**POST** `/api/knowledge/update?id=ID&title=TITLE&content=CONTENT&tags=tag1,tag2&category=lesson`
+
+Update an existing knowledge entry.
+
+**Parameters:**
+- `id` (required): Entry ID
+- `title` (optional): New title
+- `content` (optional): New content
+- `tags` (optional): New tags (comma-separated)
+- `category` (optional): Move to different category
+
+**Response:**
+```json
+{
+  "success": true,
+  "entry": { ... updated entry ... }
+}
+```
+
+### Delete Knowledge Entry
+**POST** `/api/knowledge/delete?id=ID`
+
+Delete a knowledge entry.
+
+**Parameters:**
+- `id` (required): Entry ID
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+---
+
 ## System Status
 
 ### Get System Status

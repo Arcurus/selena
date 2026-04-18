@@ -443,10 +443,10 @@
                             <div class="setting-item" style="margin-bottom: 0;">
                                 <label>Category</label>
                                 <select id="kbCategory" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
-                                    <option value="lessons">Lessons</option>
-                                    <option value="skills">Skills</option>
-                                    <option value="patterns">Patterns</option>
-                                    <option value="references">References</option>
+                                    <option value="lesson">Lessons</option>
+                                    <option value="skill">Skills</option>
+                                    <option value="pattern">Patterns</option>
+                                    <option value="reference">References</option>
                                 </select>
                             </div>
                             <div class="setting-item" style="margin-bottom: 0;">
@@ -868,15 +868,15 @@
         function renderKnowledge(entries, categories) {
             // Render category counts
             const categoryColors = {
-                lessons: 'var(--warning)',
-                skills: 'var(--success)',
-                patterns: 'var(--accent-lunar)',
-                references: 'var(--working)'
+                lesson: 'var(--warning)',
+                skill: 'var(--success)',
+                pattern: 'var(--accent-lunar)',
+                reference: 'var(--working)'
             };
-            const catHtml = Object.entries(categories || {}).map(([cat, count]) => `
-                <div class="category-badge" onclick="loadKnowledge('${cat}')" 
-                     style="background: ${categoryColors[cat] || 'var(--accent-glow)'}; padding: 8px 15px; border-radius: 20px; cursor: pointer; font-size: 0.85rem;">
-                    ${cat.charAt(0).toUpperCase() + cat.slice(1)}: ${count}
+            const catHtml = (categories || []).map(cat => `
+                <div class="category-badge" onclick="loadKnowledge('${cat.name}')" 
+                     style="background: ${categoryColors[cat.name] || 'var(--accent-glow)'}; padding: 8px 15px; border-radius: 20px; cursor: pointer; font-size: 0.85rem;">
+                    ${cat.name.charAt(0).toUpperCase() + cat.name.slice(1)}: ${cat.count}
                 </div>
             `).join('');
             document.getElementById('kbCategories').innerHTML = `

@@ -1,144 +1,241 @@
+#!/usr/bin/env python3
 """
-Knowledge Base Module for Selena v2
-Manages lessons learned, skills, patterns, and other knowledge.
+Knowledge Base for Selena v2
+=============================
+
+A system to capture, store, and retrieve knowledge entries.
+Entries are categorized as: lessons, skills, patterns, references.
+
+Storage: Git-friendly JSON files in data/knowledge/
+Each entry has: id, category, title, content, tags, created_at
 """
 
-import json
 import os
-from datetime import datetime
-from typing import Optional, List, Dict
+import json
 import uuid
+from datetime import datetime
+from typing import Optional, List
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
-KNOWLEDGE_DIR = os.path.join(DATA_DIR, 'knowledge')
+# Configuration
+SELENA_ROOT = os.path.expanduser("~/openclaw/workspace/selena")
+KNOWLEDGE_DIR = os.path.join(SELENA_ROOT, "data", "knowledge")
+CATEGORIES = ["lesson", "skill", "pattern", "reference"]
 
-# Ensure knowledge directory exists
-os.makedirs(KNOWLEDGE_DIR, exist_ok=True)
-
-KNOWLEDGE_FILE = os.path.join(KNOWLEDGE_DIR, 'knowledge.json')
-
-CATEGORIES = ['lessons', 'skills', 'patterns', 'references']
-
-
-def _load_knowledge() -> List[Dict]:
-    """Load knowledge entries from disk."""
-    if os.path.exists(KNOWLEDGE_FILE):
-        try:
-            with open(KNOWLEDGE_FILE, 'r') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            return []
-    return []
-
-
-def _save_knowledge(knowledge: List[Dict]) -> bool:
-    """Save knowledge entries to disk."""
-    try:
-        with open(KNOWLEDGE_FILE, 'w') as f:
-            json.dump(knowledge, f, indent=2)
-        return True
-    except IOError:
-        return False
-
-
-def get_all_entries(category: Optional[str] = None, search: Optional[str] = None) -> List[Dict]:
-    """Get all knowledge entries, optionally filtered."""
-    knowledge = _load_knowledge()
+class KnowledgeBase:
+    """
+    Manages knowledge entries for Selena v2.
+    Entries are stored as JSON files, one per category.
+    """
     
-    # Filter by category
-    if category and category in CATEGORIES:
-        knowledge = [k for k in knowledge if k.get('category') == category]
+    def __init__(self):
+        os.makedirs(KNOWLEDGE_DIR, exist_ok=True)
+        self._ensure_category_files()
     
-    # Filter by search term
-    if search:
-        search_lower = search.lower()
-        knowledge = [k for k in knowledge if 
-                     search_lower in k.get('title', '').lower() or
-                     search_lower in k.get('content', '').lower() or
-                     any(search_lower in tag.lower() for tag in k.get('tags', []))]
+    def _ensure_category_files(self):
+        """Ensure all category files exist."""
+        for category in CATEGORIES:
+            filepath = self._get_category_file(category)
+            if not os.path.exists(filepath):
+                self._save_category(category, [])
     
-    # Sort by most recent first
-    knowledge.sort(key=lambda x: x.get('updated_at', ''), reverse=True)
+    def _get_category_file(self, category: str) -> str:
+        """Get the filepath for a category."""
+        return os.path.join(KNOWLEDGE_DIR, f"{category}s.json")
     
-    return knowledge
-
-
-def get_entry(entry_id: str) -> Optional[Dict]:
-    """Get a specific knowledge entry by ID."""
-    knowledge = _load_knowledge()
-    for entry in knowledge:
-        if entry.get('id') == entry_id:
-            return entry
-    return None
-
-
-def add_entry(category: str, title: str, content: str, tags: List[str] = None) -> Optional[Dict]:
-    """Add a new knowledge entry."""
-    if category not in CATEGORIES:
+    def _load_category(self, category: str) -> List[dict]:
+        """Load entries for a category."""
+        filepath = self._get_category_file(category)
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, 'r') as f:
+                    return json.load(f)
+            except:
+                return []
+        return []
+    
+    def _save_category(self, category: str, entries: List[dict]):
+        """Save entries for a category."""
+        filepath = self._get_category_file(category)
+        with open(filepath, 'w') as f:
+            json.dump(entries, f, indent=2)
+    
+    def _now(self) -> str:
+        """Get current ISO timestamp."""
+        return datetime.now().isoformat()
+    
+    def add_entry(self, category: str, title: str, content: str, 
+                  tags: Optional[List[str]] = None) -> dict:
+        """
+        Add a new knowledge entry.
+        
+        Args:
+            category: Type of entry (lesson, skill, pattern, reference)
+            title: Brief title
+            content: The knowledge content
+            tags: Optional list of tags
+        
+        Returns:
+            The created entry dict
+        """
+        if category not in CATEGORIES:
+            raise ValueError(f"Invalid category. Must be one of: {CATEGORIES}")
+        
+        entry = {
+            "id": str(uuid.uuid4())[:8],
+            "category": category,
+            "title": title,
+            "content": content,
+            "tags": tags or [],
+            "created_at": self._now()
+        }
+        
+        entries = self._load_category(category)
+        entries.append(entry)
+        self._save_category(category, entries)
+        
+        return entry
+    
+    def get_all_entries(self, category: Optional[str] = None,
+                       search: Optional[str] = None) -> List[dict]:
+        """
+        Get knowledge entries, optionally filtered.
+        
+        Args:
+            category: Filter by category
+            search: Search in title and content
+        
+        Returns:
+            List of matching entries
+        """
+        if category:
+            categories = [category]
+        else:
+            categories = CATEGORIES
+        
+        results = []
+        for cat in categories:
+            entries = self._load_category(cat)
+            results.extend(entries)
+        
+        # Search in title and content
+        if search:
+            search_lower = search.lower()
+            results = [e for e in results if 
+                      search_lower in e.get("title", "").lower() or
+                      search_lower in e.get("content", "").lower()]
+        
+        # Sort by created_at (newest first)
+        results.sort(key=lambda e: e.get("created_at", ""), reverse=True)
+        
+        return results
+    
+    def get_entries(self, category: Optional[str] = None,
+                   tag: Optional[str] = None,
+                   search: Optional[str] = None) -> List[dict]:
+        """Alias for get_all_entries for backwards compatibility."""
+        return self.get_all_entries(category=category, search=search)
+    
+    def get_entry(self, entry_id: str) -> Optional[dict]:
+        """Get a specific entry by ID."""
+        for category in CATEGORIES:
+            entries = self._load_category(category)
+            for entry in entries:
+                if entry.get("id") == entry_id:
+                    return entry
         return None
     
-    now = datetime.now().isoformat()
-    entry = {
-        'id': str(uuid.uuid4())[:8],
-        'category': category,
-        'title': title[:200],  # Limit title length
-        'content': content,
-        'tags': tags or [],
-        'created_at': now,
-        'updated_at': now
-    }
+    def update_entry(self, entry_id: str, 
+                    title: Optional[str] = None,
+                    content: Optional[str] = None,
+                    tags: Optional[List[str]] = None,
+                    category: Optional[str] = None) -> Optional[dict]:
+        """Update an existing entry."""
+        for cat in CATEGORIES:
+            entries = self._load_category(cat)
+            for i, entry in enumerate(entries):
+                if entry.get("id") == entry_id:
+                    if title is not None:
+                        entry["title"] = title
+                    if content is not None:
+                        entry["content"] = content
+                    if tags is not None:
+                        entry["tags"] = tags
+                    if category is not None and category in CATEGORIES:
+                        # Move to different category if category changed
+                        if category != cat:
+                            entries.pop(i)
+                            self._save_category(cat, entries)
+                            entry["category"] = category
+                            new_entries = self._load_category(category)
+                            new_entries.append(entry)
+                            self._save_category(category, new_entries)
+                            return entry
+                    entries[i] = entry
+                    self._save_category(cat, entries)
+                    return entry
+        return None
     
-    knowledge = _load_knowledge()
-    knowledge.append(entry)
+    def delete_entry(self, entry_id: str) -> bool:
+        """Delete an entry by ID."""
+        for category in CATEGORIES:
+            entries = self._load_category(category)
+            new_entries = [e for e in entries if e.get("id") != entry_id]
+            if len(new_entries) < len(entries):
+                self._save_category(category, new_entries)
+                return True
+        return False
     
-    if _save_knowledge(knowledge):
-        return entry
-    return None
+    def get_summary(self) -> dict:
+        """Get a summary of all knowledge entries."""
+        summary = {}
+        for category in CATEGORIES:
+            entries = self._load_category(category)
+            summary[category] = len(entries)
+        return summary
+    
+    def get_categories(self) -> List[dict]:
+        """Get categories with entry counts."""
+        return [
+            {"name": cat, "count": len(self._load_category(cat))}
+            for cat in CATEGORIES
+        ]
+    
+    def get_all_tags(self) -> dict:
+        """Get all tags organized by category."""
+        tags = {cat: set() for cat in CATEGORIES}
+        for category in CATEGORIES:
+            entries = self._load_category(category)
+            for entry in entries:
+                for tag in entry.get("tags", []):
+                    tags[category].add(tag)
+        return {cat: sorted(list(tag_set)) for cat, tag_set in tags.items()}
 
 
-def update_entry(entry_id: str, title: Optional[str] = None, content: Optional[str] = None, 
-                 tags: Optional[List[str]] = None, category: Optional[str] = None) -> Optional[Dict]:
-    """Update an existing knowledge entry."""
-    knowledge = _load_knowledge()
-    
-    for i, entry in enumerate(knowledge):
-        if entry.get('id') == entry_id:
-            if title is not None:
-                entry['title'] = title[:200]
-            if content is not None:
-                entry['content'] = content
-            if tags is not None:
-                entry['tags'] = tags
-            if category is not None and category in CATEGORIES:
-                entry['category'] = category
-            entry['updated_at'] = datetime.now().isoformat()
-            
-            if _save_knowledge(knowledge):
-                return entry
-            return None
-    
-    return None
+# Global instance
+knowledge_base = KnowledgeBase()
 
 
-def delete_entry(entry_id: str) -> bool:
-    """Delete a knowledge entry."""
-    knowledge = _load_knowledge()
-    initial_length = len(knowledge)
-    knowledge = [k for k in knowledge if k.get('id') != entry_id]
-    
-    if len(knowledge) < initial_length:
-        return _save_knowledge(knowledge)
-    return False
+# Convenience functions for API use
+def add_knowledge(category: str, title: str, content: str, 
+                 tags: Optional[List[str]] = None) -> dict:
+    """Add a knowledge entry."""
+    return knowledge_base.add_entry(category, title, content, tags)
 
+def get_knowledge(category: Optional[str] = None,
+                 tag: Optional[str] = None,
+                 search: Optional[str] = None) -> List[dict]:
+    """Get knowledge entries."""
+    return knowledge_base.get_entries(category, tag, search)
 
-def get_categories() -> Dict[str, int]:
-    """Get all categories with their entry counts."""
-    knowledge = _load_knowledge()
-    counts = {cat: 0 for cat in CATEGORIES}
-    
-    for entry in knowledge:
-        cat = entry.get('category')
-        if cat in counts:
-            counts[cat] += 1
-    
-    return counts
+def get_all_knowledge(category: Optional[str] = None,
+                     search: Optional[str] = None) -> List[dict]:
+    """Get all knowledge entries."""
+    return knowledge_base.get_all_entries(category, search)
+
+def get_knowledge_summary() -> dict:
+    """Get knowledge summary."""
+    return knowledge_base.get_summary()
+
+def get_knowledge_categories() -> List[dict]:
+    """Get knowledge categories."""
+    return knowledge_base.get_categories()
