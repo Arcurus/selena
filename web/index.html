@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Selena v2 - Services Dashboard</title>
+    <style>
+        :root {
+            --bg-dark: #0a0a0f;
+            --bg-card: #1a1a2e;
+            --bg-card-hover: #252542;
+            --accent-lunar: #7b68ee;
+            --accent-glow: #4a4a8a;
+            --text-primary: #e0e0ff;
+            --text-secondary: #a0a0c0;
+            --shiba-orange: #ff9f43;
+            --success: #2ecc71;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+            --working: #3498db;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        
+        /* Login Screen */
+        .login-screen {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        
+        .login-box {
+            background: var(--bg-card);
+            padding: 40px;
+            border-radius: 16px;
+            border: 1px solid var(--accent-glow);
+            text-align: center;
+            width: 400px;
+        }
+        
+        .login-box h1 { color: var(--accent-lunar); margin-bottom: 20px; font-size: 2rem; }
+        .login-box input {
+            width: 100%; padding: 12px; margin: 10px 0;
+            background: var(--bg-dark); border: 1px solid var(--accent-glow);
+            border-radius: 8px; color: var(--text-primary); font-size: 1rem;
+        }
+        .login-box button {
+            width: 100%; padding: 12px; margin-top: 20px;
+            background: var(--accent-lunar); border: none; border-radius: 8px;
+            color: white; font-size: 1rem; cursor: pointer;
+        }
+        .login-box button:hover { background: var(--accent-glow); }
+        .login-error { color: var(--danger); margin-top: 10px; display: none; }
+        
+        /* Dashboard */
+        .dashboard { display: none; }
+        .header {
+            background: var(--bg-card); padding: 20px 40px;
+            border-bottom: 1px solid var(--accent-glow);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .header h1 { color: var(--accent-lunar); font-size: 1.5rem; }
+        .header .logout {
+            padding: 8px 16px; background: transparent;
+            border: 1px solid var(--accent-glow); border-radius: 8px;
+            color: var(--text-primary); cursor: pointer;
+        }
+        
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px 40px; }
+        
+        /* Layout */
+        .main-grid {
+            display: grid; grid-template-columns: 1fr 350px; gap: 30px;
+        }
+        
+        /* Panels */
+        .services-panel, .cost-panel {
+            background: var(--bg-card); border-radius: 16px;
+            border: 1px solid var(--accent-glow); padding: 25px;
+        }
+        .services-panel h2, .cost-panel h2 {
+            color: var(--accent-lunar); margin-bottom: 20px;
+            display: flex; align-items: center; gap: 10px;
+        }
+        
+        /* Tabs */
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .tab {
+            padding: 10px 20px; background: var(--bg-card);
+            border: 1px solid var(--accent-glow); border-radius: 8px;
+            color: var(--text-secondary); cursor: pointer; transition: all 0.3s;
+        }
+        .tab:hover, .tab.active {
+            background: var(--accent-lunar); color: white; border-color: var(--accent-lunar);
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        /* Service List */
+        .service-list { display: flex; flex-direction: column; gap: 12px; }
+        .service-item {
+            background: var(--bg-dark); border-radius: 12px; padding: 15px;
+            display: flex; align-items: center; gap: 15px;
+            border-left: 4px solid var(--success); transition: all 0.3s;
+        }
+        .service-item:hover { background: var(--bg-card-hover); }
+        .service-item.warning { border-left-color: var(--warning); }
+        .service-item.error { border-left-color: var(--danger); }
+        .service-icon {
+            width: 45px; height: 45px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem; background: var(--bg-card);
+        }
+        .service-item.status-ok .service-icon { background: rgba(46, 204, 113, 0.2); }
+        .service-item.warning .service-icon { background: rgba(243, 156, 18, 0.2); }
+        .service-item.error .service-icon { background: rgba(231, 76, 60, 0.2); }
+        .service-info { flex: 1; }
+        .service-name { font-weight: bold; font-size: 1rem; margin-bottom: 4px; }
+        .service-description { color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 6px; }
+        .service-meta { display: flex; gap: 15px; font-size: 0.8rem; color: var(--text-secondary); }
+        .status-badge {
+            padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;
+        }
+        .status-ok .status-badge { background: rgba(46, 204, 113, 0.2); color: var(--success); }
+        .warning .status-badge { background: rgba(243, 156, 18, 0.2); color: var(--warning); }
+        .error .status-badge { background: rgba(231, 76, 60, 0.2); color: var(--danger); }
+        
+        /* Cost Display */
+        .cost-summary {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;
+        }
+        .cost-card {
+            background: var(--bg-dark); border-radius: 12px; padding: 20px;
+            border: 1px solid var(--accent-glow);
+        }
+        .cost-card h3 { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 10px; }
+        .cost-card .value { font-size: 1.8rem; color: var(--accent-lunar); font-weight: bold; }
+        .cost-card .sub { color: var(--text-secondary); font-size: 0.85rem; margin-top: 5px; }
+        
+        /* Plan Options */
+        .plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 20px; }
+        .plan-card {
+            background: var(--bg-dark); border-radius: 10px; padding: 15px;
+            border: 1px solid var(--accent-glow); text-align: center;
+        }
+        .plan-card.current { border-color: var(--success); background: rgba(46, 204, 113, 0.1); }
+        .plan-card h4 { color: var(--accent-lunar); margin-bottom: 8px; font-size: 1rem; }
+        .plan-card .price { font-size: 1.2rem; color: var(--shiba-orange); font-weight: bold; margin-bottom: 5px; }
+        .plan-card .calls { color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 8px; }
+        .plan-card .features { color: var(--text-secondary); font-size: 0.75rem; line-height: 1.4; }
+        
+        /* Graph */
+        .graph-container {
+            background: var(--bg-dark); border-radius: 12px; padding: 20px; margin-bottom: 20px;
+        }
+        .graph-container h3 { margin-bottom: 15px; color: var(--text-secondary); font-size: 0.9rem; }
+        .graph-canvas { width: 100%; height: 200px; background: var(--bg-card); border-radius: 8px; }
+        
+        /* Provider Grid */
+        .provider-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; }
+        .provider-card {
+            background: var(--bg-dark); border-radius: 12px; padding: 20px;
+            border: 1px solid var(--accent-glow);
+        }
+        .provider-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .provider-name { font-weight: bold; font-size: 1.1rem; }
+        .provider-status { padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; }
+        .provider-status.ok { background: rgba(46, 204, 113, 0.2); color: var(--success); }
+        .provider-status.warning { background: rgba(243, 156, 18, 0.2); color: var(--warning); }
+        .provider-status.error { background: rgba(231, 76, 60, 0.2); color: var(--danger); }
+        .provider-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .provider-stat { text-align: center; }
+        .provider-stat .val { font-size: 1.3rem; color: var(--accent-lunar); font-weight: bold; }
+        .provider-stat .lbl { font-size: 0.75rem; color: var(--text-secondary); }
+        .provider-graph { height: 60px; margin-top: 15px; }
+        
+        /* Sidebar */
+        .sidebar { display: flex; flex-direction: column; gap: 20px; }
+        .shiba-panel {
+            background: var(--bg-card); border-radius: 16px;
+            border: 2px solid var(--shiba-orange); padding: 20px; text-align: center;
+        }
+        .shiba-avatar {
+            width: 120px; height: 120px; border-radius: 50%; object-fit: cover;
+            margin-bottom: 15px; border: 3px solid var(--shiba-orange);
+        }
+        .shiba-status {
+            font-size: 1rem; font-weight: bold; padding: 6px 15px;
+            border-radius: 20px; display: inline-block; margin-bottom: 8px;
+        }
+        .status-working { background: rgba(52, 152, 219, 0.2); color: #3498db; }
+        .status-waiting { background: rgba(46, 204, 113, 0.2); color: #2ecc71; }
+        .status-issued { background: rgba(243, 156, 18, 0.2); color: #f39c12; }
+        .status-broken { background: rgba(231, 76, 60, 0.2); color: #e74c3c; }
+        .shiba-task { color: var(--text-secondary); font-size: 0.85rem; }
+        
+        .settings-panel {
+            background: var(--bg-card); border-radius: 16px;
+            border: 1px solid var(--accent-glow); padding: 20px;
+        }
+        .settings-panel h3 { color: var(--accent-lunar); margin-bottom: 15px; }
+        .setting-item { margin-bottom: 15px; }
+        .setting-item label { display: block; color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 5px; }
+        .setting-item input {
+            width: 100%; padding: 10px; background: var(--bg-dark);
+            border: 1px solid var(--accent-glow); border-radius: 8px;
+            color: var(--text-primary); font-size: 0.95rem;
+        }
+        .setting-item input:focus { outline: none; border-color: var(--accent-lunar); }
+        .save-btn {
+            width: 100%; padding: 10px; background: var(--accent-lunar);
+            border: none; border-radius: 8px; color: white; cursor: pointer; font-size: 0.95rem;
+        }
+        .save-btn:hover { background: var(--accent-glow); }
+        
+        /* Activity & Error List */
+        .activity-list, .error-list {
+            display: flex; flex-direction: column; gap: 10px; max-height: 500px; overflow-y: auto;
+        }
+        .activity-item {
+            background: var(--bg-dark); border-radius: 10px; padding: 15px;
+            border-left: 3px solid var(--accent-lunar);
+        }
+        .activity-item.success { border-left-color: var(--success); }
+        .activity-item.warning { border-left-color: var(--warning); }
+        .activity-item.error { border-left-color: var(--danger); }
+        .activity-time { color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 5px; }
+        .activity-message { font-size: 0.95rem; }
+        .activity-meta { margin-top: 10px; display: flex; gap: 15px; flex-wrap: wrap; }
+        .activity-meta span {
+            background: var(--bg-card); padding: 3px 10px; border-radius: 5px;
+            font-size: 0.8rem; color: var(--text-secondary);
+        }
+        
+        /* Error Detail Card (like Open World action) */
+        .error-card {
+            background: var(--bg-dark); border-radius: 12px; padding: 20px;
+            border: 1px solid var(--danger); margin-bottom: 15px;
+        }
+        .error-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 15px;
+        }
+        .error-title { font-weight: bold; color: var(--danger); font-size: 1.1rem; }
+        .error-worker { 
+            background: rgba(231, 76, 60, 0.2); color: var(--danger);
+            padding: 4px 12px; border-radius: 15px; font-size: 0.85rem;
+        }
+        .error-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        .error-detail { background: var(--bg-card); padding: 12px; border-radius: 8px; }
+        .error-detail label { display: block; color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 5px; }
+        .error-detail value { color: var(--text-primary); font-weight: bold; }
+        .error-timeline {
+            margin-top: 15px; padding: 15px; background: var(--bg-card);
+            border-radius: 8px; border-left: 3px solid var(--warning);
+        }
+        .timeline-item {
+            display: flex; gap: 15px; padding: 10px 0;
+            border-bottom: 1px solid var(--accent-glow);
+        }
+        .timeline-item:last-child { border-bottom: none; }
+        .timeline-time { color: var(--text-secondary); font-size: 0.85rem; min-width: 80px; }
+        .timeline-event { flex: 1; }
+        .timeline-event.pending { color: var(--warning); }
+        .timeline-event.active { color: var(--accent-lunar); }
+        .timeline-event.failed { color: var(--danger); }
+        .timeline-event.timeout { color: var(--danger); font-weight: bold; }
+        
+        .reported-back {
+            margin-top: 15px; padding: 15px; background: rgba(46, 204, 113, 0.1);
+            border: 1px solid var(--success); border-radius: 8px;
+        }
+        .reported-back h4 { color: var(--success); margin-bottom: 10px; }
+        .reported-back p { font-size: 0.9rem; color: var(--text-secondary); }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-dark); }
+        ::-webkit-scrollbar-thumb { background: var(--accent-glow); border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div class="login-screen" id="loginScreen">
+        <div class="login-box">
+            <h1>🌙 Selena v2</h1>
+            <p style="color: var(--text-secondary); margin-bottom: 20px;">Enter password to access</p>
+            <input type="password" id="passwordInput" placeholder="Password" onkeypress="if(event.key==='Enter')login()">
+            <button onclick="login()">Login</button>
+            <div class="login-error" id="loginError">Invalid password</div>
+        </div>
+    </div>
+    
+    <!-- Main Dashboard -->
+    <div class="dashboard" id="dashboard">
+        <div class="header">
+            <h1>🌙 Selena v2 - Services Dashboard</h1>
+            <button class="logout" onclick="logout()">Logout</button>
+        </div>
+        
+        <div class="container">
+            <div class="tabs">
+                <div class="tab active" onclick="showTab('services')">Services</div>
+                <div class="tab" onclick="showTab('projects')">Projects</div>
+                <div class="tab" onclick="showTab('looseends')">🎯 Loose Ends</div>
+                <div class="tab" onclick="showTab('activity')">Activity</div>
+                <div class="tab" onclick="showTab('cost')">💰 Cost</div>
+                <div class="tab" onclick="showTab('settings')">Settings</div>
+            </div>
+            
+            <!-- Services Tab -->
+            <div class="tab-content active" id="tab-services">
+                <div class="main-grid">
+                    <div class="services-panel">
+                        <h2>⚙️ Running Services</h2>
+                        <div class="service-list" id="serviceList"></div>
+                    </div>
+                    <div class="sidebar">
+                        <div class="shiba-panel">
+                            <img src="agents/shiba_miner.png" class="shiba-avatar" alt="Shiba Miner"
+                                 onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2280%22>🐕</text></svg>'">
+                            <div class="shiba-status status-working" id="shibaStatus">Working</div>
+                            <div class="shiba-task" id="shibaTask">Mining context...</div>
+                        </div>
+                        <div class="settings-panel">
+                            <h3>🔧 Quick Settings</h3>
+                            <div class="setting-item">
+                                <label>Port</label>
+                                <input type="number" id="settingPort" value="8765" onchange="saveSetting('port', this.value)">
+                            </div>
+                            <button class="save-btn" onclick="saveAllSettings()">Save Settings</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Projects Tab -->
+            <div class="tab-content" id="tab-projects">
+                <div class="services-panel">
+                    <h2>📁 Projects</h2>
+                    <p style="color: var(--text-secondary);">Projects coming soon...</p>
+                </div>
+            </div>
+            
+            <!-- Loose Ends Tab -->
+            <div class="tab-content" id="tab-looseends">
+                <div class="services-panel">
+                    <h2>🎯 Loose Ends / Todos</h2>
+                    <div id="todoSummary" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px;"></div>
+                    <div id="todoList" style="max-height: 600px; overflow-y: auto;"></div>
+                </div>
+            </div>
+            
+            <!-- Activity Tab -->
+            <div class="tab-content" id="tab-activity">
+                <div class="tabs" style="margin-bottom: 15px;">
+                    <div class="tab active" onclick="showActivityTab('log')">Activity Log</div>
+                    <div class="tab" onclick="showActivityTab('errors')">Errors & Failures</div>
+                </div>
+                <div class="tab-content active" id="activity-log">
+                    <div class="activity-list" id="activityList"></div>
+                </div>
+                <div class="tab-content" id="activity-errors">
+                    <div class="error-list" id="errorList"></div>
+                </div>
+            </div>
+            
+            <!-- Cost Tab -->
+            <div class="tab-content" id="tab-cost">
+                <div class="tabs" style="margin-bottom: 15px;">
+                    <div class="tab active" onclick="showCostTab('tokenplan')">Token Plan</div>
+                    <div class="tab" onclick="showCostTab('providers')">LLM Providers</div>
+                </div>
+                
+                <!-- Token Plan Sub-tab -->
+                <div class="tab-content active" id="cost-tokenplan">
+                    <div class="cost-summary" id="tokenSummary"></div>
+                    <h3 style="margin: 20px 0 10px; color: var(--text-secondary);">Available Plans</h3>
+                    <div class="plan-grid" id="planOptions"></div>
+                    <div class="graph-container">
+                        <h3>📈 Token Usage Over Time (5 min intervals)</h3>
+                        <canvas id="tokenGraph" class="graph-canvas"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Providers Sub-tab -->
+                <div class="tab-content" id="cost-providers">
+                    <div class="cost-summary" id="providerSummary"></div>
+                    <div class="provider-grid" id="providerGrid"></div>
+                </div>
+            </div>
+            
+            <!-- Settings Tab -->
+            <div class="tab-content" id="tab-settings">
+                <div class="services-panel">
+                    <h2>⚙️ Settings</h2>
+                    <div class="setting-item">
+                        <label>API Server Port</label>
+                        <input type="number" id="settingPort2" value="8765">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let token = localStorage.getItem('selena_token') || '';
+        const settings = { port: localStorage.getItem('selena_port') || '8765' };
+        
+        // Cost tracking data
+        const costData = {
+            tokenPlan: {
+                name: 'MiniMax Plus',
+                totalCalls: 4000,  // 4000 calls per 5 hours
+                usedCalls: 0,
+                leftCalls: 4000,
+                history: [],
+                planOptions: [
+                    { name: 'Starter', price: '$10/mo', calls: '1,500/5hrs', features: ['Standard M2.7'] },
+                    { name: 'Plus', price: '$20/mo', calls: '4,500/5hrs', features: ['Standard M2.7', '4K images/day', 'Speech 2.8'] },
+                    { name: 'Max', price: '$50/mo', calls: '15,000/5hrs', features: ['Standard M2.7', '12K images/day', '11K speech/day'] },
+                    { name: 'Plus-Highspeed', price: '$40/mo', calls: '4,500/5hrs', features: ['M2.7 Highspeed', '9K speech/day', '100 images/day'] },
+                    { name: 'Max-Highspeed', price: '$80/mo', calls: '15,000/5hrs', features: ['M2.7 Highspeed', '19K speech/day', '200 images/day', '3 videos/day'] },
+                    { name: 'Ultra-Highspeed', price: '$150/mo', calls: '30,000/5hrs', features: ['Fastest M2.7', '50K speech/day', '800 images/day', '5 videos/day'] }
+                ]
+            },
+            providers: [
+                { id: 'minimax', name: 'MiniMax', icon: '🔵', total: 100000, used: 42000, status: 'ok' },
+                { id: 'openrouter', name: 'OpenRouter', icon: '🟠', total: 50000, used: 48500, status: 'warning' },
+                { id: 'openai', name: 'OpenAI', icon: '🟢', total: 10000, used: 2340, status: 'ok' },
+                { id: 'xai', name: 'XAI (Grok)', icon: '🟣', total: 25000, used: 890, status: 'ok' }
+            ]
+        };
+        
+        async function login() {
+            const password = document.getElementById('passwordInput').value;
+            const errorEl = document.getElementById('loginError');
+            try {
+                const response = await fetch(`/api/login?password=${encodeURIComponent(password)}`);
+                const data = await response.json();
+                if (data.success) {
+                    token = data.token;
+                    localStorage.setItem('selena_token', token);
+                    errorEl.style.display = 'none';
+                    showDashboard();
+                } else { errorEl.style.display = 'block'; }
+            } catch (e) { errorEl.style.display = 'block'; }
+        }
+        
+        function logout() {
+            token = ''; localStorage.removeItem('selena_token');
+            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('loginScreen').style.display = 'flex';
+        }
+        
+        function showDashboard() {
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            document.getElementById('settingPort').value = settings.port;
+            document.getElementById('settingPort2').value = settings.port;
+            loadDashboard();
+            initCostTracking();
+            renderActivityLog();
+            renderErrorLog();
+        }
+        
+        function saveSetting(key, value) {
+            settings[key] = value;
+            localStorage.setItem(`selena_${key}`, value);
+        }
+        
+        function saveAllSettings() {
+            saveSetting('port', document.getElementById('settingPort').value);
+            document.getElementById('settingPort2').value = document.getElementById('settingPort').value;
+            alert('Settings saved!');
+        }
+        
+        function loadDashboard() {
+            renderServices(getMockServices());
+            simulateShibaStatus();
+        }
+        
+        function renderServices(services) {
+            const list = document.getElementById('serviceList');
+            list.innerHTML = services.map(s => `
+                <div class="service-item ${s.status}">
+                    <div class="service-icon">${s.icon}</div>
+                    <div class="service-info">
+                        <div class="service-name">${s.name}</div>
+                        <div class="service-description">${s.description}</div>
+                        <div class="service-meta">
+                            <span>📍 Port: ${s.port || 'N/A'}</span>
+                            <span>🕐 Last: ${s.lastSeen}</span>
+                        </div>
+                    </div>
+                    <span class="status-badge">${s.statusText}</span>
+                </div>
+            `).join('');
+        }
+        
+        function getMockServices() {
+            return [
+                { name: 'Selena v2', description: 'Main agent API server', icon: '🌙', port: settings.port, status: 'ok', statusText: 'Running', lastSeen: 'Just now' },
+                { name: 'Shiba Miner', description: 'Context mining worker', icon: '🐕', port: null, status: 'ok', statusText: 'Mining', lastSeen: '5s ago' },
+                { name: 'Open World', description: 'Rust game server', icon: '🎮', port: '8080', status: 'ok', statusText: 'Running', lastSeen: '2s ago' },
+                { name: 'Nginx', description: 'Reverse proxy & HTTPS', icon: '🌐', port: '443', status: 'warning', statusText: 'Warning', lastSeen: '30s ago' },
+                { name: 'OpenClaw', description: 'Main agent framework', icon: '🦶', port: '18789', status: 'ok', statusText: 'Running', lastSeen: 'Just now' }
+            ];
+        }
+        
+        function simulateShibaStatus() {
+            const statuses = [
+                { status: 'Working', class: 'status-working', task: 'Mining context...' },
+                { status: 'Waiting', class: 'status-waiting', task: 'Waiting for task...' },
+                { status: 'Working', class: 'status-working', task: 'Processing Open World...' },
+                { status: 'Issued', class: 'status-issued', task: 'Issue detected...' },
+            ];
+            const random = statuses[Math.floor(Math.random() * statuses.length)];
+            document.getElementById('shibaStatus').className = 'shiba-status ' + random.class;
+            document.getElementById('shibaStatus').textContent = random.status;
+            document.getElementById('shibaTask').textContent = random.task;
+        }
+        
+        function showTab(tabName) {
+            document.querySelectorAll('.tabs > .tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tabs > .tab[onclick="showTab('${tabName}')"]`).classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            if (tabName === 'looseends') {
+                loadTodos();
+            }
+        }
+        
+        async function loadTodos() {
+            try {
+                const response = await fetch('/api/todos', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                renderTodos(data.todos, data.summary);
+            } catch (e) {
+                console.error('Failed to load todos:', e);
+            }
+        }
+        
+        function renderTodos(todos, summary) {
+            // Render summary
+            if (summary) {
+                document.getElementById('todoSummary').innerHTML = `
+                    <div class="cost-card">
+                        <h3>Total</h3>
+                        <div class="value">${summary.total}</div>
+                    </div>
+                    <div class="cost-card">
+                        <h3>Open</h3>
+                        <div class="value" style="color: var(--warning)">${summary.open}</div>
+                    </div>
+                    <div class="cost-card">
+                        <h3>In Progress</h3>
+                        <div class="value" style="color: var(--working)">${summary.in_progress}</div>
+                    </div>
+                    <div class="cost-card">
+                        <h3>Done</h3>
+                        <div class="value" style="color: var(--success)">${summary.done}</div>
+                    </div>
+                `;
+            }
+            
+            // Render todo list
+            if (todos && todos.length > 0) {
+                const todoHtml = todos.map(todo => `
+                    <div class="todo-card" style="margin-bottom: 15px; padding: 15px; background: var(--bg-dark); border-radius: 10px; border: 1px solid ${getPriorityColor(todo.priority)}">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                    <span class="priority-badge" style="background: ${getPriorityColor(todo.priority)}; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">P${todo.priority}</span>
+                                    <span class="status-badge" style="background: ${getStatusColor(todo.status)}; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">${todo.status}</span>
+                                </div>
+                                <h4 style="margin-bottom: 5px;">${todo.short_desc}</h4>
+                                ${todo.long_desc ? `<p style="color: var(--text-secondary); font-size: 0.85rem;">${todo.long_desc}</p>` : ''}
+                                <div style="margin-top: 10px; font-size: 0.75rem; color: var(--text-secondary);">
+                                    ID: ${todo.id} | Created: ${new Date(todo.created_at).toLocaleString()}
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 5px;">
+                                <button onclick="markTodoStatus('${todo.id}', 'in_progress')" style="background: var(--working); border: none; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">▶</button>
+                                <button onclick="markTodoStatus('${todo.id}', 'done')" style="background: var(--success); border: none; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">✓</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+                document.getElementById('todoList').innerHTML = todoHtml;
+            } else {
+                document.getElementById('todoList').innerHTML = '<p style="color: var(--text-secondary);">No loose ends! Everything is under control. 🌙</p>';
+            }
+        }
+        
+        function getPriorityColor(priority) {
+            if (priority >= 8) return 'var(--danger)';
+            if (priority >= 6) return 'var(--warning)';
+            if (priority >= 4) return 'var(--working)';
+            return 'var(--success)';
+        }
+        
+        function getStatusColor(status) {
+            switch(status) {
+                case 'done': return 'var(--success)';
+                case 'in_progress': return 'var(--working)';
+                default: return 'var(--text-secondary)';
+            }
+        }
+        
+        async function markTodoStatus(todoId, status) {
+            try {
+                const response = await fetch(`/api/todos/update?id=${todoId}&status=${status}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    loadTodos(); // Reload todos
+                }
+            } catch (e) {
+                console.error('Failed to update todo:', e);
+            }
+        }
+        
+        function showCostTab(tabName) {
+            document.querySelectorAll('#tab-cost .tabs .tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('#tab-cost .tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelector(`#tab-cost .tabs .tab[onclick="showCostTab('${tabName}')"]`).classList.add('active');
+            document.getElementById(`cost-${tabName}`).classList.add('active');
+        }
+        
+        function showActivityTab(tabName) {
+            document.querySelectorAll('#tab-activity .tabs .tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('#tab-activity .tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelector(`#tab-activity .tabs .tab[onclick="showActivityTab('${tabName}')"]`).classList.add('active');
+            document.getElementById(`activity-${tabName}`).classList.add('active');
+        }
+        
+        // Error tracking data (like Open World actions)
+        const errorLog = [
+            {
+                id: 'err_001',
+                worker: 'Shiba Miner #1',
+                time: '22:54:30',
+                status: 'failed',
+                task: 'Mining context from memory',
+                waitTime: '2.3s',
+                timeoutLimit: '5s',
+                error: 'Connection timeout - memory service not responding',
+                timeline: [
+                    { time: '0.0s', event: 'Task assigned to Shiba Miner #1', type: 'assigned' },
+                    { time: '0.1s', event: 'Starting context mining...', type: 'active' },
+                    { time: '2.3s', event: 'Waiting for memory service response...', type: 'pending' },
+                    { time: '5.0s', event: 'TIMEOUT - service did not respond', type: 'timeout' },
+                    { time: '5.1s', event: 'Attempting retry...', type: 'failed' },
+                    { time: '10.0s', event: 'TIMEOUT after retry - marking as failed', type: 'timeout' }
+                ],
+                reportedBack: true,
+                reportMessage: 'Reported to Selena: Task failed after 2 timeout attempts. Memory service at localhost:8766 not responding.'
+            },
+            {
+                id: 'err_002',
+                worker: 'Shiba Coder',
+                time: '22:51:15',
+                status: 'failed',
+                task: 'Compiling Open World API changes',
+                waitTime: '15s',
+                timeoutLimit: '30s',
+                error: 'Compilation error in api_server.py line 234',
+                timeline: [
+                    { time: '0.0s', event: 'Task assigned to Shiba Coder', type: 'assigned' },
+                    { time: '0.2s', event: 'Pulling latest changes from git', type: 'active' },
+                    { time: '3.5s', event: 'Applying code changes...', type: 'active' },
+                    { time: '8.2s', event: 'Running compilation check...', type: 'pending' },
+                    { time: '15.0s', event: 'Compilation error detected', type: 'failed' }
+                ],
+                reportedBack: true,
+                reportMessage: 'Reported to Selena: Compilation failed. Syntax error in api_server.py. Need human review.'
+            }
+        ];
+        
+        const activityLog = [
+            { time: '22:54:30', message: 'Shiba Miner #1 failed - reported back to Selena', type: 'error' },
+            { time: '22:54:25', message: 'Selena received failure report from Shiba Miner #1', type: 'warning' },
+            { time: '22:51:15', message: 'Shiba Coder failed - reported back to Selena', type: 'error' },
+            { time: '22:51:10', message: 'Selena acknowledged Shiba Coder failure', type: 'warning' },
+            { time: '22:50:00', message: 'Context mining completed - 15 items found', type: 'success' },
+            { time: '22:49:30', message: 'Open World server health check passed', type: 'success' },
+            { time: '22:48:00', message: 'Shiba Miner started context mining task', type: '' },
+            { time: '22:47:00', message: 'Selena assigned new task to Shiba Miner', type: '' }
+        ];
+        
+        function renderActivityLog() {
+            const list = document.getElementById('activityList');
+            list.innerHTML = activityLog.map(a => `
+                <div class="activity-item ${a.type}">
+                    <div class="activity-time">${a.time}</div>
+                    <div class="activity-message">${a.message}</div>
+                </div>
+            `).join('');
+        }
+        
+        function renderErrorLog() {
+            const list = document.getElementById('errorList');
+            list.innerHTML = errorLog.map(e => `
+                <div class="error-card">
+                    <div class="error-header">
+                        <span class="error-title">❌ ${e.error}</span>
+                        <span class="error-worker">${e.worker}</span>
+                    </div>
+                    <div class="error-details">
+                        <div class="error-detail">
+                            <label>Task</label>
+                            <value>${e.task}</value>
+                        </div>
+                        <div class="error-detail">
+                            <label>Wait Time</label>
+                            <value>${e.waitTime}</value>
+                        </div>
+                        <div class="error-detail">
+                            <label>Timeout Limit</label>
+                            <value>${e.timeoutLimit}</value>
+                        </div>
+                        <div class="error-detail">
+                            <label>Time</label>
+                            <value>${e.time}</value>
+                        </div>
+                    </div>
+                    <div class="error-timeline">
+                        <strong>Timeline:</strong>
+                        ${e.timeline.map(t => `
+                            <div class="timeline-item">
+                                <span class="timeline-time">${t.time}</span>
+                                <span class="timeline-event ${t.type}">${t.event}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    ${e.reportedBack ? `
+                    <div class="reported-back">
+                        <h4>✅ Reported Back to Main Agent (Selena)</h4>
+                        <p>${e.reportMessage}</p>
+                    </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+        
+        // Cost tracking functions
+        function initCostTracking() {
+            // Generate initial history
+            for (let i = 24; i >= 0; i--) {
+                costData.tokenPlan.history.push({
+                    time: i * 5,
+                    spent: Math.floor(Math.random() * 500) + 100,
+                    left: costData.tokenPlan.totalCalls - (costData.tokenPlan.usedCalls + Math.floor(Math.random() * 500))
+                });
+            }
+            renderCostSummary();
+            renderTokenGraph();
+            renderProviderGrid();
+            updateProviderGraphs();
+        }
+        
+        function renderCostSummary() {
+            const tp = costData.tokenPlan;
+            document.getElementById('tokenSummary').innerHTML = `
+                <div class="cost-card">
+                    <h3>Total Calls</h3>
+                    <div class="value">${tp.totalCalls.toLocaleString()}</div>
+                </div>
+                <div class="cost-card">
+                    <h3>Used</h3>
+                    <div class="value" style="color: var(--warning)">${tp.usedCalls.toLocaleString()}</div>
+                    <div class="sub">${(tp.usedCalls/tp.totalCalls*100).toFixed(1)}%</div>
+                </div>
+                <div class="cost-card">
+                    <h3>Remaining</h3>
+                    <div class="value" style="color: var(--success)">${tp.leftCalls.toLocaleString()}</div>
+                    <div class="sub">${(tp.leftCalls/tp.totalCalls*100).toFixed(1)}%</div>
+                </div>
+            `;
+            
+            // Render plan options
+            if (tp.planOptions) {
+                const optionsHtml = tp.planOptions.map(plan => `
+                    <div class="plan-card ${plan.name === tp.name ? 'current' : ''}">
+                        <h4>${plan.name}</h4>
+                        <div class="price">${plan.price}</div>
+                        <div class="calls">${plan.calls}</div>
+                        <div class="features">${plan.features.join('<br>')}</div>
+                    </div>
+                `).join('');
+                document.getElementById('planOptions').innerHTML = optionsHtml;
+            }
+            
+            const totalUsed = costData.providers.reduce((a, p) => a + p.used, 0);
+            const totalLeft = costData.providers.reduce((a, p) => a + (p.total - p.used), 0);
+            document.getElementById('providerSummary').innerHTML = `
+                <div class="cost-card">
+                    <h3>Total Spent</h3>
+                    <div class="value">${totalUsed.toLocaleString()}</div>
+                </div>
+                <div class="cost-card">
+                    <h3>Total Left</h3>
+                    <div class="value" style="color: var(--success)">${totalLeft.toLocaleString()}</div>
+                </div>
+                <div class="cost-card">
+                    <h3>Active Providers</h3>
+                    <div class="value">${costData.providers.length}</div>
+                </div>
+            `;
+        }
+        
+        function renderTokenGraph() {
+            const canvas = document.getElementById('tokenGraph');
+            const ctx = canvas.getContext('2d');
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * 2;
+            canvas.height = rect.height * 2;
+            ctx.scale(2, 2);
+            
+            const width = rect.width;
+            const height = rect.height;
+            const history = costData.tokenPlan.history;
+            const maxVal = Math.max(...history.map(h => h.spent));
+            
+            // Background
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Grid
+            ctx.strokeStyle = '#2a2a4e';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 5; i++) {
+                const y = (height / 5) * i;
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+                ctx.stroke();
+            }
+            
+            // Spent line (yellow)
+            ctx.strokeStyle = '#f39c12';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            history.forEach((h, i) => {
+                const x = (width / (history.length - 1)) * i;
+                const y = height - (h.spent / maxVal) * (height - 20);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+            
+            // Left line (green)
+            ctx.strokeStyle = '#2ecc71';
+            ctx.beginPath();
+            history.forEach((h, i) => {
+                const x = (width / (history.length - 1)) * i;
+                const y = height - (h.left / costData.tokenPlan.totalCalls) * (height - 20);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+            
+            // Labels
+            ctx.fillStyle = '#a0a0c0';
+            ctx.font = '10px Segoe UI';
+            ctx.fillText(`${maxVal}`, 5, 15);
+            ctx.fillText('0', 5, height - 5);
+            ctx.fillText('Now', width - 25, height - 5);
+            ctx.fillText('-2h', width/2 - 10, height - 5);
+            
+            // Legend
+            ctx.fillStyle = '#f39c12';
+            ctx.fillRect(width - 100, 5, 10, 10);
+            ctx.fillStyle = '#a0a0c0';
+            ctx.fillText('Spent', width - 85, 14);
+            ctx.fillStyle = '#2ecc71';
+            ctx.fillRect(width - 100, 20, 10, 10);
+            ctx.fillStyle = '#a0a0c0';
+            ctx.fillText('Left', width - 85, 29);
+        }
+        
+        function renderProviderGrid() {
+            const grid = document.getElementById('providerGrid');
+            grid.innerHTML = costData.providers.map(p => `
+                <div class="provider-card" id="provider-${p.id}">
+                    <div class="provider-header">
+                        <span class="provider-name">${p.icon} ${p.name}</span>
+                        <span class="provider-status ${p.status}">${p.status === 'ok' ? 'OK' : p.status === 'warning' ? 'Low' : 'Error'}</span>
+                    </div>
+                    <div class="provider-stats">
+                        <div class="provider-stat">
+                            <div class="val">${p.used.toLocaleString()}</div>
+                            <div class="lbl">Spent</div>
+                        </div>
+                        <div class="provider-stat">
+                            <div class="val">${(p.total - p.used).toLocaleString()}</div>
+                            <div class="lbl">Left</div>
+                        </div>
+                    </div>
+                    <canvas class="provider-graph" id="graph-${p.id}"></canvas>
+                </div>
+            `).join('');
+        }
+        
+        function updateProviderGraphs() {
+            costData.providers.forEach(p => {
+                const canvas = document.getElementById(`graph-${p.id}`);
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                const rect = canvas.getBoundingClientRect();
+                canvas.width = rect.width * 2;
+                canvas.height = rect.height * 2;
+                ctx.scale(2, 2);
+                
+                const width = rect.width;
+                const height = rect.height;
+                const used = p.used;
+                const left = p.total - p.used;
+                
+                // Bar chart
+                const barWidth = width / 3;
+                const maxHeight = height - 5;
+                
+                // Used bar (yellow/red)
+                const usedHeight = (used / p.total) * maxHeight;
+                ctx.fillStyle = p.status === 'ok' ? '#f39c12' : '#e74c3c';
+                ctx.fillRect(5, height - usedHeight, barWidth, usedHeight);
+                
+                // Left bar (green)
+                const leftHeight = (left / p.total) * maxHeight;
+                ctx.fillStyle = '#2ecc71';
+                ctx.fillRect(barWidth + 15, height - leftHeight, barWidth, leftHeight);
+                
+                // Labels
+                ctx.fillStyle = '#a0a0c0';
+                ctx.font = '8px Segoe UI';
+                ctx.fillText('Used', 10, height - usedHeight - 5);
+                ctx.fillText('Left', barWidth + 20, height - leftHeight - 5);
+            });
+        }
+        
+        // Simulate cost updates every 5 minutes (30 seconds for demo)
+        setInterval(() => {
+            costData.tokenPlan.usedCalls += Math.floor(Math.random() * 50);
+            costData.tokenPlan.leftCalls = costData.tokenPlan.totalCalls - costData.tokenPlan.usedCalls;
+            costData.tokenPlan.history.shift();
+            costData.tokenPlan.history.push({
+                time: 0,
+                spent: Math.floor(Math.random() * 500) + 100,
+                left: costData.tokenPlan.leftCalls
+            });
+            renderCostSummary();
+            renderTokenGraph();
+        }, 30000);
+        
+        // Shiba status update
+        setInterval(simulateShibaStatus, 8000);
+        
+        // Resize graphs on window resize
+        window.addEventListener('resize', () => {
+            renderTokenGraph();
+            updateProviderGraphs();
+        });
+        
+        // Check if already logged in
+        if (token) showDashboard();
+    </script>
+</body>
+</html>

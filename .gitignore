@@ -1,0 +1,29 @@
+# Environment and secrets
+.env
+.env.*
+*.env
+
+# Data files (contain runtime data)
+/data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Memory files (contain personal data)
+/memory/daily/*.md
