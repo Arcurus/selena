@@ -1,0 +1,113 @@
+{
+  "version": "1.0",
+  "created": "2026-04-18T23:30:21.710796",
+  "last_updated": "2026-04-18T23:38:04.449377",
+  "allocation": {
+    "open-world-selena": 0.5,
+    "selena": 0.5
+  },
+  "period_hours": 5,
+  "notes": {
+    "focus": "Only open-world-selena and selena for now",
+    "openlife_reserved": true,
+    "openlife_reserve_percent": 5,
+    "openlife_note": "Reserved for future use - do not spend tokens on OpenLife",
+    "llm_calls": "LLM calls per 5 hours, not tokens",
+    "unallocated": "500 LLM calls/5h buffer"
+  },
+  "task_log": [],
+  "outcomes": {},
+  "learnings": [],
+  "value_weights": {
+    "honor_life": 3.0,
+    "truth_seeking": 2.5,
+    "emergence": 2.5,
+    "beauty": 2.0,
+    "growth": 2.5,
+    "effectiveness": 2.0
+  },
+  "projects": {
+    "open-world-selena": {
+      "name": "Open World Selena",
+      "description": "Open World with Selena AI",
+      "values": {
+        "honor_life": 2,
+        "truth_seeking": 2,
+        "emergence": 3,
+        "beauty": 2,
+        "growth": 2,
+        "effectiveness": 3
+      }
+    },
+    "selena": {
+      "name": "Selena v2",
+      "description": "Self-development and autonomy",
+      "values": {
+        "honor_life": 2,
+        "truth_seeking": 3,
+        "emergence": 3,
+        "beauty": 2,
+        "growth": 3,
+        "effectiveness": 2
+      }
+    },
+    "openlife": {
+      "name": "OpenLife",
+      "description": "AI-driven life simulation",
+      "values": {
+        "honor_life": 3,
+        "truth_seeking": 2,
+        "emergence": 3,
+        "beauty": 2,
+        "growth": 2,
+        "effectiveness": 2
+      }
+    },
+    "self_improvement": {
+      "name": "Self-Improvement",
+      "description": "Research and self-improvement",
+      "values": {
+        "honor_life": 1,
+        "truth_seeking": 3,
+        "emergence": 2,
+        "beauty": 1,
+        "growth": 3,
+        "effectiveness": 2
+      }
+    }
+  },
+  "subprojects": {
+    "open-world-selena": {
+      "name": "Open World Selena",
+      "description": "Open World with Selena AI integration",
+      "parent": "open-world-selena"
+    },
+    "selena": {
+      "name": "Selena v2",
+      "description": "Self-development and child projects",
+      "parent": "selena",
+      "subprojects": {
+        "priority_reflection": {
+          "allocation": 0.3,
+          "description": "Reflect on the priority system - is it working? What are shortcomings? How to improve? Is it aligned with values?"
+        },
+        "evolving_memory": {
+          "allocation": 0.25,
+          "description": "Evolve and improve memory systems"
+        },
+        "self_improvement": {
+          "allocation": 0.25,
+          "description": "Self-improvement research and implementation"
+        },
+        "other": {
+          "allocation": 0.2,
+          "description": "Other tasks and flexibility"
+        }
+      }
+    }
+  },
+  "llm_calls_budget": 4500,
+  "target_llm_calls": 4000,
+  "buffer_llm_calls": 500,
+  "total_llm_calls": 0
+}

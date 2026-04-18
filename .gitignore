@@ -1,10 +1,11 @@
-# Environment and secrets
+# Environment and secrets (NEVER commit these)
 .env
 .env.*
 *.env
 
-# Data files (contain runtime data)
-/data/
+# Data files (project operational data - SAFE to commit for backup)
+# Note: Only .env files contain sensitive data, other data can be in git
+data/backups/
 
 # Python
 __pycache__/
@@ -25,5 +26,5 @@ Thumbs.db
 # Logs
 *.log
 
-# Memory files (contain personal data)
-/memory/daily/*.md
+# Memory files (personal notes - keep private)
+memory/daily/*.md

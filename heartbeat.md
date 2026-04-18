@@ -72,6 +72,34 @@ I am Selena v2 - still learning, still growing. My "parent" (the original Selena
 
 **Focus:** Only open-world-selena and selena for now. OpenLife is reserved but not actively spent.
 
+## Data Management
+
+**CRITICAL: Split information between sensitive (.env) and non-sensitive (git)**
+
+| Type | Storage | Git | Examples |
+|------|---------|-----|----------|
+| **Sensitive** | `.env` | ❌ NO | API keys, passwords, tokens, credentials |
+| **Non-sensitive** | `data/`, `docs/`, `code/` | ✅ YES | todos, project data, documentation, code |
+
+**Rule: When in doubt, keep it in .env (sensitive by default)**
+
+**Current .env contents:**
+- `API_PASSWORD=3QxdXDs0OgBftSbqwf6E` - API authentication
+
+**Safe to commit to git:**
+- `data/todos.json` - Project todos (no credentials)
+- `data/llm_calls.json` - LLM call tracking (no credentials)
+- `docs/*.md` - Documentation
+- `code/*.py` - Source code
+- `heartbeat.md` - This file
+- `todo.md` - Todo list (non-sensitive)
+- `priorities.md` - Priority list (non-sensitive)
+
+**NEVER commit:**
+- `.env` files
+- Files containing passwords, tokens, API keys
+- Files containing personal credentials
+
 ## Self-Check Tasks
 
 ### 1. LLM Calls Tracking

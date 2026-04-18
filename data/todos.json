@@ -1,0 +1,182 @@
+[
+  {
+    "id": "a5eda4d6",
+    "short_desc": "Build todo web interface",
+    "long_desc": "Display loose ends in web interface with priority short_desc long_desc",
+    "priority": 9,
+    "status": "done",
+    "created_at": "2026-04-19T00:05:56.318686",
+    "updated_at": "2026-04-19T00:07:50.622247"
+  },
+  {
+    "id": "1c4858d9",
+    "short_desc": "Make Selena v2 truly self-evolving",
+    "long_desc": "She should be able to work on her own improvements autonomously",
+    "priority": 9,
+    "status": "open",
+    "created_at": "2026-04-19T00:05:56.328729",
+    "updated_at": "2026-04-19T00:05:56.328738"
+  },
+  {
+    "id": "bf0a2d7e",
+    "short_desc": "Check heartbeat channel for loose ends",
+    "long_desc": "Review the main heartbeats channel and add any loose ends to this todo list",
+    "priority": 8,
+    "status": "done",
+    "created_at": "2026-04-19T00:05:56.339034",
+    "updated_at": "2026-04-19T00:27:19.509546"
+  },
+  {
+    "id": "efec2eb5",
+    "short_desc": "Create Discord channel selena-project-important",
+    "long_desc": "Create a new Discord channel for important updates and questions\n\nDONE: Created channel selena-project-important (ID: 1495187458776891483) on Apr 19 00:16 CET",
+    "priority": 7,
+    "status": "done",
+    "created_at": "2026-04-19T00:05:56.351842",
+    "updated_at": "2026-04-19T00:26:22.339481"
+  },
+  {
+    "id": "6c5bccee",
+    "short_desc": "Improve self-evolution loop",
+    "long_desc": "Make the self-evolution loop more effective at identifying and fixing issues",
+    "priority": 8,
+    "status": "open",
+    "created_at": "2026-04-19T00:05:56.362373",
+    "updated_at": "2026-04-19T00:05:56.362382"
+  },
+  {
+    "id": "fac609d2",
+    "short_desc": "Fix Selena API crash (UnboundLocalError)",
+    "long_desc": "API server on port 8765 crashing with UnboundLocalError for os variable. Need to investigate and fix the scoping issue in api_server.py",
+    "priority": 9,
+    "status": "done",
+    "created_at": "2026-04-19T00:18:30.332121",
+    "updated_at": "2026-04-19T00:21:10.878992"
+  },
+  {
+    "id": "9a86d17c",
+    "short_desc": "Open World server DOWN since Apr 13",
+    "long_desc": "Open World server at 159.195.43.108:8080 has been down since approximately Apr 13. Needs restart. See memory/openworld-status.md for details. Also mentioned in MEMORY.md -> Active Issues section.",
+    "priority": 9,
+    "status": "open",
+    "created_at": "2026-04-19T00:26:32.734365",
+    "updated_at": "2026-04-19T00:26:32.734376"
+  },
+  {
+    "id": "781c6ec5",
+    "short_desc": "Investigate Open World frequent crashes",
+    "long_desc": "OpenWorld crashes frequently. No SIGKILL/OOM in dmesg. Cause is unknown. See memory/openworld-status.md for details. Already has a related todo for restarting the server.",
+    "priority": 7,
+    "status": "open",
+    "created_at": "2026-04-19T00:26:38.243785",
+    "updated_at": "2026-04-19T00:26:38.243796"
+  },
+  {
+    "id": "67a3692d",
+    "short_desc": "Security updates pending: OpenSSH and runC",
+    "long_desc": "OpenSSH CVE patch verification pending (need >= 9.9p2). runC CVE patch verification pending (need >= 1.2.8/1.3.3). See memory/security-updates.md for details. Also mentioned in MEMORY.md -> Active Issues section.",
+    "priority": 6,
+    "status": "open",
+    "created_at": "2026-04-19T00:26:43.368440",
+    "updated_at": "2026-04-19T00:26:43.368452"
+  },
+  {
+    "id": "988c58e1",
+    "short_desc": "Populate ByteRover context tree",
+    "long_desc": "ByteRover context tree (.brv/context-tree) is mostly empty. Need to curate useful patterns, decisions, and architectural rules. Use brv curate to save knowledge after completing tasks. See TOOLS.md for usage.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T00:26:50.147854",
+    "updated_at": "2026-04-19T00:26:50.147866"
+  },
+  {
+    "id": "17c29783",
+    "short_desc": "Add daily cron for memory/user-interactions.md",
+    "long_desc": "From relevant memories: add a daily cron and remind in memory to post long stuff to memory/user-interactions.md and for important stuff directly post to the new Discord channel (selena-project-important, ID: 1495187458776891483). Update MEMORY.md and AGENTS.md with this pattern.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T00:26:57.784688",
+    "updated_at": "2026-04-19T00:26:57.784701"
+  },
+  {
+    "id": "fa45e5e7",
+    "short_desc": "Implement open-world-selena subproject (50% focus)",
+    "long_desc": "Selena v2 priority: open-world-selena subproject. Focus: AI entities, evolving world simulation. Budget: 2250 LLM calls/5h (50% of 4500). See open-world-selena/ project.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T00:36:26.019837",
+    "updated_at": "2026-04-19T00:36:26.019849"
+  },
+  {
+    "id": "4e4b8b13",
+    "short_desc": "Implement selena subproject (50% focus)",
+    "long_desc": "Selena v2 priority: selena subproject. Budget: 2250 LLM calls/5h (50% of 4500). Key subprojects: priority_reflection (30%), evolving_memory (25%), self_improvement (25%). Leave 500 LLM calls as buffer.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T00:36:33.829234",
+    "updated_at": "2026-04-19T00:36:33.829244"
+  },
+  {
+    "id": "80ea43b4",
+    "short_desc": "Implement priority_reflection (30% allocation)",
+    "long_desc": "Selena v2 key subproject: evolve her own priority system. Part of selena subproject (50% focus). Allocated: 30% of selena budget.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T00:36:43.412810",
+    "updated_at": "2026-04-19T00:36:43.412821"
+  },
+  {
+    "id": "85d081c4",
+    "short_desc": "Implement evolving_memory (25% allocation)",
+    "long_desc": "Selena v2 key subproject: improve memory systems. Part of selena subproject (50% focus). Allocated: 25% of selena budget.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T00:36:43.425851",
+    "updated_at": "2026-04-19T00:36:43.425864"
+  },
+  {
+    "id": "1fba05a3",
+    "short_desc": "Implement self_improvement (25% allocation)",
+    "long_desc": "Selena v2 key subproject: research and grow. Part of selena subproject (50% focus). Allocated: 25% of selena budget.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T00:36:43.438088",
+    "updated_at": "2026-04-19T00:36:43.438099"
+  },
+  {
+    "id": "f622cc25",
+    "short_desc": "Improve self-evolution health-check",
+    "long_desc": "Self-evolution health check was using wrong API password (test instead of 3QxdXDs0OgBftSbqwf6E) and missing scheduler check. Fixed in code but cron needs restart to pick up changes",
+    "priority": 8,
+    "status": "open",
+    "created_at": "2026-04-19T00:37:37.709139",
+    "updated_at": "2026-04-19T00:37:37.709150"
+  },
+  {
+    "id": "61fcd33e",
+    "short_desc": "Integrate Discord bot (discord_bot_basic.py)",
+    "long_desc": "Selena v2 task: Integrate Discord bot using discord_bot_basic.py. Part of selena subproject. File: selena/code/discord_bot_basic.py",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T00:39:26.849216",
+    "updated_at": "2026-04-19T00:39:26.849227"
+  },
+  {
+    "id": "4f552e78",
+    "short_desc": "Improve agent loop (agent_loop.py)",
+    "long_desc": "Selena v2 task: Improve agent loop using agent_loop.py. Part of selena subproject. File: selena/code/agent_loop.py",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T00:39:26.860308",
+    "updated_at": "2026-04-19T00:39:26.860319"
+  },
+  {
+    "id": "e7f9e110",
+    "short_desc": "Add more world events and mysteries",
+    "long_desc": "Selena v2 task: Add more world events and mysteries to open-world-selena. Part of open-world-selena subproject. Currently has 12 entities with prophecy. Goal: Expand the realm with rich lore.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T00:39:26.870692",
+    "updated_at": "2026-04-19T00:39:26.870698"
+  }
+]
