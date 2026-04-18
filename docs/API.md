@@ -77,6 +77,9 @@ Get all todos, optionally filtered by status and sorted.
       "sensitive": false,
       "parent_id": null,
       "estimated_llm_calls": 10,
+      "creator_id": "main",
+      "conversation_id": "channel:1495170712397152367",
+      "agent_id": "selena-v2",
       "created_at": "2026-04-19T00:05:56.318686",
       "updated_at": "2026-04-19T00:05:56.318698"
     }
@@ -115,7 +118,7 @@ Get a quick summary of all todos.
 ```
 
 ### Add Todo
-**POST** `/api/todos/add?short_desc=TITLE&long_desc=DESCRIPTION&priority=9&sensitive=false&parent_id=ID&estimated_llm_calls=10`
+**POST** `/api/todos/add?short_desc=TITLE&long_desc=DESCRIPTION&priority=9&sensitive=false&parent_id=ID&estimated_llm_calls=10&creator_id=ID&conversation_id=ID&agent_id=ID`
 
 Add a new todo.
 
@@ -126,6 +129,9 @@ Add a new todo.
 - `sensitive` (optional): If `true`, stored in `todos.env` NOT in git (default: false)
 - `parent_id` (optional): Parent todo ID for hierarchical todos
 - `estimated_llm_calls` (optional): Estimated LLM calls for this task
+- `creator_id` (optional): ID of who created this todo
+- `conversation_id` (optional): ID of the conversation this belongs to
+- `agent_id` (optional): ID of the agent that owns this todo
 
 **Response:**
 ```json
@@ -140,6 +146,9 @@ Add a new todo.
     "sensitive": false,
     "parent_id": null,
     "estimated_llm_calls": 10,
+    "creator_id": "main",
+    "conversation_id": "channel:1495170712397152367",
+    "agent_id": "selena-v2",
     "created_at": "2026-04-19T00:00:00.000000",
     "updated_at": "2026-04-19T00:00:00.000000"
   }
@@ -147,7 +156,7 @@ Add a new todo.
 ```
 
 ### Update Todo
-**POST** `/api/todos/update?id=ID&short_desc=TITLE&long_desc=DESCRIPTION&priority=9&status=status&sensitive=true&parent_id=ID&estimated_llm_calls=20`
+**POST** `/api/todos/update?id=ID&short_desc=TITLE&long_desc=DESCRIPTION&priority=9&status=status&sensitive=true&parent_id=ID&estimated_llm_calls=20&creator_id=ID&conversation_id=ID&agent_id=ID`
 
 Update an existing todo.
 
@@ -160,6 +169,9 @@ Update an existing todo.
 - `sensitive` (optional): If `true`, moves to `todos.env`
 - `parent_id` (optional): New parent ID (use empty to remove hierarchy)
 - `estimated_llm_calls` (optional): Updated estimate
+- `creator_id` (optional): Updated creator ID
+- `conversation_id` (optional): Updated conversation ID
+- `agent_id` (optional): Updated agent ID
 
 **Response:**
 ```json

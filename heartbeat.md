@@ -152,6 +152,38 @@ Build a comprehensive knowledge base that captures:
 
 **Full API Documentation:** `~/openclaw/workspace/selena/docs/API.md`
 
+### 3b. Automatic Todo Tracking Workflow
+
+**Rule: Always add new todos/loose ends to tracked todos in every response.**
+
+**Workflow:**
+1. **In every response:** If new tasks, loose ends, or action items are identified, add them immediately to the tracked todos via the API
+2. **After X turns (configurable, default 10):** If session is inactive or turns threshold reached, call the todo tracker agent to:
+   - Extract todos/loose ends from recent conversations
+   - Check if all are already tracked
+   - Add any missing ones
+3. **Session inactive trigger:** If session has been inactive for a period, automatically invoke todo extraction
+
+**Todo Metadata (store with each todo):**
+| Field | Description |
+|-------|-------------|
+| `creator_id` | Who added the todo (user ID, agent ID, or "system") |
+| `conversation_id` | Which conversation/channel the todo came from |
+| `agent_id` | Which agent created the todo |
+| `created_at` | Timestamp when created |
+
+**Example API call with metadata:**
+```
+POST /api/todos/add?short_desc=...&long_desc=...&priority=9&creator_id=382800169453748225&conversation_id=1494781163498246144&agent_id=selena-v2
+```
+
+**Todo Tracker Agent:**
+- Runs after X turns or session inactivity
+- Scans recent conversation context
+- Extracts action items, loose ends, pending decisions
+- Checks against existing todos
+- Adds missing ones with proper metadata
+
 ### 4. Learning Check
 - Review recent `.learnings/` files
 - Look for patterns worth documenting

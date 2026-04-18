@@ -13,6 +13,9 @@ Each todo has:
 - sensitive (boolean - if True, stored in todos.env NOT in git)
 - parent_id (optional - for hierarchical todos)
 - estimated_llm_calls (optional - estimated LLM calls for this task)
+- creator_id (optional - who created this todo)
+- conversation_id (optional - which conversation this belongs to)
+- agent_id (optional - which agent owns this todo)
 - created_at
 - updated_at
 """
@@ -157,7 +160,10 @@ class TodoManager:
     
     def add_todo(self, short_desc: str, long_desc: str = "", priority: int = 5, 
                  sensitive: bool = False, parent_id: Optional[str] = None,
-                 estimated_llm_calls: Optional[int] = None) -> dict:
+                 estimated_llm_calls: Optional[int] = None,
+                 creator_id: Optional[str] = None,
+                 conversation_id: Optional[str] = None,
+                 agent_id: Optional[str] = None) -> dict:
         """
         Add a new todo.
         
@@ -168,6 +174,9 @@ class TodoManager:
             sensitive: If True, stored in todos.env NOT in git (default False)
             parent_id: Optional parent todo ID for hierarchical todos
             estimated_llm_calls: Optional estimated LLM calls for this task
+            creator_id: Optional ID of who created this todo
+            conversation_id: Optional ID of the conversation this belongs to
+            agent_id: Optional ID of the agent that owns this todo
         
         Returns:
             The created todo dict
@@ -181,6 +190,9 @@ class TodoManager:
             "sensitive": sensitive,
             "parent_id": parent_id,  # None means top-level todo
             "estimated_llm_calls": estimated_llm_calls,
+            "creator_id": creator_id,
+            "conversation_id": conversation_id,
+            "agent_id": agent_id,
             "created_at": self._now(),
             "updated_at": self._now()
         }
@@ -307,7 +319,7 @@ class TodoManager:
         
         Args:
             todo_id: ID of todo to update
-            **kwargs: Fields to update (short_desc, long_desc, priority, status, sensitive, parent_id, estimated_llm_calls)
+            **kwargs: Fields to update (short_desc, long_desc, priority, status, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id)
         
         Returns:
             Updated todo dict or None if not found
@@ -327,7 +339,7 @@ class TodoManager:
     def _update_todo_in_list(self, todo: dict, todo_list: list, **kwargs) -> dict:
         """Update a todo in a specific list."""
         # Update allowed fields
-        allowed = ["short_desc", "long_desc", "priority", "status", "sensitive", "parent_id", "estimated_llm_calls"]
+        allowed = ["short_desc", "long_desc", "priority", "status", "sensitive", "parent_id", "estimated_llm_calls", "creator_id", "conversation_id", "agent_id"]
         for key in allowed:
             if key in kwargs:
                 if key == "priority":

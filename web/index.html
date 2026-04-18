@@ -405,6 +405,23 @@
                                 <input type="text" id="todoDesc" placeholder="Optional description" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
                             </div>
                         </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                            <div class="setting-item" style="margin-bottom: 0;">
+                                <label>Creator ID</label>
+                                <input type="text" id="todoCreatorId" placeholder="Who created this?" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
+                            </div>
+                            <div class="setting-item" style="margin-bottom: 0;">
+                                <label>Conversation ID</label>
+                                <input type="text" id="todoConversationId" placeholder="Which conversation?" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
+                            </div>
+                            <div class="setting-item" style="margin-bottom: 0;">
+                                <label>Agent ID</label>
+                                <input type="text" id="todoAgentId" placeholder="Which agent?" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
+                            </div>
+                        </div>
+                                <input type="text" id="todoDesc" placeholder="Optional description" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-glow); border-radius: 8px; color: var(--text-primary);">
+                            </div>
+                        </div>
                         <button onclick="addTodo()" style="padding: 10px 20px; background: var(--accent-lunar); border: none; border-radius: 8px; color: white; cursor: pointer;">Add Todo</button>
                     </div>
                     
@@ -668,6 +685,9 @@
             const llmCalls = parseInt(document.getElementById('todoLlmCalls').value) || null;
             const sensitive = document.getElementById('todoSensitiveFlag').value === 'true';
             const desc = document.getElementById('todoDesc').value.trim();
+            const creatorId = document.getElementById('todoCreatorId').value.trim() || null;
+            const conversationId = document.getElementById('todoConversationId').value.trim() || null;
+            const agentId = document.getElementById('todoAgentId').value.trim() || null;
             
             if (!title) {
                 alert('Title is required!');
@@ -680,6 +700,9 @@
                 if (llmCalls) url += `&estimated_llm_calls=${llmCalls}`;
                 if (sensitive) url += `&sensitive=true`;
                 if (desc) url += `&long_desc=${encodeURIComponent(desc)}`;
+                if (creatorId) url += `&creator_id=${encodeURIComponent(creatorId)}`;
+                if (conversationId) url += `&conversation_id=${encodeURIComponent(conversationId)}`;
+                if (agentId) url += `&agent_id=${encodeURIComponent(agentId)}`;
                 
                 const response = await fetch(url, {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -691,6 +714,9 @@
                     document.getElementById('todoDesc').value = '';
                     document.getElementById('todoParentId').value = '';
                     document.getElementById('todoLlmCalls').value = '';
+                    document.getElementById('todoCreatorId').value = '';
+                    document.getElementById('todoConversationId').value = '';
+                    document.getElementById('todoAgentId').value = '';
                     // Reload todos
                     loadTodos();
                 } else {
@@ -770,6 +796,9 @@
                                 <div style="margin-top: 10px; font-size: 0.75rem; color: var(--text-secondary); flex-wrap: wrap; display: flex; gap: 10px;">
                                     <span>ID: ${todo.id}</span>
                                     ${todo.parent_id ? `<span>Parent: ${todo.parent_id}</span>` : ''}
+                                    ${todo.creator_id ? `<span>👤 ${todo.creator_id}</span>` : ''}
+                                    ${todo.conversation_id ? `<span>💬 ${todo.conversation_id}</span>` : ''}
+                                    ${todo.agent_id ? `<span>🤖 ${todo.agent_id}</span>` : ''}
                                     <span>Created: ${new Date(todo.created_at).toLocaleString()}</span>
                                 </div>
                             </div>

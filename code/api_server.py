@@ -496,10 +496,13 @@ class RequestHandler(BaseHTTPRequestHandler):
             sensitive = query.get('sensitive', ['false'])[0].lower() == 'true'
             parent_id = query.get('parent_id', [None])[0] if 'parent_id=' in parsed.query else None
             estimated_llm_calls = int(query.get('estimated_llm_calls', ['0'])[0]) if 'estimated_llm_calls=' in parsed.query else None
+            creator_id = query.get('creator_id', [None])[0] if 'creator_id=' in parsed.query else None
+            conversation_id = query.get('conversation_id', [None])[0] if 'conversation_id=' in parsed.query else None
+            agent_id = query.get('agent_id', [None])[0] if 'agent_id=' in parsed.query else None
             if not short_desc:
                 self.send_json({'success': False, 'error': 'short_desc required'}, 400)
                 return
-            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls)
+            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id)
             self.send_json({'success': True, 'todo': todo})
             return
         
@@ -521,6 +524,9 @@ class RequestHandler(BaseHTTPRequestHandler):
             if 'sensitive' in query: updates['sensitive'] = query['sensitive'][0].lower() == 'true'
             if 'parent_id' in query: updates['parent_id'] = query['parent_id'][0] if query['parent_id'][0] else None
             if 'estimated_llm_calls' in query: updates['estimated_llm_calls'] = int(query['estimated_llm_calls'][0]) if query['estimated_llm_calls'][0] else None
+            if 'creator_id' in query: updates['creator_id'] = query['creator_id'][0] if query['creator_id'][0] else None
+            if 'conversation_id' in query: updates['conversation_id'] = query['conversation_id'][0] if query['conversation_id'][0] else None
+            if 'agent_id' in query: updates['agent_id'] = query['agent_id'][0] if query['agent_id'][0] else None
             todo = todo_manager.update_todo(todo_id, **updates)
             if todo:
                 self.send_json({'success': True, 'todo': todo})
