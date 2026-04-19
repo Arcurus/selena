@@ -953,9 +953,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         
         # Projects endpoints
         if path == '/api/projects':
-            if not self.authenticate():
-                self.send_json({'error': 'Unauthorized'}, 401)
-                return
+            # No auth required - projects are public info
             # Load projects from file
             projects_file = os.path.join(SELENA_ROOT, 'docs', 'projects.md')
             projects = []
