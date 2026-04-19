@@ -46,6 +46,7 @@
 - **Description**: Web editor for OneLife object files with sprite preview
 - **Tech**: Python, HTML5 Canvas
 - **Features**: Parse .txt object files, binary cache, TGA sprite preview, zoom 25%-400%
+- **Directory**: ohol-editor
 
 ### llm-loop-example
 - **name**: llm-loop-example

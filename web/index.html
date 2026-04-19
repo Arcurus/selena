@@ -594,7 +594,7 @@
                         ${p.port ? `<span>📍 Port: ${p.port}</span>` : ''}
                         ${p.repo ? `<span>🔗 <a href="${p.repo}" target="_blank" style="color: var(--accent-blue);">GitHub</a></span>` : ''}
                         ${p.priority ? `<span>⭐ P${p.priority}</span>` : ''}
-                        <span><a href="#" onclick="openFileBrowser('${p.name}/'); return false;" style="color: var(--accent-blue);">📁 Files</a></span>
+                        <span><a href="#" onclick="openFileBrowser('${p.directory || p.name}/'); return false;" style="color: var(--accent-blue);">📁 Files</a></span>
                     </div>
                 </div>
             `).join('');
