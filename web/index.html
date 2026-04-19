@@ -280,6 +280,8 @@
     <script>
         let token = localStorage.getItem('selena_token') || '';
         let servicesPollingInterval = null;
+        let lastServicesState = null;
+        let isServicesLoading = false;
         const settings = { port: localStorage.getItem('selena_port') || '8765' };
         
         // Projects data
@@ -384,7 +386,14 @@
         // Services functions
         async function loadServices() {
             const list = document.getElementById('serviceList');
-            list.innerHTML = '<p style="color: var(--text-secondary);">Loading services...</p>';
+            
+            // Show loading state but keep last known state visible
+            isServicesLoading = true;
+            if (lastServicesState) {
+                renderServices(lastServicesState, true); // true = show loading overlay
+            } else {
+                list.innerHTML = '<p style="color: var(--text-secondary);">Loading services...</p>';
+            }
             
             try {
                 // Get services status from API
@@ -395,6 +404,7 @@
                 
                 // Build services list
                 let services = [];
+                const now = new Date();
                 
                 // Add API server
                 services.push({
@@ -448,42 +458,57 @@
                 // Ping services to check actual status
                 for (let service of services) {
                     if (service.checkUrl) {
+                        service.lastChecked = now;
                         try {
                             const controller = new AbortController();
                             const timeout = setTimeout(() => controller.abort(), 3000);
                             const response = await fetch(service.checkUrl, { 
-                                method: 'HEAD',
+                                method: 'GET',
                                 signal: controller.signal,
                                 cache: 'no-cache'
                             });
                             clearTimeout(timeout);
+                            // If we get any response (even error status), server is running
                             service.status = 'ok';
                             service.statusText = 'Running';
                         } catch (e) {
                             service.status = 'error';
                             service.statusText = 'Down';
                         }
+                    } else {
+                        service.lastChecked = now;
                     }
                 }
                 
-                renderServices(services);
+                // Store last known state
+                lastServicesState = services;
+                isServicesLoading = false;
+                renderServices(services, false);
             } catch (e) {
+                isServicesLoading = false;
                 list.innerHTML = '<p style="color: var(--danger);">Failed to load services: ' + e.message + '</p>';
             }
         }
         
-        function renderServices(services) {
+        function renderServices(services, isLoading = false) {
             const list = document.getElementById('serviceList');
+            const lastCheckedText = (s) => {
+                if (!s.lastChecked) return '';
+                const d = s.lastChecked;
+                const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                return `<span style="color: var(--text-secondary); font-size: 0.75rem;">Last checked: ${timeStr}</span>`;
+            };
             list.innerHTML = services.map(s => `
                 <div class="service-item ${s.status}">
                     <div class="service-icon">${s.icon}</div>
                     <div class="service-info">
-                        <div class="service-name">${s.name}</div>
+                        <div class="service-name">${s.name}${isLoading ? ' <span style="color: var(--accent-blue);">⟳</span>' : ''}</div>
                         <div class="service-description">${s.description}</div>
                         <div class="service-meta">
                             ${s.port ? `<span>📍 Port: ${s.port}</span>` : ''}
                             ${s.pid ? `<span>PID: ${s.pid}</span>` : ''}
                             <span>🕐 ${s.statusText}</span>
+                            ${lastCheckedText(s)}
                         </div>
                     </div>
                     <div class="service-actions">
