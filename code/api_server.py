@@ -155,6 +155,30 @@ def log_error(error_msg, context=''):
         print(f"Failed to write to error log: {e}", file=sys.stderr)
 
 
+# API request logging (daily rotating files)
+def get_api_log_path():
+    """Get path to today's API log file."""
+    log_dir = os.path.join(os.path.dirname(__file__), '..', 'logs')
+    os.makedirs(log_dir, exist_ok=True)
+    today = datetime.datetime.now().strftime('%Y-%m-%d')
+    return os.path.join(log_dir, f'api-server-{today}.log')
+
+def log_api(action, details=''):
+    """Log an API request to the daily API log file."""
+    timestamp = datetime.datetime.now().isoformat()
+    log_line = f"[{timestamp}] API: {action}"
+    if details:
+        log_line += f" | Details: {details}"
+    log_line += "\n"
+    try:
+        with open(get_api_log_path(), 'a') as f:
+            f.write(log_line)
+    except Exception as e:
+        # Fallback to stderr if file logging fails
+        import sys
+        print(f"Failed to write to API log: {e}", file=sys.stderr)
+
+
 def generate_token():
     """Generate a simple auth token"""
     import secrets
@@ -704,6 +728,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         # Todo Manager endpoints
         if path == '/api/todos':
             if not self.authenticate():
+                log_api('UNAUTHORIZED', f'Attempted to load todos without auth')
                 self.send_json({'error': 'Unauthorized'}, 401)
                 return
             # Get all todos
@@ -718,6 +743,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 search = query.get('search', [None])[0]
                 todos = todo_manager.get_all_todos(status=status, sort_by=sort_by, sensitive=sensitive, include_deleted=include_deleted, search=search)
                 summary = todo_manager.get_summary(sensitive=sensitive)
+                log_api('LOAD_TODOS', f'status={status}, sort={sort_by}, sensitive={sensitive}, count={len(todos)}')
                 self.send_json({'todos': todos, 'summary': summary})
             except Exception as e:
                 log_error(f'/api/todos failed: {str(e)}', 'GET /api/todos')

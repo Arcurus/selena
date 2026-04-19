@@ -187,16 +187,16 @@
             <!-- Knowledge Base Tab -->
             <div class="tab-content" id="tab-knowledge">
                 <div class="services-panel">
-                    <h2>📚 Knowledge Base</h2>
-
-                    <!-- Search and Filter Row -->
-                    <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; align-items: center;">
+                    <!-- Headline Row with Search and New Entry -->
+                    <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap; align-items: center;">
+                        <h2 style="margin: 0; flex-shrink: 0;">📚 Knowledge Base</h2>
+                        <div id="kbEntryCount" style="color: var(--text-secondary); font-size: 0.85rem; flex: 0 0 auto;"></div>
                         <input type="text" id="kbSearch" placeholder="🔍 Search knowledge..." 
                                oninput="searchKbEntries()"
                                style="flex: 1; min-width: 200px; padding: 10px 15px; background: var(--bg-card); border: 1px solid var(--accent-blue); border-radius: 8px; color: var(--text-primary);">
-                        <div id="btn-new-kb" onclick="toggleAddKbForm()" class="cost-card" style="padding: 12px 20px; text-align: center; min-width: 120px; border-radius: 12px; cursor: pointer;">
-                            <span style="font-size: 1.2rem;">➕</span>
-                            <div style="color: var(--text-primary); font-size: 0.85rem; font-weight: 500;">New entry</div>
+                        <div id="btn-new-kb" onclick="toggleAddKbForm()" class="cost-card" style="padding: 10px 20px; text-align: center; min-width: 100px; border-radius: 12px; cursor: pointer; flex-shrink: 0;">
+                            <span style="font-size: 1rem;">➕</span>
+                            <div style="color: var(--text-primary); font-size: 0.8rem; font-weight: 500;">New entry</div>
                         </div>
                     </div>
 
@@ -233,7 +233,8 @@
                             <label>Tags (comma-separated)</label>
                             <input type="text" id="kbTags" placeholder="api, error-handling, best-practices" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-blue); border-radius: 8px; color: var(--text-primary);">
                         </div>
-                        <button onclick="addKnowledgeEntry()" class="save-btn" style="width: auto; padding: 10px 30px;">➕ Add Entry</button>
+                        <button onclick="addKnowledgeEntry()" class="save-btn" style="width: auto; padding: 10px 20px;">➕ Add Entry</button>
+                        <button onclick="toggleAddKbForm()" style="background: var(--bg-card); border: 1px solid var(--accent-blue); color: var(--text-primary); padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-left: 10px;">Cancel</button>
                     </div>
 
                     <!-- Knowledge Entries -->
@@ -544,6 +545,62 @@
             }
         }
 
+        async function testAuthAPI() {
+            // Test function to verify API always returns Unauthorized when authentication is wrong
+            // This helps catch regression issues where API might silently fail instead of returning proper error
+            
+            // Test 1: Request with invalid token should return 401 + {"error": "Unauthorized"}
+            const invalidResponse = await fetch('/api/status', {
+                headers: { 'Authorization': 'Bearer invalid_token_12345' }
+            });
+            const invalidData = await invalidResponse.json().catch(() => ({}));
+            
+            if (invalidResponse.status !== 401) {
+                console.error('TEST FAILED: Invalid token should return HTTP 401, got:', invalidResponse.status);
+                return false;
+            }
+            if (invalidData.error !== 'Unauthorized') {
+                console.error('TEST FAILED: Invalid token should return {\"error\": \"Unauthorized\"}, got:', invalidData);
+                return false;
+            }
+            console.log('TEST PASSED: API correctly returns 401 + Unauthorized for invalid token');
+            
+            // Test 2: Request without Authorization header should return 401 + {"error": "Unauthorized"}
+            const noAuthResponse = await fetch('/api/status');
+            const noAuthData = await noAuthResponse.json().catch(() => ({}));
+            
+            if (noAuthResponse.status !== 401) {
+                console.error('TEST FAILED: No auth header should return HTTP 401, got:', noAuthResponse.status);
+                return false;
+            }
+            if (noAuthData.error !== 'Unauthorized') {
+                console.error('TEST FAILED: No auth header should return {\"error\": \"Unauthorized\"}, got:', noAuthData);
+                return false;
+            }
+            console.log('TEST PASSED: API correctly returns 401 + Unauthorized for missing auth');
+            
+            // Test 3: If we have a valid token, verify it works
+            if (token) {
+                const validResponse = await fetch('/api/status', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const validData = await validResponse.json().catch(() => ({}));
+                
+                if (validResponse.status !== 200) {
+                    console.error('TEST FAILED: Valid token should return HTTP 200, got:', validResponse.status);
+                    return false;
+                }
+                if (validData.authenticated !== true) {
+                    console.error('TEST FAILED: Valid token should return {\"authenticated\": true}, got:', validData);
+                    return false;
+                }
+                console.log('TEST PASSED: API correctly returns 200 + authenticated for valid token');
+            }
+            
+            console.log('All auth API tests passed!');
+            return true;
+        }
+
         async function login() {
             const password = document.getElementById('passwordInput').value;
             const errorEl = document.getElementById('loginError');
@@ -631,8 +688,10 @@
                 });
 
                 if (!response.ok) {
-                    // 401 means token is invalid/expired - logout and show login
+                    // 401 means token is invalid/expired - verify API returns Unauthorized, then logout
                     if (response.status === 401) {
+                        console.error('Services: Auth error detected. Running auth API test...');
+                        testAuthAPI();
                         logout();
                         return;
                     }
@@ -819,7 +878,9 @@
                     const data = await response.json();
                     projects = data.projects || [];
                 } else if (response.status === 401) {
-                    // 401 means token is invalid/expired - logout and show login
+                    // 401 means token is invalid/expired - verify API returns Unauthorized, then logout
+                    console.error('Projects: Auth error detected. Running auth API test...');
+                    testAuthAPI();
                     logout();
                     return;
                 }
@@ -1088,7 +1149,10 @@
                 });
                 
                 const allData = await allResponse.json().catch(() => ({}));
-                if (allData.error === 'Unauthorized') {
+                if (allData.error === 'Unauthorized' || allResponse.status === 401) {
+                    // Auth error detected - verify API is correctly returning Unauthorized
+                    console.error('Auth error detected. Running auth API test to verify...');
+                    testAuthAPI(); // Verify API always returns Unauthorized when auth is wrong
                     logout();
                     return;
                 }
@@ -1114,7 +1178,10 @@
                 const data = await response.json().catch(() => ({}));
                 
                 // Check for unauthorized error in response body (API returns 200 with {"error": "Unauthorized"})
-                if (data.error === 'Unauthorized') {
+                if (data.error === 'Unauthorized' || response.status === 401) {
+                    // Auth error detected - verify API is correctly returning Unauthorized
+                    console.error('Auth error detected on filtered request. Running auth API test...');
+                    testAuthAPI(); // Verify API always returns Unauthorized when auth is wrong
                     logout();
                     return;
                 }
@@ -1620,29 +1687,29 @@
         let currentKbFilter = '';
         let kbSearchQuery = '';
 
-        async function loadKnowledge(category, forceRefresh = false) {
+        async function loadKnowledge(forceRefresh = false) {
             // If we have a filter or search, we need fresh data
             if (currentKbFilter || kbSearchQuery) {
                 forceRefresh = true;
             }
             
-            // Check cache first (only for 'all' without filter)
-            if (!forceRefresh && allKbCache.length > 0 && !category) {
+            // Check cache first
+            if (!forceRefresh && allKbCache.length > 0) {
                 renderKnowledge(allKbCache, getKbCategoriesSummary());
                 return;
             }
             
             try {
-                let url = '/api/knowledge';
-                if (category && category !== 'all') url += `/category/${category}`;
-
-                const response = await fetch(url, {
+                // Always fetch ALL entries - filtering happens in JavaScript
+                const response = await fetch('/api/knowledge', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 
                 if (!response.ok) {
-                    // 401 means token is invalid/expired - logout and show login
+                    // 401 means token is invalid/expired - verify API returns Unauthorized, then logout
                     if (response.status === 401) {
+                        console.error('Knowledge: Auth error detected. Running auth API test...');
+                        testAuthAPI();
                         logout();
                         return;
                     }
@@ -1651,9 +1718,9 @@
                 }
 
                 const data = await response.json();
-                // Cache all entries for filtering
+                // Cache ALL entries for filtering (never filter at API level)
                 allKbCache = data.entries || data;
-                renderKnowledge(allKbCache, data.categories);
+                renderKnowledge(allKbCache, getKbCategoriesSummary());
             } catch (e) {
                 console.error('Failed to load knowledge:', e);
             }
@@ -1669,7 +1736,8 @@
 
         function setKbFilter(filter) {
             currentKbFilter = filter;
-            loadKnowledge(filter || 'all', true);
+            // Re-render from cache (all data already fetched)
+            renderKnowledge(allKbCache, getKbCategoriesSummary());
         }
 
         function searchKbEntries() {
@@ -1704,9 +1772,9 @@
             if (matching.length > 0) {
                 suggestionsDiv.innerHTML = `
                     <div style="background: var(--bg-card); border-radius: 8px; padding: 10px; border: 1px solid var(--accent-blue);">
-                        <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px;">Similar entries found:</div>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px;">Similar entries found (click to edit):</div>
                         ${matching.slice(0, 5).map(e => `
-                            <div style="display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--bg-dark);">
+                            <div onclick="prefillKbEntry(${e.id})" style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--bg-dark); cursor: pointer; border-radius: 4px;" onmouseover="this.style.background='var(--bg-dark)'" onmouseout="this.style.background='transparent'">
                                 <span style="background: var(--${e.category === 'lesson' ? 'warning' : e.category === 'skill' ? 'success' : e.category === 'pattern' ? 'accent-neon' : 'working'}); padding: 2px 6px; border-radius: 4px; font-size: 0.7rem;">${e.category}</span>
                                 <span style="color: var(--text-primary);">${e.title}</span>
                             </div>
@@ -1715,6 +1783,24 @@
                 `;
             } else {
                 suggestionsDiv.innerHTML = '';
+            }
+        }
+
+        function prefillKbEntry(entryId) {
+            const entry = allKbCache.find(e => e.id === entryId);
+            if (!entry) return;
+            
+            document.getElementById('kbCategory').value = entry.category;
+            document.getElementById('kbTitle').value = entry.title;
+            document.getElementById('kbContent').value = entry.content || '';
+            document.getElementById('kbTags').value = entry.tags ? entry.tags.join(', ') : '';
+            document.getElementById('kbTitleSuggestions').innerHTML = '';
+            
+            // Ensure form is visible
+            const form = document.getElementById('addKbForm');
+            if (form.style.display === 'none') {
+                form.style.display = 'block';
+                document.getElementById('btn-new-kb').classList.add('active');
             }
         }
 
@@ -1754,6 +1840,14 @@
                 }
             });
             document.getElementById('kbFilterCards').innerHTML = filterCardsHtml;
+
+            // Show entry count (X of Y)
+            const filteredCount = filtered.length;
+            if (currentKbFilter || kbSearchQuery) {
+                document.getElementById('kbEntryCount').innerHTML = `${filteredCount} of ${totalCount} entries`;
+            } else {
+                document.getElementById('kbEntryCount').innerHTML = `${totalCount} entries`;
+            }
 
             // Apply filters
             let filtered = entries;
@@ -2134,7 +2228,7 @@
             }
 
             if (tabName === 'tasks') setTodoFilter(currentTodoFilter || '');
-            if (tabName === 'knowledge') setKbFilter(currentKbFilter || '');
+            if (tabName === 'knowledge') loadKnowledge();
             if (tabName === 'services') {
                 loadServices();
                 // Poll every 10 seconds
