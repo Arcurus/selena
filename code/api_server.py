@@ -281,14 +281,22 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
     
     def authenticate(self):
-        """Check if request is authenticated"""
+        """Check if request is authenticated via Authorization header or cookie"""
+        # Check Authorization header first
         auth_header = self.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            token = auth_header[7:]
+            return active_tokens.get(token, False)
         
-        if not auth_header.startswith('Bearer '):
-            return False
+        # Check cookie
+        cookie_header = self.headers.get('Cookie', '')
+        for cookie in cookie_header.split(';'):
+            cookie = cookie.strip()
+            if cookie.startswith('selena_token='):
+                token = cookie[13:]  # len('selena_token=') == 13
+                return active_tokens.get(token, False)
         
-        token = auth_header[7:]
-        return active_tokens.get(token, False)
+        return False
     
     def send_json(self, data, status=200):
         """Send JSON response"""

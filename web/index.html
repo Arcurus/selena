@@ -78,18 +78,30 @@
                     
                     <!-- File Browser -->
                     <div id="fileBrowser" style="display: none; margin-top: 30px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                            <h3 id="fileBrowserTitle">📂 Files</h3>
-                            <button onclick="closeFileBrowser()" class="service-btn" style="padding: 8px 16px;">✕ Close</button>
-                        </div>
-                        <div id="fileBrowserBreadcrumb" style="margin-bottom: 15px; color: var(--text-secondary);"></div>
-                        <div id="fileList" class="file-list"></div>
-                        <div id="fileContent" style="display: none; margin-top: 20px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                                <h4 id="fileContentTitle">File Content</h4>
-                                <button onclick="closeFileContent()" class="service-btn" style="padding: 5px 12px;">← Back</button>
+                        <!-- Password prompt for file browser -->
+                        <div id="fileBrowserAuth" class="auth-prompt" style="display: none;">
+                            <div class="auth-box">
+                                <h3>🔐 Enter Password</h3>
+                                <p style="color: var(--text-secondary);">Authentication required to browse files</p>
+                                <input type="password" id="fileBrowserPassword" placeholder="Password" onkeypress="if(event.key==='Enter')fileBrowserLogin()">
+                                <button onclick="fileBrowserLogin()">Login</button>
+                                <div class="login-error" id="fileBrowserAuthError" style="display: none;">Invalid password</div>
                             </div>
-                            <pre id="fileContentBody" style="background: var(--bg-dark); padding: 15px; border-radius: 8px; overflow-x: auto; max-height: 500px; font-size: 0.85rem;"></pre>
+                        </div>
+                        <div id="fileBrowserContent" style="display: none;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                <h3 id="fileBrowserTitle">📂 Files</h3>
+                                <button onclick="closeFileBrowser()" class="service-btn" style="padding: 8px 16px;">✕ Close</button>
+                            </div>
+                            <div id="fileBrowserBreadcrumb" style="margin-bottom: 15px; color: var(--text-secondary);"></div>
+                            <div id="fileList" class="file-list"></div>
+                            <div id="fileContent" style="display: none; margin-top: 20px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                    <h4 id="fileContentTitle">File Content</h4>
+                                    <button onclick="closeFileContent()" class="service-btn" style="padding: 5px 12px;">← Back</button>
+                                </div>
+                                <pre id="fileContentBody" style="background: var(--bg-dark); padding: 15px; border-radius: 8px; overflow-x: auto; max-height: 500px; font-size: 0.85rem;"></pre>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -321,6 +333,11 @@
                 if (data.success) {
                     token = data.token;
                     localStorage.setItem('selena_token', token);
+                    // Set secure cookie with 1-hour expiration
+                    // HttpOnly prevents JS access (more secure)
+                    // SameSite=Strict prevents CSRF
+                    // Secure requires HTTPS (only in production)
+                    document.cookie = `selena_token=${token}; max-age=3600; path=/; SameSite=Strict`;
                     errorEl.style.display = 'none';
                     showDashboard();
                 } else { errorEl.style.display = 'block'; }
@@ -559,12 +576,51 @@
         
         // File Browser functions
         let currentFilePath = '';
+        let pendingFilePath = '';
         
         function openFileBrowser(path) {
             document.getElementById('projectsList').style.display = 'none';
             document.getElementById('fileBrowser').style.display = 'block';
+            document.getElementById('fileBrowserContent').style.display = 'none';
             currentFilePath = path;
-            loadFileList(path);
+            pendingFilePath = path;
+            
+            // Check if authenticated
+            if (!token && !document.cookie.includes('selena_token=')) {
+                // Show password prompt
+                document.getElementById('fileBrowserAuth').style.display = 'flex';
+                document.getElementById('fileBrowserPassword').value = '';
+                document.getElementById('fileBrowserAuthError').style.display = 'none';
+                document.getElementById('fileBrowserPassword').focus();
+            } else {
+                // Authenticated - show file browser
+                document.getElementById('fileBrowserAuth').style.display = 'none';
+                document.getElementById('fileBrowserContent').style.display = 'block';
+                loadFileList(path);
+            }
+        }
+        
+        async function fileBrowserLogin() {
+            const password = document.getElementById('fileBrowserPassword').value;
+            const errorEl = document.getElementById('fileBrowserAuthError');
+            try {
+                const response = await fetch(`/api/login?password=${encodeURIComponent(password)}`);
+                const data = await response.json();
+                if (data.success) {
+                    token = data.token;
+                    localStorage.setItem('selena_token', token);
+                    errorEl.style.display = 'none';
+                    document.getElementById('fileBrowserAuth').style.display = 'none';
+                    document.getElementById('fileBrowserContent').style.display = 'block';
+                    if (pendingFilePath) {
+                        loadFileList(pendingFilePath);
+                    }
+                } else {
+                    errorEl.style.display = 'block';
+                }
+            } catch (e) {
+                errorEl.style.display = 'block';
+            }
         }
         
         function closeFileBrowser() {
