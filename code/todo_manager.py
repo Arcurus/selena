@@ -197,6 +197,7 @@ class TodoManager:
             "agent_id": agent_id,
             "block_reason": None,  # Reason why blocked (if status is blocked)
             "waiting_for": None,   # ID of todo this is waiting for
+            "deleted_at": None,    # Soft delete timestamp (None = not deleted)
             "created_at": self._now(),
             "updated_at": self._now()
         }
@@ -228,7 +229,8 @@ class TodoManager:
         return self._get_todo_list(sensitive)
     
     def get_all_todos(self, status: Optional[str] = None, sort_by: str = "priority",
-                      include_children: bool = True, sensitive: Optional[bool] = None) -> list:
+                      include_children: bool = True, sensitive: Optional[bool] = None,
+                      include_deleted: bool = False, search: Optional[str] = None) -> list:
         """
         Get all todos, optionally filtered by status.
         
@@ -237,6 +239,8 @@ class TodoManager:
             sort_by: Sort by "priority", "created", or "updated" (default: priority)
             include_children: If True, include child todos under their parents
             sensitive: If None, include all. If True, only sensitive. If False, only non-sensitive.
+            include_deleted: If True, include soft-deleted todos (deleted_at is not null)
+            search: Filter by short_desc (case-insensitive partial match)
         
         Returns:
             List of todo dicts
@@ -249,9 +253,18 @@ class TodoManager:
         else:
             todos = self._get_todo_list(False)
         
+        # Filter by deleted status
+        if not include_deleted:
+            todos = [t for t in todos if not t.get("deleted_at")]
+        
         # Filter by status
         if status:
             todos = [t for t in todos if t["status"] == status]
+        
+        # Filter by search query (search in short_desc)
+        if search:
+            search_lower = search.lower()
+            todos = [t for t in todos if search_lower in t.get("short_desc", "").lower()]
         
         # Sort
         if sort_by == "priority":
@@ -342,8 +355,18 @@ class TodoManager:
     
     def _update_todo_in_list(self, todo: dict, todo_list: list, **kwargs) -> dict:
         """Update a todo in a specific list."""
+        # Handle restore parameter (sets deleted_at to None)
+        if kwargs.get("restore"):
+            todo["deleted_at"] = None
+            todo["updated_at"] = self._now()
+            if todo in self.todos:
+                self._save_todos()
+            else:
+                self._save_sensitive_todos()
+            return todo
+        
         # Update allowed fields
-        allowed = ["short_desc", "long_desc", "priority", "status", "sensitive", "parent_id", "estimated_llm_calls", "creator_id", "conversation_id", "agent_id", "block_reason", "waiting_for"]
+        allowed = ["short_desc", "long_desc", "priority", "status", "sensitive", "parent_id", "estimated_llm_calls", "creator_id", "conversation_id", "agent_id", "block_reason", "waiting_for", "deleted_at"]
         for key in allowed:
             if key in kwargs:
                 if key == "priority":

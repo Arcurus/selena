@@ -421,7 +421,13 @@
                     this.y += this.vy;
 
                     this.life++;
-                    this.opacity = Math.max(0, 1 - this.life / this.maxLife);
+                    // Fade only in last 20% of life - stays bright for most of its journey
+                    const lifeRatio = this.life / this.maxLife;
+                    if (lifeRatio < 0.8) {
+                        this.opacity = 1;
+                    } else {
+                        this.opacity = Math.max(0, 1 - Math.pow((lifeRatio - 0.8) / 0.2, 0.5));
+                    }
 
                     // Reset when it leaves the screen or dies
                     if (this.x > window.innerWidth + 150 || this.y > window.innerHeight + 150 || this.life > this.maxLife) {
