@@ -243,12 +243,12 @@
   },
   {
     "id": "e02ddd44",
-    "short_desc": "MiniMax TTS setup (speech-2.8-hd) - BLOCKED",
-    "long_desc": "Configure MiniMax TTS (speech-2.8-hd) for voice storytelling. BLOCKED: The minimax-oauth token works for language models but NOT for TTS API. TTS requires API secret key from platform.minimaxi.chat. Arcurus confirmed token plan includes TTS HD but OAuth token doesn't authenticate to TTS endpoint.",
-    "priority": 8,
-    "status": "blocked",
+    "short_desc": "MiniMax TTS setup (speech-2.8-hd) - COMPLETED",
+    "long_desc": "Configure MiniMax TTS (speech-2.8-hd) for voice storytelling. COMPLETED: The minimax-oauth token works for language models AND for TTS API. We fixed the token configuration. TTS is now working properly.",
+    "priority": 3,
+    "status": "completed",
     "created_at": "2026-04-19T07:09:15.297730",
-    "updated_at": "2026-04-19T07:09:15.297730"
+    "updated_at": "2026-04-19T13:18:27.840430"
   },
   {
     "id": "9ddae970",
@@ -587,6 +587,23 @@
     "waiting_for": null,
     "created_at": "2026-04-19T12:59:07.342334",
     "updated_at": "2026-04-19T12:59:17.332876"
+  },
+  {
+    "id": "29fe32e6",
+    "short_desc": "Test POST todo",
+    "long_desc": "Testing POST method",
+    "priority": 7,
+    "status": "open",
+    "sensitive": false,
+    "parent_id": null,
+    "estimated_llm_calls": null,
+    "creator_id": null,
+    "conversation_id": null,
+    "agent_id": null,
+    "block_reason": null,
+    "waiting_for": null,
+    "created_at": "2026-04-19T13:01:05.211886",
+    "updated_at": "2026-04-19T13:01:05.211899"
   },
   {
     "id": "29fe32e6",

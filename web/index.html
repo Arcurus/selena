@@ -11,6 +11,9 @@
     <div class="starfield" id="starfield"></div>
     <div class="nebula"></div>
     
+    <!-- Shooting Stars Canvas -->
+    <canvas id="shootingStarsCanvas"></canvas>
+
     <!-- Login Screen -->
     <div class="login-screen" id="loginScreen">
         <div class="login-box">
@@ -21,14 +24,14 @@
             <div class="login-error" id="loginError">Invalid password</div>
         </div>
     </div>
-    
+
     <!-- Main Dashboard -->
     <div class="dashboard" id="dashboard">
         <div class="header">
             <h1>🌙 <span class="header-star">✨</span> Selena Astra - explore the stars <span class="header-star">✨</span></h1>
             <button class="logout" onclick="logout()">Logout</button>
         </div>
-        
+
         <div class="container">
             <div class="tabs">
                 <div class="tab active" onclick="showTab('services')">⚙️ Services</div>
@@ -40,7 +43,7 @@
                 <div class="tab" onclick="showTab('settings')">⚡ Settings</div>
                 <div class="tab" onclick="showTab('scanner')">🔍 Scanner</div>
             </div>
-            
+
             <!-- Services Tab -->
             <div class="tab-content active" id="tab-services">
                 <div class="main-grid">
@@ -69,7 +72,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- Projects Tab -->
             <div class="tab-content" id="tab-projects">
                 <div class="projects-panel">
@@ -78,7 +81,7 @@
                         <button onclick="closeFileBrowser(); loadProjects();" class="service-btn" style="padding: 8px 16px;">🔄 Show All</button>
                     </div>
                     <div id="projectsList" class="projects-grid"></div>
-                    
+
                     <!-- File Browser -->
                     <div id="fileBrowser" style="display: none; margin-top: 30px;">
                         <!-- Password prompt for file browser -->
@@ -109,24 +112,37 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- Tasks Tab -->
             <div class="tab-content" id="tab-tasks">
                 <div class="tasks-panel">
                     <h2>🎯 Tasks / Loose Ends / Todos</h2>
-                    
+
                     <!-- Filter Controls -->
                     <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
-                        <select id="todoFilter" onchange="loadTodos()" style="padding: 8px 12px; background: var(--bg-dark); border: 1px solid var(--accent-blue); border-radius: 8px; color: var(--text-primary);">
-                            <option value="">All Status</option>
-                            <option value="open">Open</option>
-                            <option value="in_progress">In Progress</option>
-                            <option value="done">Done</option>
-                            <option value="blocked">Blocked</option>
-                        </select>
-                        <button onclick="showTab('tasks'); loadTodos();" class="save-btn" style="width: auto; padding: 8px 16px;">🔄 Refresh</button>
+                        <button id="filter-all" class="filter-btn" onclick="setTodoFilter('')">
+                            <span>All</span>
+                            <span class="count" id="count-all">0</span>
+                        </button>
+                        <button id="filter-open" class="filter-btn" onclick="setTodoFilter('open')">
+                            <span>Open</span>
+                            <span class="count" id="count-open">0</span>
+                        </button>
+                        <button id="filter-in_progress" class="filter-btn" onclick="setTodoFilter('in_progress')">
+                            <span>In Progress</span>
+                            <span class="count" id="count-in_progress">0</span>
+                        </button>
+                        <button id="filter-blocked" class="filter-btn" onclick="setTodoFilter('blocked')">
+                            <span>Blocked</span>
+                            <span class="count" id="count-blocked">0</span>
+                        </button>
+                        <button id="filter-done" class="filter-btn" onclick="setTodoFilter('done')">
+                            <span>Done</span>
+                            <span class="count" id="count-done">0</span>
+                        </button>
+                        <button onclick="showTab('tasks');" class="save-btn" style="width: auto; padding: 8px 16px;">🔄 Refresh</button>
                     </div>
-                    
+
                     <!-- Add Todo Form -->
                     <div style="background: var(--bg-dark); border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid var(--accent-blue);">
                         <h3 style="color: var(--accent-neon); margin-bottom: 15px;">Add New Task</h3>
@@ -146,17 +162,17 @@
                         </div>
                         <button onclick="addTodo()" class="save-btn" style="width: auto; padding: 10px 30px;">➕ Add Task</button>
                     </div>
-                    
+
                     <div id="todoSummary" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 20px;"></div>
                     <div id="todoList" style="max-height: 600px; overflow-y: auto;"></div>
                 </div>
             </div>
-            
+
             <!-- Knowledge Base Tab -->
             <div class="tab-content" id="tab-knowledge">
                 <div class="services-panel">
                     <h2>📚 Knowledge Base</h2>
-                    
+
                     <!-- Add Entry Form -->
                     <div style="background: var(--bg-dark); border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid var(--accent-blue);">
                         <h3 style="color: var(--accent-neon); margin-bottom: 15px;">Add New Entry</h3>
@@ -185,15 +201,15 @@
                         </div>
                         <button onclick="addKnowledgeEntry()" class="save-btn" style="width: auto; padding: 10px 30px;">➕ Add Entry</button>
                     </div>
-                    
+
                     <!-- Category Filters -->
                     <div id="kbCategories" style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;"></div>
-                    
+
                     <!-- Knowledge Entries -->
                     <div id="kbEntries" style="max-height: 600px; overflow-y: auto;"></div>
                 </div>
             </div>
-            
+
             <!-- Activity Tab -->
             <div class="tab-content" id="tab-activity">
                 <div class="tabs" style="margin-bottom: 15px;">
@@ -207,14 +223,14 @@
                     <div class="error-list" id="errorList"></div>
                 </div>
             </div>
-            
+
             <!-- Cost Tab -->
             <div class="tab-content" id="tab-cost">
                 <div class="tabs" style="margin-bottom: 15px;">
                     <div class="tab active" onclick="showCostTab('tokenplan')">🎫 Token Plan</div>
                     <div class="tab" onclick="showCostTab('tracking')">📊 Call Tracking</div>
                 </div>
-                
+
                 <!-- Token Plan Sub-tab -->
                 <div class="tab-content active" id="cost-tokenplan">
                     <div class="cost-summary" id="tokenSummary"></div>
@@ -223,7 +239,7 @@
                         <canvas id="tokenGraph" class="graph-canvas"></canvas>
                     </div>
                 </div>
-                
+
                 <!-- Call Tracking Sub-tab -->
                 <div class="tab-content" id="cost-tracking">
                     <div class="cost-summary" id="callSummary"></div>
@@ -233,7 +249,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- Settings Tab -->
             <div class="tab-content" id="tab-settings">
                 <div class="services-panel">
@@ -247,27 +263,27 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- Scanner Tab -->
             <div class="tab-content" id="tab-scanner">
                 <div class="services-panel">
                     <h2>🔍 Workspace Scanner</h2>
                     <p>Scan .md files in the workspace and extract knowledge to the knowledge base.</p>
-                    
+
                     <div style="margin: 20px 0; text-align: center;">
                         <button onclick="runScanner()" class="save-btn" id="scannerBtn" style="width: auto; padding: 12px 40px;">🚀 Run Scanner</button>
                     </div>
-                    
+
                     <div id="scannerStatus" style="margin-top: 20px;">
                         <h3>📊 Scanner Status</h3>
                         <div id="scannerStatusContent">Click "Run Scanner" to scan the workspace.</div>
                     </div>
-                    
+
                     <div id="scannerResults" style="margin-top: 20px; display: none;">
                         <h3>📋 Last Scan Results</h3>
                         <div id="scannerResultsContent"></div>
                     </div>
-                    
+
                     <div id="scannerHistory" style="margin-top: 20px;">
                         <h3>📜 Scan History</h3>
                         <div id="scannerHistoryContent">No scans yet.</div>
@@ -276,17 +292,18 @@
             </div>
         </div>
     </div>
-    
+
     <script>
         let token = localStorage.getItem('selena_token') || '';
         let servicesPollingInterval = null;
         let lastServicesState = null;
         let isServicesLoading = false;
+        let currentTodoFilter = '';
         const settings = { port: localStorage.getItem('selena_port') || '8765' };
-        
+
         // Projects data
         let projectsData = [];
-        
+
         // Cost tracking data (loaded from API)
         let costData = {
             tokenPlan: {
@@ -298,12 +315,12 @@
             },
             calls: []
         };
-        
+
         // Initialize starfield
         function createStarfield() {
             const starfield = document.getElementById('starfield');
             if (!starfield) return;
-            
+
             // Create stars
             for (let i = 0; i < 150; i++) {
                 const star = document.createElement('div');
@@ -317,19 +334,148 @@
                 star.style.animationDelay = Math.random() * 5 + 's';
                 starfield.appendChild(star);
             }
-            
-            // Create shooting stars
-            for (let i = 0; i < 3; i++) {
-                const shootingStar = document.createElement('div');
-                shootingStar.className = 'shooting-star';
-                shootingStar.style.left = Math.random() * 50 + '%';
-                shootingStar.style.top = Math.random() * 50 + '%';
-                shootingStar.style.setProperty('--duration', (Math.random() * 3 + 4) + 's');
-                shootingStar.style.animationDelay = Math.random() * 10 + 's';
-                starfield.appendChild(shootingStar);
-            }
+
+            // Initialize canvas-based shooting stars
+            initShootingStars();
         }
-        
+
+        // Shooting Stars (Canvas-based)
+        const shootingCanvas = document.getElementById('shootingStarsCanvas');
+        const shootingCtx = shootingCanvas ? shootingCanvas.getContext('2d') : null;
+        let shootingStars = [];
+        let shootingAnimationId = null;
+
+        function initShootingStars() {
+            if (!shootingCanvas) return;
+            
+            function resizeShootingCanvas() {
+                shootingCanvas.width = window.innerWidth;
+                shootingCanvas.height = window.innerHeight;
+            }
+            resizeShootingCanvas();
+            window.addEventListener('resize', resizeShootingCanvas);
+
+            class ShootingStar {
+                constructor() {
+                    this.reset();
+                }
+
+                reset() {
+                    // Angle from top-left to bottom-right: roughly 30° to 60° (down-right)
+                    const angle = Math.PI / 6 + Math.random() * Math.PI / 3; // 30°–90° (mostly down-right)
+                    const speed = 1.5 + Math.random() * 2; // SLOWER: 1.5–3.5 px/frame
+
+                    this.vx = Math.cos(angle) * speed;
+                    this.vy = Math.sin(angle) * speed;
+
+                    // Start from top-left area mostly
+                    if (Math.random() > 0.3) {
+                        // Start from left side (top-left quadrant)
+                        this.x = -100;
+                        this.y = Math.random() * window.innerHeight * 0.4;
+                    } else {
+                        // Start from top side
+                        this.x = Math.random() * window.innerWidth * 0.5;
+                        this.y = -100;
+                    }
+
+                    this.trail = [];
+                    this.maxTrailLength = 80 + Math.random() * 40; // LONGER bluish trail
+                    this.life = 0;
+                    // Stagger spawn times for more orderly appearance
+                    this.maxLife = 280 + Math.random() * 120;
+                    this.opacity = 1;
+                    this.delay = Math.random() * 200; // Initial delay for orderly spawn
+                }
+
+                update() {
+                    // Handle initial delay for orderly spawning
+                    if (this.delay > 0) {
+                        this.delay--;
+                        return;
+                    }
+
+                    // Store current position BEFORE moving (this fixes trail direction)
+                    this.trail.push({ x: this.x, y: this.y });
+
+                    if (this.trail.length > this.maxTrailLength) {
+                        this.trail.shift();
+                    }
+
+                    // Move the star
+                    this.x += this.vx;
+                    this.y += this.vy;
+
+                    this.life++;
+                    this.opacity = Math.max(0, 1 - this.life / this.maxLife);
+
+                    // Reset when it leaves the screen or dies
+                    if (this.x > window.innerWidth + 150 || this.y > window.innerHeight + 150 || this.life > this.maxLife) {
+                        this.reset();
+                    }
+                }
+
+                draw() {
+                    if (this.trail.length < 2 || this.delay > 0) return;
+
+                    shootingCtx.save();
+
+                    // Draw fading trail (oldest = faint tail, newest = bright near head)
+                    // More bluish color
+                    shootingCtx.strokeStyle = '#6eb5ff';
+                    shootingCtx.lineWidth = 2.5;
+                    shootingCtx.lineCap = 'round';
+
+                    for (let i = 0; i < this.trail.length - 1; i++) {
+                        // Alpha increases toward the head (newer positions)
+                        const alpha = (i / this.trail.length) * this.opacity * 0.85;
+                        shootingCtx.globalAlpha = alpha;
+                        shootingCtx.beginPath();
+                        shootingCtx.moveTo(this.trail[i].x, this.trail[i].y);
+                        shootingCtx.lineTo(this.trail[i + 1].x, this.trail[i + 1].y);
+                        shootingCtx.stroke();
+                    }
+
+                    // Bright head + glow (bluish-white)
+                    shootingCtx.globalAlpha = this.opacity;
+                    shootingCtx.shadowBlur = 15;
+                    shootingCtx.shadowColor = '#a0d8ff';
+
+                    shootingCtx.fillStyle = '#c8e6ff';
+                    shootingCtx.beginPath();
+                    shootingCtx.arc(this.x, this.y, 3, 0, Math.PI * 2);
+                    shootingCtx.fill();
+
+                    shootingCtx.restore();
+                }
+            }
+
+            // Create fewer shooting stars (4 instead of 7)
+            const NUM_STARS = 4;
+            for (let i = 0; i < NUM_STARS; i++) {
+                const star = new ShootingStar();
+                // Stagger initial spawn times for more orderly appearance
+                star.delay = i * 60 + Math.random() * 30;
+                shootingStars.push(star);
+            }
+
+            function animateShootingStars() {
+                // Gentle background fade (keeps previous frames slightly visible for trail effect)
+                shootingCtx.fillStyle = 'rgba(0, 4, 15, 0.22)';
+                shootingCtx.fillRect(0, 0, shootingCanvas.width, shootingCanvas.height);
+
+                shootingStars.forEach(star => {
+                    star.update();
+                    star.draw();
+                });
+
+                shootingAnimationId = requestAnimationFrame(animateShootingStars);
+            }
+
+            // Start animation
+            animateShootingStars();
+        }
+
         async function login() {
             const password = document.getElementById('passwordInput').value;
             const errorEl = document.getElementById('loginError');
@@ -349,13 +495,13 @@
                 } else { errorEl.style.display = 'block'; }
             } catch (e) { errorEl.style.display = 'block'; }
         }
-        
+
         function logout() {
             token = ''; localStorage.removeItem('selena_token');
             document.getElementById('dashboard').style.display = 'none';
             document.getElementById('loginScreen').style.display = 'flex';
         }
-        
+
         function showDashboard() {
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('dashboard').style.display = 'block';
@@ -365,28 +511,28 @@
             loadDashboard();
             loadCostTracking();
         }
-        
+
         function saveSetting(key, value) {
             settings[key] = value;
             localStorage.setItem(`selena_${key}`, value);
         }
-        
+
         function saveAllSettings() {
             saveSetting('port', document.getElementById('settingPort').value);
             document.getElementById('settingPort2').value = document.getElementById('settingPort').value;
             alert('Settings saved! 🌙');
         }
-        
+
         function loadDashboard() {
             loadServices();
             loadProjects();
             loadCostTracking();
         }
-        
+
         // Services functions
         async function loadServices() {
             const list = document.getElementById('serviceList');
-            
+
             // Show loading state but keep last known state visible
             isServicesLoading = true;
             if (lastServicesState) {
@@ -394,13 +540,13 @@
             } else {
                 list.innerHTML = '<p style="color: var(--text-secondary);">Loading services...</p>';
             }
-            
+
             try {
                 // Get services status from API
                 const response = await fetch('/api/status', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                
+
                 if (!response.ok) {
                     // 401 means token is invalid/expired - logout and show login
                     if (response.status === 401) {
@@ -413,13 +559,13 @@
                     isServicesLoading = false;
                     return;
                 }
-                
+
                 const data = await response.json();
-                
+
                 // Build services list
                 let services = [];
                 const now = new Date();
-                
+
                 // Add API server
                 services.push({
                     name: 'Selena API Server',
@@ -431,7 +577,7 @@
                     status: data.authenticated ? 'ok' : 'unknown',
                     statusText: data.authenticated ? 'Running' : 'Unknown'
                 });
-                
+
                 // Add scheduler status if available
                 if (data.agents) {
                     services.push({
@@ -445,7 +591,7 @@
                         statusText: data.agents.length + ' agents'
                     });
                 }
-                
+
                 // Add services from project docs
                 services.push({
                     name: 'Open World (open-world-selena)',
@@ -457,7 +603,7 @@
                     status: 'unknown',
                     statusText: 'Checking...'
                 });
-                
+
                 services.push({
                     name: 'OpenClaw Gateway',
                     description: 'Main agent framework',
@@ -468,7 +614,7 @@
                     status: 'ok',
                     statusText: 'Running'
                 });
-                
+
                 // Ping services to check actual status
                 for (let service of services) {
                     if (service.checkUrl) {
@@ -476,7 +622,7 @@
                         try {
                             const controller = new AbortController();
                             const timeout = setTimeout(() => controller.abort(), 3000);
-                            const response = await fetch(service.checkUrl, { 
+                            const response = await fetch(service.checkUrl, {
                                 method: 'GET',
                                 signal: controller.signal,
                                 cache: 'no-cache'
@@ -493,7 +639,7 @@
                         service.lastChecked = now;
                     }
                 }
-                
+
                 // Store last known state
                 lastServicesState = services;
                 isServicesLoading = false;
@@ -503,7 +649,7 @@
                 list.innerHTML = '<p style="color: var(--danger);">Failed to load services: ' + e.message + '</p>';
             }
         }
-        
+
         function renderServices(services, isLoading = false) {
             const list = document.getElementById('serviceList');
             const lastCheckedText = (s) => {
@@ -533,11 +679,11 @@
                 </div>
             `).join('');
         }
-        
+
         function refreshServices() {
             loadServices();
         }
-        
+
         async function restartService(name) {
             if (!confirm(`Restart ${name}?`)) return;
             try {
@@ -555,7 +701,7 @@
                 alert(`✗ Error restarting ${name}: ${e.message}`);
             }
         }
-        
+
         async function stopService(name) {
             if (!confirm(`Stop ${name}? This may cause data loss!`)) return;
             try {
@@ -573,18 +719,18 @@
                 alert(`✗ Error stopping ${name}: ${e.message}`);
             }
         }
-        
+
         // Projects functions
         async function loadProjects() {
             const list = document.getElementById('projectsList');
             list.innerHTML = '<p style="color: var(--text-secondary);">Loading projects...</p>';
-            
+
             try {
                 // Fetch projects from API or use default
                 const response = await fetch('/api/projects', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                
+
                 let projects = [];
                 if (response.ok) {
                     const data = await response.json();
@@ -594,7 +740,7 @@
                     logout();
                     return;
                 }
-                
+
                 // If no projects from API, use defaults
                 if (projects.length === 0) {
                     projects = [
@@ -614,21 +760,21 @@
                         }
                     ];
                 }
-                
+
                 projectsData = projects;
                 renderProjects(projects);
             } catch (e) {
                 list.innerHTML = '<p style="color: var(--text-secondary);">Projects: ' + e.message + '</p>';
             }
         }
-        
+
         function renderProjects(projects) {
             const list = document.getElementById('projectsList');
             if (projects.length === 0) {
                 list.innerHTML = '<p style="color: var(--text-secondary);">No projects found.</p>';
                 return;
             }
-            
+
             list.innerHTML = projects.map(p => `
                 <div class="project-card">
                     <div class="project-header">
@@ -645,18 +791,18 @@
                 </div>
             `).join('');
         }
-        
+
         // File Browser functions
         let currentFilePath = '';
         let pendingFilePath = '';
-        
+
         function openFileBrowser(path) {
             document.getElementById('projectsList').style.display = 'none';
             document.getElementById('fileBrowser').style.display = 'block';
             document.getElementById('fileBrowserContent').style.display = 'none';
             currentFilePath = path;
             pendingFilePath = path;
-            
+
             // Check if authenticated
             if (!token && !document.cookie.includes('selena_token=')) {
                 // Show password prompt
@@ -671,7 +817,7 @@
                 loadFileList(path);
             }
         }
-        
+
         async function fileBrowserLogin() {
             const password = document.getElementById('fileBrowserPassword').value;
             const errorEl = document.getElementById('fileBrowserAuthError');
@@ -694,32 +840,32 @@
                 errorEl.style.display = 'block';
             }
         }
-        
+
         function closeFileBrowser() {
             document.getElementById('projectsList').style.display = 'grid';
             document.getElementById('fileBrowser').style.display = 'none';
             document.getElementById('fileContent').style.display = 'none';
             currentFilePath = '';
         }
-        
+
         async function loadFileList(path) {
             const listEl = document.getElementById('fileList');
             const titleEl = document.getElementById('fileBrowserTitle');
             const breadcrumbEl = document.getElementById('fileBrowserBreadcrumb');
-            
+
             titleEl.textContent = '📂 ' + path;
             breadcrumbEl.innerHTML = path.split('/').filter(p => p).map((part, i, arr) => {
                 const partPath = arr.slice(0, i + 1).join('/') + '/';
                 return `<a href="#" onclick="loadFileList('${partPath}'); return false;" style="color: var(--accent-blue);">${part}</a>`;
             }).join(' / ');
-            
+
             listEl.innerHTML = '<p style="color: var(--text-secondary);">Loading...</p>';
-            
+
             try {
                 const response = await fetch(`/api/files/list?path=${encodeURIComponent(path)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                
+
                 // Handle unauthorized - show password prompt
                 if (response.status === 401) {
                     // Clear invalid token
@@ -733,26 +879,26 @@
                     document.getElementById('fileBrowserPassword').focus();
                     return;
                 }
-                
+
                 const data = await response.json();
-                
+
                 if (data.error) {
                     listEl.innerHTML = `<p style="color: var(--error);">Error: ${data.error}</p>`;
                     return;
                 }
-                
+
                 if (data.entries.length === 0) {
                     listEl.innerHTML = '<p style="color: var(--text-secondary);">Empty directory.</p>';
                     return;
                 }
-                
+
                 // Sort: directories first, then files
                 data.entries.sort((a, b) => {
                     if (a.is_dir && !b.is_dir) return -1;
                     if (!a.is_dir && b.is_dir) return 1;
                     return a.name.localeCompare(b.name);
                 });
-                
+
                 listEl.innerHTML = data.entries.map(entry => {
                     if (entry.is_dir) {
                         return `<div class="file-item" onclick="loadFileList('${entry.path}/')" style="cursor: pointer;">
@@ -773,7 +919,7 @@
                 listEl.innerHTML = `<p style="color: var(--error);">Error: ${e.message}</p>`;
             }
         }
-        
+
         function getFileIcon(ext) {
             const icons = {
                 'md': '📝', 'txt': '📄', 'json': '📋', 'js': '📜', 'py': '🐍',
@@ -782,7 +928,7 @@
             };
             return icons[ext] || '📄';
         }
-        
+
         function formatFileSize(bytes) {
             if (bytes === 0) return '0 B';
             const k = 1024;
@@ -790,44 +936,43 @@
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
         }
-        
+
         async function readFile(path) {
             const contentEl = document.getElementById('fileContent');
             const titleEl = document.getElementById('fileContentTitle');
             const bodyEl = document.getElementById('fileContentBody');
-            
+
             titleEl.textContent = '📄 ' + path.split('/').pop();
             bodyEl.textContent = 'Loading...';
             contentEl.style.display = 'block';
-            
+
             try {
                 const response = await fetch(`/api/files/read?path=${encodeURIComponent(path)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json();
-                
+
                 if (data.error) {
                     bodyEl.textContent = 'Error: ' + data.error;
                     return;
                 }
-                
+
                 bodyEl.textContent = data.content;
             } catch (e) {
                 bodyEl.textContent = 'Error: ' + e.message;
             }
         }
-        
+
         function closeFileContent() {
             document.getElementById('fileContent').style.display = 'none';
         }
-        
+
         // Todos functions
         async function loadTodos() {
             try {
-                const status = document.getElementById('todoFilter').value;
                 let url = '/api/todos?';
-                if (status) url += `status=${status}&`;
-                
+                if (currentTodoFilter) url += `status=${currentTodoFilter}&`;
+
                 const response = await fetch(url, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -852,16 +997,25 @@
             }
         }
         
+        function setTodoFilter(filter) {
+            currentTodoFilter = filter;
+            // Update button highlights
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            const activeBtn = document.getElementById('filter-' + (filter || 'all'));
+            if (activeBtn) activeBtn.classList.add('active');
+            loadTodos();
+        }
+
         async function addTodo() {
             const title = document.getElementById('todoTitle').value.trim();
             const priority = parseInt(document.getElementById('todoPriority').value) || 5;
             const desc = document.getElementById('todoDesc').value.trim();
-            
+
             if (!title) {
                 alert('Title is required!');
                 return;
             }
-            
+
             try {
                 const response = await fetch('/api/todos/add', {
                     method: 'POST',
@@ -875,13 +1029,13 @@
                         priority: priority
                     })
                 });
-                
+
                 // 401 means token is invalid/expired - logout and show login
                 if (response.status === 401) {
                     logout();
                     return;
                 }
-                
+
                 const data = await response.json();
                 if (data.success) {
                     document.getElementById('todoTitle').value = '';
@@ -894,9 +1048,17 @@
                 alert('Failed to add task');
             }
         }
-        
+
         function renderTodos(todos, summary) {
+            // Update filter button counts from summary
             if (summary) {
+                document.getElementById('count-all').textContent = summary.total || 0;
+                document.getElementById('count-open').textContent = summary.open || 0;
+                document.getElementById('count-in_progress').textContent = summary.in_progress || 0;
+                document.getElementById('count-blocked').textContent = summary.blocked || 0;
+                document.getElementById('count-done').textContent = summary.done || 0;
+                
+                // Also update the summary cards
                 document.getElementById('todoSummary').innerHTML = `
                     <div class="cost-card">
                         <h3>Total</h3>
@@ -925,6 +1087,23 @@
                 `;
             }
             
+            // Sort todos: status (in_progress, blocked, open, done), then priority (desc), then updated_at (desc)
+            const statusOrder = { 'in_progress': 0, 'blocked': 1, 'open': 2, 'done': 3 };
+            if (todos && todos.length > 0) {
+                todos.sort((a, b) => {
+                    // First: status order
+                    const statusDiff = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99);
+                    if (statusDiff !== 0) return statusDiff;
+                    // Second: priority (higher first)
+                    const priorityDiff = (b.priority || 0) - (a.priority || 0);
+                    if (priorityDiff !== 0) return priorityDiff;
+                    // Third: updated_at (most recent first)
+                    const dateA = new Date(a.updated_at || 0).getTime();
+                    const dateB = new Date(b.updated_at || 0).getTime();
+                    return dateB - dateA;
+                });
+            }
+
             if (todos && todos.length > 0) {
                 document.getElementById('todoList').innerHTML = todos.map(todo => `
                     <div class="todo-card" style="border-color: ${getPriorityColor(todo.priority)};">
@@ -952,14 +1131,14 @@
                 document.getElementById('todoList').innerHTML = '<p style="color: var(--text-secondary);">No tasks found. 🌙</p>';
             }
         }
-        
+
         function getPriorityColor(priority) {
             if (priority >= 8) return 'var(--danger)';
             if (priority >= 6) return 'var(--warning)';
             if (priority >= 4) return 'var(--working)';
             return 'var(--success)';
         }
-        
+
         function getStatusColor(status) {
             switch(status) {
                 case 'done': return 'var(--success)';
@@ -968,13 +1147,13 @@
                 default: return 'var(--text-secondary)';
             }
         }
-        
+
         async function markTodoStatus(todoId, status) {
             try {
                 const response = await fetch(`/api/todos/update?id=${todoId}&status=${status}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                
+
                 if (!response.ok) {
                     // 401 means token is invalid/expired - logout and show login
                     if (response.status === 401) {
@@ -984,7 +1163,7 @@
                     console.error('Failed to update todo:', response.status);
                     return;
                 }
-                
+
                 const data = await response.json();
                 if (data.success) {
                     loadTodos();
@@ -993,17 +1172,17 @@
                 console.error('Failed to update todo:', e);
             }
         }
-        
+
         // Knowledge Base functions
         async function loadKnowledge(category) {
             try {
                 let url = '/api/knowledge';
                 if (category && category !== 'all') url += `/category/${category}`;
-                
+
                 const response = await fetch(url, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                
+
                 if (!response.ok) {
                     // 401 means token is invalid/expired - logout and show login
                     if (response.status === 401) {
@@ -1013,14 +1192,14 @@
                     console.error('Failed to load knowledge:', response.status);
                     return;
                 }
-                
+
                 const data = await response.json();
                 renderKnowledge(data.entries || data, data.categories);
             } catch (e) {
                 console.error('Failed to load knowledge:', e);
             }
         }
-        
+
         function renderKnowledge(entries, categories) {
             // Render category counts
             const categoryColors = {
@@ -1030,19 +1209,19 @@
                 reference: 'var(--working)'
             };
             const catHtml = (categories || []).map(cat => `
-                <div class="category-badge" onclick="loadKnowledge('${cat.name}')" 
+                <div class="category-badge" onclick="loadKnowledge('${cat.name}')"
                      style="background: ${categoryColors[cat.name] || 'var(--accent-blue)'}; padding: 8px 15px; border-radius: 20px; cursor: pointer; font-size: 0.85rem;">
                     ${cat.name.charAt(0).toUpperCase() + cat.name.slice(1)}: ${cat.count}
                 </div>
             `).join('');
             document.getElementById('kbCategories').innerHTML = `
-                <div class="category-badge" onclick="loadKnowledge('all')" 
+                <div class="category-badge" onclick="loadKnowledge('all')"
                      style="background: var(--accent-blue); padding: 8px 15px; border-radius: 20px; cursor: pointer; font-size: 0.85rem;">
                     All
                 </div>
                 ${catHtml}
             `;
-            
+
             // Render entries
             if (entries && entries.length > 0) {
                 document.getElementById('kbEntries').innerHTML = entries.map(entry => `
@@ -1069,18 +1248,18 @@
                 document.getElementById('kbEntries').innerHTML = '<p style="color: var(--text-secondary);">No knowledge entries yet. Add your first entry above! 📚</p>';
             }
         }
-        
+
         async function addKnowledgeEntry() {
             const category = document.getElementById('kbCategory').value;
             const title = document.getElementById('kbTitle').value;
             const content = document.getElementById('kbContent').value;
             const tags = document.getElementById('kbTags').value;
-            
+
             if (!title) {
                 alert('Title is required!');
                 return;
             }
-            
+
             try {
                 const tagsParam = tags ? `&tags=${encodeURIComponent(tags)}` : '';
                 const response = await fetch(`/api/knowledge/add?category=${category}&title=${encodeURIComponent(title)}&content=${encodeURIComponent(content)}${tagsParam}`, {
@@ -1099,8 +1278,8 @@
                 alert('Failed to add entry');
             }
         }
-        
-        
+
+
         async function deleteKnowledgeEntry(entryId) {
             if (!confirm('Delete this entry?')) return;
             try {
@@ -1113,14 +1292,14 @@
                 console.error('Failed to delete:', e);
             }
         }
-        
+
         // Cost tracking functions
         async function loadCostTracking() {
             try {
                 const response = await fetch('/api/cost/tracking', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                
+
                 if (response.ok) {
                     const data = await response.json();
                     costData = data;
@@ -1128,12 +1307,12 @@
             } catch (e) {
                 console.log('Using default cost tracking');
             }
-            
+
             renderCostSummary();
             renderTokenGraph();
             renderCallTracking();
         }
-        
+
         function renderCostSummary() {
             const tp = costData.tokenPlan;
             document.getElementById('tokenSummary').innerHTML = `
@@ -1155,25 +1334,25 @@
                 </div>
             `;
         }
-        
+
         function renderTokenGraph() {
             const canvas = document.getElementById('tokenGraph');
             if (!canvas) return;
-            
+
             const ctx = canvas.getContext('2d');
             const rect = canvas.getBoundingClientRect();
             canvas.width = rect.width * 2;
             canvas.height = rect.height * 2;
             ctx.scale(2, 2);
-            
+
             const width = rect.width;
             const height = rect.height;
             const history = costData.tokenPlan.history || [];
-            
+
             // Background
             ctx.fillStyle = '#0a0a20';
             ctx.fillRect(0, 0, width, height);
-            
+
             // Grid
             ctx.strokeStyle = '#1a1a40';
             ctx.lineWidth = 1;
@@ -1184,10 +1363,10 @@
                 ctx.lineTo(width, y);
                 ctx.stroke();
             }
-            
+
             if (history.length > 0) {
                 const maxVal = Math.max(...history.map(h => h.spent || 0), 1);
-                
+
                 // Used line (orange)
                 ctx.strokeStyle = '#f59e0b';
                 ctx.lineWidth = 2;
@@ -1199,7 +1378,7 @@
                     else ctx.lineTo(x, y);
                 });
                 ctx.stroke();
-                
+
                 // Labels
                 ctx.fillStyle = '#8ab4f8';
                 ctx.font = '10px Segoe UI';
@@ -1210,10 +1389,10 @@
                 ctx.fillText('No data yet', width/2 - 30, height/2);
             }
         }
-        
+
         function renderCallTracking() {
             const calls = costData.calls || [];
-            
+
             // Summary
             document.getElementById('callSummary').innerHTML = `
                 <div class="cost-card">
@@ -1225,7 +1404,7 @@
                     <div class="value" style="font-size: 1.5rem;">${calls.filter(c => new Date(c.time).toDateString() === new Date().toDateString()).length}</div>
                 </div>
             `;
-            
+
             // Recent calls
             const callList = document.getElementById('callList');
             if (calls.length === 0) {
@@ -1244,24 +1423,24 @@
                 `).join('');
             }
         }
-        
+
         // Scanner Functions
         async function runScanner() {
             if (!token) { alert('Please login first'); return; }
-            
+
             const btn = document.getElementById('scannerBtn');
             btn.disabled = true;
             btn.textContent = '⏳ Scanning...';
-            
+
             document.getElementById('scannerStatusContent').innerHTML = '<p style="color: var(--text-secondary);">Scanning workspace...</p>';
             document.getElementById('scannerResults').style.display = 'none';
-            
+
             try {
                 const response = await fetch('/api/worker/scan', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json();
-                
+
                 if (data.success) {
                     // Show status
                     document.getElementById('scannerStatusContent').innerHTML = `
@@ -1283,7 +1462,7 @@
                             Scanned at: ${new Date(data.timestamp).toLocaleString()}
                         </p>
                     `;
-                    
+
                     // Show results details
                     if (data.details && data.details.length > 0) {
                         document.getElementById('scannerResults').style.display = 'block';
@@ -1303,7 +1482,7 @@
                             </div>
                         `;
                     }
-                    
+
                     if (data.errors && data.errors.length > 0) {
                         document.getElementById('scannerStatusContent').innerHTML += `
                             <div style="margin-top: 15px; color: var(--error);">
@@ -1311,7 +1490,7 @@
                             </div>
                         `;
                     }
-                    
+
                     // Refresh status and history
                     refreshScannerStatus();
                     refreshScannerHistory();
@@ -1321,20 +1500,20 @@
             } catch (error) {
                 document.getElementById('scannerStatusContent').innerHTML = `<p style="color: var(--error);">Error: ${error.message}</p>`;
             }
-            
+
             btn.disabled = false;
             btn.textContent = '🚀 Run Scanner';
         }
-        
+
         async function refreshScannerStatus() {
             if (!token) return;
-            
+
             try {
                 const response = await fetch('/api/worker/status', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json();
-                
+
                 if (data.has_result) {
                     document.getElementById('scannerStatusContent').innerHTML = `
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 15px;">
@@ -1362,16 +1541,16 @@
                 console.error('Error refreshing scanner status:', error);
             }
         }
-        
+
         async function refreshScannerHistory() {
             if (!token) return;
-            
+
             try {
                 const response = await fetch('/api/worker/history', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json();
-                
+
                 if (data.history && data.history.length > 0) {
                     document.getElementById('scannerHistoryContent').innerHTML = data.history.map(h => `
                         <div style="background: var(--bg-dark); border-radius: 8px; padding: 10px; margin-bottom: 8px;">
@@ -1391,20 +1570,20 @@
                 console.error('Error refreshing scanner history:', error);
             }
         }
-        
+
         function showTab(tabName) {
             document.querySelectorAll('.tabs > .tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.querySelector(`.tabs > .tab[onclick="showTab('${tabName}')"]`).classList.add('active');
             document.getElementById(`tab-${tabName}`).classList.add('active');
-            
+
             // Clear services polling when leaving services tab
             if (servicesPollingInterval) {
                 clearInterval(servicesPollingInterval);
                 servicesPollingInterval = null;
             }
-            
-            if (tabName === 'tasks') loadTodos();
+
+            if (tabName === 'tasks') setTodoFilter(currentTodoFilter || '');
             if (tabName === 'knowledge') loadKnowledge();
             if (tabName === 'services') {
                 loadServices();
@@ -1415,30 +1594,30 @@
             if (tabName === 'cost') { renderCostSummary(); renderTokenGraph(); }
             if (tabName === 'scanner') { refreshScannerStatus(); refreshScannerHistory(); }
         }
-        
+
         function showActivityTab(tabName) {
             document.querySelectorAll('#tab-activity .tabs .tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('#tab-activity .tab-content').forEach(t => t.classList.remove('active'));
             document.querySelector(`#tab-activity .tabs .tab[onclick="showActivityTab('${tabName}')"]`).classList.add('active');
             document.getElementById(`activity-${tabName}`).classList.add('active');
-            
+
             if (tabName === 'log') renderActivityLog();
             if (tabName === 'errors') renderErrorLog();
         }
-        
+
         function showCostTab(tabName) {
             document.querySelectorAll('#tab-cost .tabs .tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('#tab-cost .tab-content').forEach(t => t.classList.remove('active'));
             document.querySelector(`#tab-cost .tabs .tab[onclick="showCostTab('${tabName}')"]`).classList.add('active');
             document.getElementById(`cost-${tabName}`).classList.add('active');
         }
-        
+
         function renderActivityLog() {
             const list = document.getElementById('activityList');
             if (!list) return;
-            
+
             list.innerHTML = '<p style="color: var(--text-secondary);">Loading...</p>';
-            
+
             fetch('/api/activity/log', {
                 headers: { 'Authorization': `Bearer ${token}` }
             })
@@ -1460,13 +1639,13 @@
                 list.innerHTML = '<p style="color: var(--danger);">Failed to load activity.</p>';
             });
         }
-        
+
         function renderErrorLog() {
             const list = document.getElementById('errorList');
             if (!list) return;
-            
+
             list.innerHTML = '<p style="color: var(--text-secondary);">Loading...</p>';
-            
+
             fetch('/api/activity/errors', {
                 headers: { 'Authorization': `Bearer ${token}` }
             })
@@ -1488,19 +1667,19 @@
                 list.innerHTML = '<p style="color: var(--danger);">Failed to load errors.</p>';
             });
         }
-        
+
         // Window resize handler
         window.addEventListener('resize', () => {
             if (document.getElementById('tokenGraph')) {
                 renderTokenGraph();
             }
         });
-        
+
         // Check if already logged in
         if (token) {
             showDashboard();
         }
-        
+
         // Refresh activity log periodically from API
         setInterval(() => {
             if (document.getElementById('activityList')) {
