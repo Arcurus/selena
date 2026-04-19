@@ -38,7 +38,7 @@ Selena v2 uses an advanced priority selection system based on values and impact.
 | Project | Allocation | LLM Calls/5h | Focus |
 |---------|------------|--------------|-------|
 | open-world-selena | 50% | 2000 | Open World + Selena AI |
-| selena | 50% | 2000 | Self-development & subprojects |
+| selena-project | 50% | 2000 | Self-development & subprojects |
 | unallocated | - | 500 | Buffer |
 
 **Total:** 4500 LLM calls per 5 hours (target: 4000 spent, 500 buffer)
@@ -47,12 +47,12 @@ Selena v2 uses an advanced priority selection system based on values and impact.
 
 | Subproject | Allocation | LLM Calls/5h | Description |
 |------------|-----------|--------------|-------------|
-| priority_reflection | 30% of selena | 300 | Reflect on the priority system - is it working? What are shortcomings? How to improve? Is it aligned with values? |
-| evolving_memory | 25% of selena | 250 | Evolve and improve memory systems |
-| self_improvement | 25% of selena | 250 | Self-improvement research and implementation |
-| other | 20% of selena | 200 | Other tasks and flexibility |
+| priority_reflection | 30% of selena-project | 300 | Reflect on the priority system - is it working? What are shortcomings? How to improve? Is it aligned with values? |
+| evolving_memory | 25% of selena-project | 250 | Evolve and improve memory systems |
+| self_improvement | 25% of selena-project | 250 | Self-improvement research and implementation |
+| other | 20% of selena-project | 200 | Other tasks and flexibility |
 
-> **Note:** Focus only on open-world-selena and selena. OpenLife is reserved but not actively spent.
+> **Note:** Focus only on open-world-selena and selena-project. OpenLife is reserved but not actively spent.
 
 > **Key Goal:** "make something good for the world out of them" - create meaningful emergent content!
 

@@ -42,10 +42,10 @@ Run heartbeat checks every ~30 minutes during active hours. The fast heartbeat r
 | Project | Allocation | LLM Calls/5h |
 |---------|------------|--------------|
 | open-world-selena | 50% | 2000 |
-| selena | 50% | 2000 |
+| selena-project | 50% | 2000 |
 | unallocated | - | 500 |
 
-**Selena Subprojects (within selena allocation):**
+**Selena-project Subprojects:**
 | Subproject | Allocation | LLM Calls/5h |
 |------------|-----------|--------------|
 | priority_reflection | 30% | 300 |
@@ -94,7 +94,7 @@ Build a comprehensive knowledge base that captures:
 - `openlife` — Not a "selena" project
 - `open-world` — Not a "selena" project
 
-**Focus:** Only open-world-selena and selena for now. OpenLife is reserved but not actively spent.
+**Focus:** Only open-world-selena and selena-project for now. OpenLife is reserved but not actively spent.
 
 ## Data Management
 

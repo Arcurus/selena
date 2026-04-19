@@ -58,9 +58,9 @@
     "short_desc": "Open World server DOWN since Apr 13",
     "long_desc": "Open World server at 159.195.43.108:8080 has been down since approximately Apr 13. Needs restart. See memory/openworld-status.md for details. Also mentioned in MEMORY.md -> Active Issues section.",
     "priority": 9,
-    "status": "open",
+    "status": "done",
     "created_at": "2026-04-19T00:26:32.734365",
-    "updated_at": "2026-04-19T00:26:32.734376"
+    "updated_at": "2026-04-19T09:02:22.052930"
   },
   {
     "id": "781c6ec5",
@@ -178,5 +178,103 @@
     "status": "open",
     "created_at": "2026-04-19T00:39:26.870692",
     "updated_at": "2026-04-19T00:39:26.870698"
+  },
+  {
+    "id": "fb94ebcf",
+    "short_desc": "Implement automatic todo tracking workflow",
+    "long_desc": "Implement workflow: 1) In every response, add new todos/loose ends to tracked todos. 2) After X turns (10) or session inactive, call todo tracker agent to extract untracked todos. 3) Todos should track: who added them, conversation id, agent id. Add to selena docs and MEMORY.md.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T01:11:50.973696",
+    "updated_at": "2026-04-19T01:11:50.973706"
+  },
+  {
+    "id": "81d4a98b",
+    "short_desc": "Add metadata fields to todo schema",
+    "long_desc": "Subtask: Add fields to todo schema: creator_id, conversation_id, agent_id, created_at. Update Selena API to support these fields.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T01:11:59.395349",
+    "updated_at": "2026-04-19T01:11:59.395363"
+  },
+  {
+    "id": "dac3d869",
+    "short_desc": "Create todo tracker cron job",
+    "long_desc": "Subtask: Create cron job that runs after X turns (10) or session inactive. Agent to extract todos from conversations and check if all are tracked.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T01:11:59.405138",
+    "updated_at": "2026-04-19T01:11:59.405147"
+  },
+  {
+    "id": "d9a81696",
+    "short_desc": "Document todo workflow in selena docs",
+    "long_desc": "Subtask: Update selena/heartbeat.md and selena/priorities.md to document the automatic todo tracking workflow.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T01:11:59.414778",
+    "updated_at": "2026-04-19T01:11:59.414787"
+  },
+  {
+    "id": "48ce57af",
+    "short_desc": "Discord Integration PAUSED",
+    "long_desc": "Discord integration paused. Reason: Focusing on webinterface first. Can resume after webinterface stable",
+    "priority": 5,
+    "status": "open",
+    "sensitive": false,
+    "parent_id": null,
+    "estimated_llm_calls": null,
+    "creator_id": null,
+    "conversation_id": null,
+    "agent_id": null,
+    "block_reason": null,
+    "waiting_for": null,
+    "created_at": "2026-04-19T09:02:22.077738",
+    "updated_at": "2026-04-19T09:02:22.077751"
+  },
+  {
+    "id": "969d4abd",
+    "short_desc": "Add todo tracking to AGENTS.md workflow",
+    "long_desc": "Add instruction to AGENTS.md: always add new todos/loose ends from responses to the tracked todos system. Also clarify the threshold ('after X turns') for when to remind about unresolved todos.",
+    "priority": 9,
+    "status": "open",
+    "created_at": "2026-04-19T07:09:15.297730",
+    "updated_at": "2026-04-19T07:09:15.297730"
+  },
+  {
+    "id": "e02ddd44",
+    "short_desc": "MiniMax TTS setup (speech-2.8-hd) - BLOCKED",
+    "long_desc": "Configure MiniMax TTS (speech-2.8-hd) for voice storytelling. BLOCKED: The minimax-oauth token works for language models but NOT for TTS API. TTS requires API secret key from platform.minimaxi.chat. Arcurus confirmed token plan includes TTS HD but OAuth token doesn't authenticate to TTS endpoint.",
+    "priority": 8,
+    "status": "blocked",
+    "created_at": "2026-04-19T07:09:15.297730",
+    "updated_at": "2026-04-19T07:09:15.297730"
+  },
+  {
+    "id": "9ddae970",
+    "short_desc": "LCM context maxed at 200k tokens - prevent future issues",
+    "long_desc": "Session hit context token limit (200,000 max). LCM compaction freed 0 bytes because context too full to generate summary. Fix: use /lossless rotate periodically. Question: should automatic rotation threshold be adjusted?",
+    "priority": 7,
+    "status": "open",
+    "created_at": "2026-04-19T07:09:15.297730",
+    "updated_at": "2026-04-19T07:09:15.297730"
+  },
+  {
+    "id": "33a91fa8",
+    "short_desc": "Heartbeat missed ~9.6 hours - investigate and fix",
+    "long_desc": "Last heartbeat was ~9.6 hours ago (576 min). Context max-out likely blocked heartbeat cron delivery. Need to investigate heartbeat delivery and ensure it works when context is full.",
+    "priority": 7,
+    "status": "open",
+    "created_at": "2026-04-19T07:09:15.297730",
+    "updated_at": "2026-04-19T07:09:15.297730"
+  },
+  {
+    "id": "93aa2ce1",
+    "short_desc": "Sync MEMORY.md cron schedule with actual cron-jobs.md",
+    "long_desc": "MEMORY.md says security-research cron runs at 'daily 03:00 CET' but actual schedule (memory/cron-jobs.md) shows different timing. Need to update MEMORY.md to match actual cron-jobs.md.",
+    "priority": 6,
+    "status": "open",
+    "created_at": "2026-04-19T07:09:15.297730",
+    "updated_at": "2026-04-19T07:09:15.297730"
   }
 ]

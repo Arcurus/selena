@@ -163,7 +163,7 @@ Primary focus. Open World with Selena integration.
 - World mechanics improvements
 - Testing and bug fixes
 
-### selena (50% of time)
+### selena-project (50% of time)
 Self-development, memory, reflection.
 
 **Subprojects:**
