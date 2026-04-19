@@ -2279,7 +2279,12 @@
             if (tabName === 'knowledge') loadKnowledge();
             if (tabName === 'services') {
                 loadServices();
-                renderServicesTaskSummary();
+                // Load todos first if not already loaded, then render task summary
+                if (allTodosCache.length === 0) {
+                    loadTodos().then(() => renderServicesTaskSummary());
+                } else {
+                    renderServicesTaskSummary();
+                }
                 // Poll every 10 seconds
                 servicesPollingInterval = setInterval(loadServices, 10000);
             }
