@@ -276,6 +276,7 @@
     
     <script>
         let token = localStorage.getItem('selena_token') || '';
+        let servicesPollingInterval = null;
         const settings = { port: localStorage.getItem('selena_port') || '8765' };
         
         // Projects data
@@ -399,6 +400,7 @@
                     icon: '🌙',
                     port: settings.port,
                     pid: null,
+                    checkUrl: `http://localhost:${settings.port}/api/projects`,
                     status: data.authenticated ? 'ok' : 'unknown',
                     statusText: data.authenticated ? 'Running' : 'Unknown'
                 });
@@ -411,6 +413,7 @@
                         icon: '🤖',
                         port: null,
                         pid: null,
+                        checkUrl: null,
                         status: 'ok',
                         statusText: data.agents.length + ' agents'
                     });
@@ -423,8 +426,9 @@
                     icon: '🎮',
                     port: '8081',
                     pid: null,
+                    checkUrl: 'http://localhost:8081/',
                     status: 'unknown',
-                    statusText: 'Check manually'
+                    statusText: 'Checking...'
                 });
                 
                 services.push({
@@ -433,9 +437,31 @@
                     icon: '🦶',
                     port: '18789',
                     pid: null,
+                    checkUrl: 'http://localhost:18789/',
                     status: 'ok',
                     statusText: 'Running'
                 });
+                
+                // Ping services to check actual status
+                for (let service of services) {
+                    if (service.checkUrl) {
+                        try {
+                            const controller = new AbortController();
+                            const timeout = setTimeout(() => controller.abort(), 3000);
+                            const response = await fetch(service.checkUrl, { 
+                                method: 'HEAD',
+                                signal: controller.signal,
+                                cache: 'no-cache'
+                            });
+                            clearTimeout(timeout);
+                            service.status = 'ok';
+                            service.statusText = 'Running';
+                        } catch (e) {
+                            service.status = 'error';
+                            service.statusText = 'Down';
+                        }
+                    }
+                }
                 
                 renderServices(services);
             } catch (e) {
@@ -1278,9 +1304,19 @@
             document.querySelector(`.tabs > .tab[onclick="showTab('${tabName}')"]`).classList.add('active');
             document.getElementById(`tab-${tabName}`).classList.add('active');
             
+            // Clear services polling when leaving services tab
+            if (servicesPollingInterval) {
+                clearInterval(servicesPollingInterval);
+                servicesPollingInterval = null;
+            }
+            
             if (tabName === 'tasks') loadTodos();
             if (tabName === 'knowledge') loadKnowledge();
-            if (tabName === 'services') loadServices();
+            if (tabName === 'services') {
+                loadServices();
+                // Poll every 10 seconds
+                servicesPollingInterval = setInterval(loadServices, 10000);
+            }
             if (tabName === 'projects') loadProjects();
             if (tabName === 'cost') { renderCostSummary(); renderTokenGraph(); }
             if (tabName === 'scanner') { refreshScannerStatus(); refreshScannerHistory(); }
