@@ -41,11 +41,63 @@ from self_evolution import evolution_loop
 from todo_manager import todo_manager
 from knowledge_base import knowledge_base as kb
 
+# Helper functions for service management
+import time
+import signal
+import subprocess
+
+def get_pid_file(pid_path):
+    """Read PID from a file, return None if not found"""
+    if os.path.exists(pid_path):
+        try:
+            with open(pid_path, 'r') as f:
+                return int(f.read().strip())
+        except:
+            return None
+    return None
+
+def check_process_running(pid):
+    """Check if a process with given PID is running"""
+    if pid is None:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except:
+        return False
+
+def get_pid_for_command(cmd1, cmd2=None):
+    """Find PID for a running command using ps"""
+    try:
+        if cmd2:
+            result = subprocess.run(['pgrep', '-f', cmd1], capture_output=True, text=True)
+            for line in result.stdout.strip().split('\n'):
+                if line:
+                    pid = int(line)
+                    try:
+                        with open(f'/proc/{pid}/cmdline', 'r') as f:
+                            cmdline = f.read()
+                            if cmd2 in cmdline:
+                                return pid
+                    except:
+                        pass
+        else:
+            result = subprocess.run(['pgrep', '-f', cmd1], capture_output=True, text=True)
+            pids = result.stdout.strip().split('\n')
+            if pids and pids[0]:
+                return int(pids[0])
+    except:
+        pass
+    return None
+
 # Configuration
 PORT = int(os.getenv('SELENA_PORT', '8765'))
 WEB_PASSWORD = os.getenv('WEB_PASSWORD', 'change_me')
 API_PASSWORD = os.getenv('WEB_PASSWORD', 'change_me')
 SELENA_ROOT = os.path.expanduser('~/openclaw/workspace/selena-project')
+DATA_DIR = os.path.join(SELENA_ROOT, 'data')
 
 # Simple auth token storage
 active_tokens = {}
@@ -779,6 +831,144 @@ class RequestHandler(BaseHTTPRequestHandler):
                 ]
             
             self.send_json({'projects': projects})
+            return
+        
+        # Service management endpoints
+        if path == '/api/services/list':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            # Return known services with their status
+            services = []
+            # Check API server
+            api_pid = get_pid_file(os.path.join(DATA_DIR, 'api_server.pid'))
+            services.append({
+                'name': 'selena-api',
+                'description': 'Selena v2 API Server',
+                'port': 8765,
+                'pid': api_pid,
+                'running': check_process_running(api_pid),
+                'start_command': 'cd {} && nohup python3 code/api_server.py > /tmp/api_server.log 2>&1 &'.format(SELENA_ROOT)
+            })
+            # Check Open World server
+            ow_pid = get_pid_file(os.path.join(DATA_DIR, 'open_world.pid'))
+            services.append({
+                'name': 'open-world-selena',
+                'description': 'Open World Rust Server',
+                'port': 8081,
+                'pid': ow_pid,
+                'running': check_process_running(ow_pid),
+                'start_command': 'cd {} && nohup cargo run > /tmp/open_world.log 2>&1 &'.format(os.path.join(SELENA_ROOT, '..', 'open-world-selena'))
+            })
+            self.send_json({'services': services})
+            return
+        
+        if path == '/api/services/restart' or path == '/api/services/stop':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            
+            # Parse query string manually since we need service name
+            parsed = urlparse(path)
+            query = parse_qs(parsed.query) if '?' in path else {}
+            
+            # Alternative: parse from full path
+            if 'service' not in query:
+                from urllib.parse import parse_qs as pqs
+                query = pqs(parsed.query) if parsed.query else {}
+            
+            service_name = query.get('service', [''])[0] if query else ''
+            if not service_name:
+                self.send_json({'success': False, 'error': 'service name required'}, 400)
+                return
+            
+            result = {'success': False, 'service': service_name, 'action': 'stop' if path == '/api/services/stop' else 'restart'}
+            
+            if path == '/api/services/stop':
+                # Stop the service
+                if service_name == 'selena-api':
+                    pid_file = os.path.join(DATA_DIR, 'api_server.pid')
+                    if os.path.exists(pid_file):
+                        with open(pid_file, 'r') as f:
+                            pid = int(f.read().strip())
+                        try:
+                            os.kill(pid, 9)
+                            result['success'] = True
+                            result['message'] = f'Stopped selena-api (PID {pid})'
+                        except ProcessLookupError:
+                            result['success'] = True
+                            result['message'] = f'Process {pid} already gone'
+                        except Exception as e:
+                            result['error'] = str(e)
+                    else:
+                        result['error'] = 'No PID file found'
+                elif service_name == 'open-world-selena':
+                    pid_file = os.path.join(DATA_DIR, 'open_world.pid')
+                    if os.path.exists(pid_file):
+                        with open(pid_file, 'r') as f:
+                            pid = int(f.read().strip())
+                        try:
+                            os.kill(pid, 9)
+                            result['success'] = True
+                            result['message'] = f'Stopped open-world-selena (PID {pid})'
+                        except ProcessLookupError:
+                            result['success'] = True
+                            result['message'] = f'Process {pid} already gone'
+                        except Exception as e:
+                            result['error'] = str(e)
+                    else:
+                        result['error'] = 'No PID file found'
+                else:
+                    result['error'] = f'Unknown service: {service_name}'
+            else:
+                # Restart = stop + start
+                if service_name == 'selena-api':
+                    # Stop first
+                    pid_file = os.path.join(DATA_DIR, 'api_server.pid')
+                    if os.path.exists(pid_file):
+                        with open(pid_file, 'r') as f:
+                            pid = int(f.read().strip())
+                        try:
+                            os.kill(pid, 9)
+                        except:
+                            pass
+                    # Start
+                    time.sleep(1)
+                    start_cmd = 'cd {} && nohup python3 code/api_server.py > /tmp/api_server.log 2>&1 &'.format(SELENA_ROOT)
+                    os.system(start_cmd)
+                    time.sleep(2)
+                    new_pid = get_pid_for_command('python3', 'api_server.py')
+                    if new_pid:
+                        with open(pid_file, 'w') as f:
+                            f.write(str(new_pid))
+                    result['success'] = True
+                    result['message'] = f'Restarted selena-api (new PID {new_pid})'
+                elif service_name == 'open-world-selena':
+                    # Stop first
+                    pid_file = os.path.join(DATA_DIR, 'open_world.pid')
+                    if os.path.exists(pid_file):
+                        with open(pid_file, 'r') as f:
+                            pid = int(f.read().strip())
+                        try:
+                            os.kill(pid, 9)
+                        except:
+                            pass
+                    # Start
+                    time.sleep(1)
+                    ow_dir = os.path.join(SELENA_ROOT, '..', 'open-world-selena')
+                    start_cmd = 'cd {} && nohup cargo run > /tmp/open_world.log 2>&1 &'.format(ow_dir)
+                    os.system(start_cmd)
+                    time.sleep(3)
+                    new_pid = get_pid_for_command('cargo', 'run')
+                    if new_pid:
+                        with open(pid_file, 'w') as f:
+                            f.write(str(new_pid))
+                    result['success'] = True
+                    result['message'] = f'Restarted open-world-selena (new PID {new_pid})'
+                else:
+                    result['error'] = f'Unknown service: {service_name}'
+            
+            self.send_json(result)
             return
         
         # Cost tracking endpoints

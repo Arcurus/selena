@@ -410,12 +410,38 @@
         
         async function restartService(name) {
             if (!confirm(`Restart ${name}?`)) return;
-            alert(`${name} restart requested. This feature requires backend support.`);
+            try {
+                const response = await fetch(`/api/services/restart?service=${encodeURIComponent(name)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert(`✓ ${data.message || name + ' restarted successfully'}`);
+                    loadServices();
+                } else {
+                    alert(`✗ Failed to restart ${name}: ${data.error || 'Unknown error'}`);
+                }
+            } catch (e) {
+                alert(`✗ Error restarting ${name}: ${e.message}`);
+            }
         }
         
         async function stopService(name) {
             if (!confirm(`Stop ${name}? This may cause data loss!`)) return;
-            alert(`${name} stop requested. This feature requires backend support.`);
+            try {
+                const response = await fetch(`/api/services/stop?service=${encodeURIComponent(name)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert(`✓ ${data.message || name + ' stopped successfully'}`);
+                    loadServices();
+                } else {
+                    alert(`✗ Failed to stop ${name}: ${data.error || 'Unknown error'}`);
+                }
+            } catch (e) {
+                alert(`✗ Error stopping ${name}: ${e.message}`);
+            }
         }
         
         // Projects functions
