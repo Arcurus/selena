@@ -29,7 +29,7 @@
 - **Status**: active
 - **Description**: AI-driven life simulation with autonomous NPCs
 - **Port**: 8000
-- **Repo**: https://github.com/Arcurus/openlife
+- **Repo**: https://github.com/Arcurus/open-life-editor
 - **Tech**: Haxe, JavaScript
 - **Features**: 50 AI NPCs, autonomous villages, dynamic events
 
