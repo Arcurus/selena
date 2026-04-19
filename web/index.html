@@ -75,6 +75,23 @@
                 <div class="projects-panel">
                     <h2>📁 Projects</h2>
                     <div id="projectsList" class="projects-grid"></div>
+                    
+                    <!-- File Browser -->
+                    <div id="fileBrowser" style="display: none; margin-top: 30px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h3 id="fileBrowserTitle">📂 Files</h3>
+                            <button onclick="closeFileBrowser()" class="service-btn" style="padding: 8px 16px;">✕ Close</button>
+                        </div>
+                        <div id="fileBrowserBreadcrumb" style="margin-bottom: 15px; color: var(--text-secondary);"></div>
+                        <div id="fileList" class="file-list"></div>
+                        <div id="fileContent" style="display: none; margin-top: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <h4 id="fileContentTitle">File Content</h4>
+                                <button onclick="closeFileContent()" class="service-btn" style="padding: 5px 12px;">← Back</button>
+                            </div>
+                            <pre id="fileContentBody" style="background: var(--bg-dark); padding: 15px; border-radius: 8px; overflow-x: auto; max-height: 500px; font-size: 0.85rem;"></pre>
+                        </div>
+                    </div>
                 </div>
             </div>
             
@@ -534,9 +551,131 @@
                         ${p.port ? `<span>📍 Port: ${p.port}</span>` : ''}
                         ${p.repo ? `<span>🔗 <a href="${p.repo}" target="_blank" style="color: var(--accent-blue);">GitHub</a></span>` : ''}
                         ${p.priority ? `<span>⭐ P${p.priority}</span>` : ''}
+                        <span><a href="#" onclick="openFileBrowser('${p.name}/'); return false;" style="color: var(--accent-blue);">📁 Files</a></span>
                     </div>
                 </div>
             `).join('');
+        }
+        
+        // File Browser functions
+        let currentFilePath = '';
+        
+        function openFileBrowser(path) {
+            document.getElementById('projectsList').style.display = 'none';
+            document.getElementById('fileBrowser').style.display = 'block';
+            currentFilePath = path;
+            loadFileList(path);
+        }
+        
+        function closeFileBrowser() {
+            document.getElementById('projectsList').style.display = 'grid';
+            document.getElementById('fileBrowser').style.display = 'none';
+            document.getElementById('fileContent').style.display = 'none';
+            currentFilePath = '';
+        }
+        
+        async function loadFileList(path) {
+            const listEl = document.getElementById('fileList');
+            const titleEl = document.getElementById('fileBrowserTitle');
+            const breadcrumbEl = document.getElementById('fileBrowserBreadcrumb');
+            
+            titleEl.textContent = '📂 ' + path;
+            breadcrumbEl.innerHTML = path.split('/').filter(p => p).map((part, i, arr) => {
+                const partPath = arr.slice(0, i + 1).join('/') + '/';
+                return `<a href="#" onclick="loadFileList('${partPath}'); return false;" style="color: var(--accent-blue);">${part}</a>`;
+            }).join(' / ');
+            
+            listEl.innerHTML = '<p style="color: var(--text-secondary);">Loading...</p>';
+            
+            try {
+                const response = await fetch(`/api/files/list?path=${encodeURIComponent(path)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                
+                if (data.error) {
+                    listEl.innerHTML = `<p style="color: var(--error);">Error: ${data.error}</p>`;
+                    return;
+                }
+                
+                if (data.entries.length === 0) {
+                    listEl.innerHTML = '<p style="color: var(--text-secondary);">Empty directory.</p>';
+                    return;
+                }
+                
+                // Sort: directories first, then files
+                data.entries.sort((a, b) => {
+                    if (a.is_dir && !b.is_dir) return -1;
+                    if (!a.is_dir && b.is_dir) return 1;
+                    return a.name.localeCompare(b.name);
+                });
+                
+                listEl.innerHTML = data.entries.map(entry => {
+                    if (entry.is_dir) {
+                        return `<div class="file-item" onclick="loadFileList('${entry.path}/')" style="cursor: pointer;">
+                            <span class="file-icon">📁</span>
+                            <span class="file-name">${entry.name}/</span>
+                        </div>`;
+                    } else {
+                        const ext = entry.name.split('.').pop().toLowerCase();
+                        const icon = getFileIcon(ext);
+                        return `<div class="file-item" onclick="readFile('${entry.path}')" style="cursor: pointer;">
+                            <span class="file-icon">${icon}</span>
+                            <span class="file-name">${entry.name}</span>
+                            <span class="file-size">${formatFileSize(entry.size)}</span>
+                        </div>`;
+                    }
+                }).join('');
+            } catch (e) {
+                listEl.innerHTML = `<p style="color: var(--error);">Error: ${e.message}</p>`;
+            }
+        }
+        
+        function getFileIcon(ext) {
+            const icons = {
+                'md': '📝', 'txt': '📄', 'json': '📋', 'js': '📜', 'py': '🐍',
+                'html': '🌐', 'css': '🎨', 'rs': '🦀', 'toml': '⚙️', 'yaml': '📐',
+                'yml': '📐', 'sh': '💻', 'gitignore': '🔒', 'env': '🔐'
+            };
+            return icons[ext] || '📄';
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+        
+        async function readFile(path) {
+            const contentEl = document.getElementById('fileContent');
+            const titleEl = document.getElementById('fileContentTitle');
+            const bodyEl = document.getElementById('fileContentBody');
+            
+            titleEl.textContent = '📄 ' + path.split('/').pop();
+            bodyEl.textContent = 'Loading...';
+            contentEl.style.display = 'block';
+            
+            try {
+                const response = await fetch(`/api/files/read?path=${encodeURIComponent(path)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                
+                if (data.error) {
+                    bodyEl.textContent = 'Error: ' + data.error;
+                    return;
+                }
+                
+                bodyEl.textContent = data.content;
+            } catch (e) {
+                bodyEl.textContent = 'Error: ' + e.message;
+            }
+        }
+        
+        function closeFileContent() {
+            document.getElementById('fileContent').style.display = 'none';
         }
         
         // Todos functions

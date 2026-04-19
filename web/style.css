@@ -794,3 +794,46 @@ body {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.5; transform: scale(0.8); }
 }
+
+/* File Browser Styles */
+.file-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    max-height: 400px;
+    overflow-y: auto;
+    background: var(--bg-dark);
+    border-radius: 8px;
+    padding: 10px;
+}
+
+.file-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+.file-item:hover {
+    background: rgba(138, 180, 248, 0.1);
+}
+
+.file-icon {
+    font-size: 1.2rem;
+    width: 30px;
+    text-align: center;
+}
+
+.file-name {
+    flex: 1;
+    color: var(--text-primary);
+}
+
+.file-size {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    min-width: 60px;
+    text-align: right;
+}

@@ -584,6 +584,91 @@ class RequestHandler(BaseHTTPRequestHandler):
             })
             return
         
+        # File Browser endpoints (password protected)
+        if path == '/api/files/list':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            query = parse_qs(parsed.query)
+            dir_path = query.get('path', [''])[0]
+            
+            # Security: Only allow accessing workspace directory
+            base_path = os.path.expanduser('~/openclaw/workspace')
+            if not dir_path:
+                dir_path = base_path
+            
+            # Prevent path traversal
+            try:
+                full_path = os.path.abspath(os.path.join(base_path, dir_path))
+                if not full_path.startswith(base_path):
+                    self.send_json({'error': 'Access denied'}, 403)
+                    return
+            except:
+                self.send_json({'error': 'Invalid path'}, 400)
+                return
+            
+            if not os.path.exists(full_path) or not os.path.isdir(full_path):
+                self.send_json({'error': 'Directory not found'}, 404)
+                return
+            
+            try:
+                entries = []
+                for name in sorted(os.listdir(full_path)):
+                    entry_path = os.path.join(full_path, name)
+                    is_dir = os.path.isdir(entry_path)
+                    rel_path = os.path.relpath(entry_path, base_path)
+                    entries.append({
+                        'name': name,
+                        'path': rel_path,
+                        'is_dir': is_dir,
+                        'size': 0 if is_dir else os.path.getsize(entry_path)
+                    })
+                self.send_json({'success': True, 'path': dir_path, 'entries': entries})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+        
+        if path == '/api/files/read':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            query = parse_qs(parsed.query)
+            file_path = query.get('path', [''])[0]
+            
+            if not file_path:
+                self.send_json({'error': 'File path required'}, 400)
+                return
+            
+            # Security: Only allow accessing workspace directory
+            base_path = os.path.expanduser('~/openclaw/workspace')
+            
+            # Prevent path traversal
+            try:
+                full_path = os.path.abspath(os.path.join(base_path, file_path))
+                if not full_path.startswith(base_path):
+                    self.send_json({'error': 'Access denied'}, 403)
+                    return
+            except:
+                self.send_json({'error': 'Invalid path'}, 400)
+                return
+            
+            if not os.path.exists(full_path) or not os.path.isfile(full_path):
+                self.send_json({'error': 'File not found'}, 404)
+                return
+            
+            # Limit file size to 1MB
+            if os.path.getsize(full_path) > 1024 * 1024:
+                self.send_json({'error': 'File too large (max 1MB)'}, 400)
+                return
+            
+            try:
+                with open(full_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                self.send_json({'success': True, 'path': file_path, 'content': content})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+        
         # Todo Manager endpoints
         if path == '/api/todos':
             if not self.authenticate():
