@@ -132,6 +132,12 @@
                             <div style="font-size: 1.5rem;">➕</div>
                             <div style="color: var(--text-primary); font-size: 0.85rem; font-weight: 500;">New task</div>
                         </div>
+                        
+                        <!-- Undo Delete Button -->
+                        <div id="btn-undo-delete" onclick="undoDelete()" class="cost-card" style="padding: 12px 20px; text-align: center; min-width: 120px; border-radius: 12px; border-color: var(--accent-red); display: none; cursor: pointer;">
+                            <div style="font-size: 1.5rem;">↩️</div>
+                            <div style="color: var(--accent-red); font-size: 0.85rem; font-weight: 500;">Undo</div>
+                        </div>
                     </div>
                     
                     <!-- Add Todo Form -->
@@ -183,8 +189,22 @@
                 <div class="services-panel">
                     <h2>📚 Knowledge Base</h2>
 
-                    <!-- Add Entry Form -->
-                    <div style="background: var(--bg-dark); border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid var(--accent-blue);">
+                    <!-- Search and Filter Row -->
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; align-items: center;">
+                        <input type="text" id="kbSearch" placeholder="🔍 Search knowledge..." 
+                               oninput="searchKbEntries()"
+                               style="flex: 1; min-width: 200px; padding: 10px 15px; background: var(--bg-card); border: 1px solid var(--accent-blue); border-radius: 8px; color: var(--text-primary);">
+                        <div id="btn-new-kb" onclick="toggleAddKbForm()" class="cost-card" style="padding: 12px 20px; text-align: center; min-width: 120px; border-radius: 12px; cursor: pointer;">
+                            <span style="font-size: 1.2rem;">➕</span>
+                            <div style="color: var(--text-primary); font-size: 0.85rem; font-weight: 500;">New entry</div>
+                        </div>
+                    </div>
+
+                    <!-- Filter Summary Cards -->
+                    <div id="kbFilterCards" style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;"></div>
+
+                    <!-- Add Entry Form (collapsible) -->
+                    <div id="addKbForm" style="background: var(--bg-dark); border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid var(--accent-blue); display: none;">
                         <h3 style="color: var(--accent-neon); margin-bottom: 15px;">Add New Entry</h3>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                             <div class="setting-item" style="margin-bottom: 0;">
@@ -198,9 +218,13 @@
                             </div>
                             <div class="setting-item" style="margin-bottom: 0;">
                                 <label>Title</label>
-                                <input type="text" id="kbTitle" placeholder="Entry title" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-blue); border-radius: 8px; color: var(--text-primary);">
+                                <input type="text" id="kbTitle" placeholder="Entry title" 
+                                       oninput="showKbTitleSuggestions(this.value)"
+                                       style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-blue); border-radius: 8px; color: var(--text-primary);">
                             </div>
                         </div>
+                        <!-- Title Suggestions -->
+                        <div id="kbTitleSuggestions" style="margin-bottom: 15px;"></div>
                         <div class="setting-item" style="margin-bottom: 15px;">
                             <label>Content</label>
                             <textarea id="kbContent" placeholder="Detailed content..." rows="3" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-blue); border-radius: 8px; color: var(--text-primary); resize: vertical;"></textarea>
@@ -211,9 +235,6 @@
                         </div>
                         <button onclick="addKnowledgeEntry()" class="save-btn" style="width: auto; padding: 10px 30px;">➕ Add Entry</button>
                     </div>
-
-                    <!-- Category Filters -->
-                    <div id="kbCategories" style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;"></div>
 
                     <!-- Knowledge Entries -->
                     <div id="kbEntries" style="max-height: 600px; overflow-y: auto;"></div>
@@ -313,7 +334,13 @@
         let todoSearchQuery = '';
         let deletedTodosExpanded = false;
         let allTodosCache = []; // Cache all todos for search suggestions
+        let lastDeletedTask = JSON.parse(localStorage.getItem('lastDeletedTask') || 'null'); // For undo delete
         const settings = { port: localStorage.getItem('selena_port') || '8765' };
+        
+        // Show undo button if there's a last deleted task
+        if (lastDeletedTask) {
+            setTimeout(() => showUndoButton(), 100);
+        }
 
         // Projects data
         let projectsData = [];
@@ -495,6 +522,28 @@
             animateShootingStars();
         }
 
+        async function verifyAuth() {
+            // Verify current token is valid by calling /api/status
+            if (!token) return false;
+            try {
+                const response = await fetch('/api/status', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json().catch(() => ({}));
+                
+                // Token is invalid if: HTTP 401 OR response body says unauthorized
+                if (response.status === 401 || data.error === 'Unauthorized') {
+                    console.warn('Token verification failed: unauthorized');
+                    return false;
+                }
+                
+                return data.authenticated === true;
+            } catch (e) {
+                console.warn('Token verification failed:', e.message);
+                return false;
+            }
+        }
+
         async function login() {
             const password = document.getElementById('passwordInput').value;
             const errorEl = document.getElementById('loginError');
@@ -510,9 +559,24 @@
                     // Secure requires HTTPS (only in production)
                     document.cookie = `selena_token=${token}; max-age=3600; path=/; SameSite=Strict`;
                     errorEl.style.display = 'none';
+                    
+                    // Verify the token works before showing dashboard
+                    const isValid = await verifyAuth();
+                    if (!isValid) {
+                        console.error('Login returned success but token is invalid!');
+                        token = '';
+                        localStorage.removeItem('selena_token');
+                        errorEl.textContent = 'Login failed: Token verification error';
+                        errorEl.style.display = 'block';
+                        return;
+                    }
+                    
                     showDashboard();
                 } else { errorEl.style.display = 'block'; }
-            } catch (e) { errorEl.style.display = 'block'; }
+            } catch (e) { 
+                errorEl.textContent = 'Login failed: ' + e.message;
+                errorEl.style.display = 'block'; 
+            }
         }
 
         function logout() {
@@ -846,6 +910,18 @@
                 if (data.success) {
                     token = data.token;
                     localStorage.setItem('selena_token', token);
+                    
+                    // Verify the token works before showing file browser
+                    const isValid = await verifyAuth();
+                    if (!isValid) {
+                        console.error('File browser login returned success but token is invalid!');
+                        token = '';
+                        localStorage.removeItem('selena_token');
+                        errorEl.textContent = 'Login failed: Token verification error';
+                        errorEl.style.display = 'block';
+                        return;
+                    }
+                    
                     errorEl.style.display = 'none';
                     document.getElementById('fileBrowserAuth').style.display = 'none';
                     document.getElementById('fileBrowserContent').style.display = 'block';
@@ -853,9 +929,11 @@
                         loadFileList(pendingFilePath);
                     }
                 } else {
+                    errorEl.textContent = 'Invalid password';
                     errorEl.style.display = 'block';
                 }
             } catch (e) {
+                errorEl.textContent = 'Login failed: ' + e.message;
                 errorEl.style.display = 'block';
             }
         }
@@ -885,8 +963,10 @@
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 
-                // Handle unauthorized - show password prompt
-                if (response.status === 401) {
+                const data = await response.json().catch(() => ({}));
+
+                // Handle unauthorized - show password prompt (check both HTTP status AND response body)
+                if (response.status === 401 || data.error === 'Unauthorized') {
                     // Clear invalid token
                     token = '';
                     localStorage.removeItem('selena_token');
@@ -898,8 +978,6 @@
                     document.getElementById('fileBrowserPassword').focus();
                     return;
                 }
-
-                const data = await response.json();
 
                 if (data.error) {
                     listEl.innerHTML = `<p style="color: var(--error);">Error: ${data.error}</p>`;
@@ -969,7 +1047,21 @@
                 const response = await fetch(`/api/files/read?path=${encodeURIComponent(path)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                const data = await response.json();
+                const data = await response.json().catch(() => ({}));
+
+                // Handle unauthorized - show password prompt (check both HTTP status AND response body)
+                if (response.status === 401 || data.error === 'Unauthorized') {
+                    // Clear invalid token
+                    token = '';
+                    localStorage.removeItem('selena_token');
+                    // Show password prompt in file browser
+                    document.getElementById('fileBrowserContent').style.display = 'none';
+                    document.getElementById('fileBrowserAuth').style.display = 'flex';
+                    document.getElementById('fileBrowserPassword').value = '';
+                    document.getElementById('fileBrowserAuthError').style.display = 'none';
+                    document.getElementById('fileBrowserPassword').focus();
+                    return;
+                }
 
                 if (data.error) {
                     bodyEl.textContent = 'Error: ' + data.error;
@@ -995,42 +1087,48 @@
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
-                if (!allResponse.ok) {
-                    if (allResponse.status === 401) {
-                        logout();
-                        return;
-                    }
-                } else {
-                    const allData = await allResponse.json();
-                    allTodosCache = allData.todos || [];
+                const allData = await allResponse.json().catch(() => ({}));
+                if (allData.error === 'Unauthorized') {
+                    logout();
+                    return;
                 }
+                if (!allResponse.ok) {
+                    document.getElementById('todoList').innerHTML = `<p style="color: var(--danger);">Failed to load tasks: Server error ${allResponse.status}. Try refreshing the page.</p>`;
+                    return;
+                }
+                allTodosCache = allData.todos || [];
                 
                 // Fetch filtered todos (excluding deleted by default)
                 let url = '/api/todos?';
-                if (currentTodoFilter) url += `status=${currentTodoFilter}&`;
+                if (currentTodoFilter === 'deleted') {
+                    url += 'include_deleted=true&';
+                } else if (currentTodoFilter) {
+                    url += `status=${currentTodoFilter}&`;
+                }
                 if (todoSearchQuery) url += `search=${encodeURIComponent(todoSearchQuery)}&`;
 
                 const response = await fetch(url, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
-                if (!response.ok) {
-                    // 401 means token is invalid/expired - logout and show login
-                    if (response.status === 401) {
-                        logout();
-                        return;
-                    }
-                    const errorData = await response.json().catch(() => ({}));
-                    const errorMsg = errorData.error || `Error ${response.status}`;
-                    document.getElementById('todoList').innerHTML = `<p style="color: var(--danger);">${errorMsg}</p>`;
+                const data = await response.json().catch(() => ({}));
+                
+                // Check for unauthorized error in response body (API returns 200 with {"error": "Unauthorized"})
+                if (data.error === 'Unauthorized') {
+                    logout();
                     return;
                 }
                 
-                const data = await response.json();
+                if (!response.ok) {
+                    const errorMsg = data.error || `Server error ${response.status}`;
+                    document.getElementById('todoList').innerHTML = `<p style="color: var(--danger);">Failed to load tasks: ${errorMsg}. Try refreshing the page.</p>`;
+                    return;
+                }
+                
                 renderTodos(data.todos, data.summary);
             } catch (e) {
                 console.error('Failed to load todos:', e);
-                document.getElementById('todoList').innerHTML = '<p style="color: var(--danger);">Failed to load tasks</p>';
+                document.getElementById('todoList').innerHTML = '<p style="color: var(--danger);">Failed to load tasks: Network error. Is the API server running?</p>';
             }
         }
         
@@ -1104,10 +1202,91 @@
         }
         
         async function deleteTodo(todoId) {
-            if (!confirm('Move this task to deleted? It will be permanently removed after 1 week.')) return;
+            const task = allTodosCache.find(t => t.id === todoId);
+            if (!task) return;
+            
+            if (task.deleted_at) {
+                // Already deleted - restore immediately
+                try {
+                    const url = `/api/todos/update?id=${todoId}&status=${encodeURIComponent(task.status)}&deleted_at=`;
+                    const response = await fetch(url, {
+                        method: 'PUT',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (response.ok) loadTodos();
+                } catch (e) {
+                    console.error('Failed to restore todo:', e);
+                }
+            } else {
+                // Active task - soft-delete and save for undo
+                lastDeletedTask = {
+                    id: task.id,
+                    previous_status: task.status,
+                    previous_deleted_at: null
+                };
+                localStorage.setItem('lastDeletedTask', JSON.stringify(lastDeletedTask));
+                
+                try {
+                    // Soft-delete: set deleted_at to current timestamp
+                    const url = `/api/todos/update?id=${todoId}&status=${encodeURIComponent(task.status)}&deleted_at=${encodeURIComponent(new Date().toISOString())}`;
+                    const response = await fetch(url, {
+                        method: 'PUT',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (response.ok) {
+                        showUndoButton();
+                        loadTodos();
+                    }
+                } catch (e) {
+                    console.error('Failed to delete todo:', e);
+                }
+            }
+        }
+        
+        async function undoDelete() {
+            if (!lastDeletedTask) return;
             
             try {
-                const response = await fetch(`/api/todos/delete?id=${todoId}`, {
+                // Restore to previous status and deleted_at
+                const deletedAtParam = lastDeletedTask.previous_deleted_at ? encodeURIComponent(lastDeletedTask.previous_deleted_at) : '';
+                const url = `/api/todos/update?id=${lastDeletedTask.id}&status=${encodeURIComponent(lastDeletedTask.previous_status)}&deleted_at=${deletedAtParam}`;
+                
+                const response = await fetch(url, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    lastDeletedTask = null;
+                    localStorage.removeItem('lastDeletedTask');
+                    hideUndoButton();
+                    loadTodos();
+                }
+            } catch (e) {
+                console.error('Failed to undo delete:', e);
+            }
+        }
+        
+        function showUndoButton() {
+            const btn = document.getElementById('btn-undo-delete');
+            if (btn && lastDeletedTask) {
+                btn.style.display = 'block';
+            }
+        }
+        
+        function hideUndoButton() {
+            const btn = document.getElementById('btn-undo-delete');
+            if (btn) {
+                btn.style.display = 'none';
+            }
+        }
+        
+        async function undoDelete() {
+            if (!lastDeletedTask) return;
+            
+            try {
+                // Re-delete the task (set deleted_at to now)
+                const response = await fetch(`/api/todos/delete?id=${lastDeletedTask.id}`, {
                     method: 'DELETE',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -1121,10 +1300,11 @@
                     return;
                 }
 
-                const data = await response.json();
-                if (data.success) {
-                    loadTodos();
-                }
+                // Clear lastDeletedTask
+                lastDeletedTask = null;
+                localStorage.removeItem('lastDeletedTask');
+                hideUndoButton();
+                loadTodos();
             } catch (e) {
                 console.error('Failed to delete todo:', e);
             }
@@ -1282,6 +1462,10 @@
                         <h3>Done</h3>
                         <div class="value" style="font-size: 1.5rem; color: var(--success)">${summary.done || 0}</div>
                     </div>
+                    <div class="cost-card ${activeFilter === 'deleted' ? 'active' : ''}" onclick="setTodoFilter('deleted')" id="card-deleted">
+                        <h3>Deleted</h3>
+                        <div class="value" style="font-size: 1.5rem; color: var(--accent-red)">${deletedTodos.length || 0}</div>
+                    </div>
                     <div class="cost-card">
                         <h3>LLM Calls</h3>
                         <div class="value" style="font-size: 1.5rem;">${summary.open_llm_calls || 0}</div>
@@ -1292,12 +1476,15 @@
             // Get deleted todos from cache
             const deletedTodos = allTodosCache.filter(t => t.deleted_at);
             
-            // Show deleted section if there are deleted todos
+            // Show deleted section if there are deleted todos AND not viewing deleted filter
             const deletedSection = document.getElementById('deletedSection');
             const deletedCount = document.getElementById('deletedCount');
             const deletedList = document.getElementById('deletedList');
             
-            if (deletedTodos.length > 0) {
+            // Hide deleted section when viewing deleted filter
+            if (currentTodoFilter === 'deleted') {
+                deletedSection.style.display = 'none';
+            } else if (deletedTodos.length > 0) {
                 deletedSection.style.display = 'block';
                 deletedCount.textContent = `(${deletedTodos.length})`;
                 
@@ -1317,7 +1504,7 @@
                                 ${todo.long_desc ? `<p style="color: var(--text-secondary); font-size: 0.85rem;">${todo.long_desc}</p>` : ''}
                             </div>
                             <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-                                <button onclick="restoreTodo('${todo.id}')" class="service-btn start" title="Restore task">↩️ Restore</button>
+                                <button onclick="restoreTodo('${todo.id}')" class="service-btn restart" title="Restore task">↩️ Restore</button>
                             </div>
                         </div>
                     </div>
@@ -1354,22 +1541,26 @@
                         <div style="display: flex; justify-content: space-between; align-items: start;">
                             <div style="flex: 1;">
                                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap;">
-                                    <button onclick="deleteTodo('${todo.id}')" class="service-btn" style="padding: 2px 6px; font-size: 0.75rem; border-color: var(--danger); color: var(--danger);" title="Delete task">🗑️</button>
                                     <span class="priority-badge" style="background: ${getPriorityColor(todo.priority)}; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">P${todo.priority}</span>
                                     <span class="status-badge" style="background: ${getStatusColor(todo.status)}; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">${todo.status}</span>
+                                    ${todo.deleted_at ? `<span style="color: var(--accent-red); font-size: 0.75rem;">🗑️ ${getTimeUntilPurge(todo.deleted_at)}</span>` : ''}
                                     ${todo.block_reason ? `<span style="color: var(--danger); font-size: 0.8rem;">🚫 ${todo.block_reason}</span>` : ''}
                                 </div>
-                                <h4 style="margin-bottom: 5px;">${todo.short_desc}</h4>
+                                <h4 style="margin-bottom: 5px; ${todo.deleted_at ? 'text-decoration: line-through; opacity: 0.7;' : ''}">${todo.short_desc}</h4>
                                 ${todo.long_desc ? `<p style="color: var(--text-secondary); font-size: 0.85rem;">${todo.long_desc}</p>` : ''}
                                 <div style="margin-top: 8px; font-size: 0.75rem; color: var(--text-secondary);">
                                     ID: ${todo.id} | Created: ${new Date(todo.created_at).toLocaleString()}
                                 </div>
                             </div>
-                            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-                                ${todo.status === 'in_progress' ? `<button onclick="markTodoStatus('${todo.id}', 'completed')" class="service-btn start" title="Mark Completed (pending review)">⏳</button>` : ''}
-                                ${todo.status === 'completed' ? `<button onclick="markTodoStatus('${todo.id}', 'done')" class="service-btn start" title="Approve & Done">✓</button>` : ''}
-                                ${todo.status !== 'done' && todo.status !== 'in_progress' && todo.status !== 'completed' ? `<button onclick="markTodoStatus('${todo.id}', 'done')" class="service-btn start" title="Mark Done">✓</button>` : ''}
-                                ${todo.status === 'done' ? `<button onclick="markTodoStatus('${todo.id}', 'open')" class="service-btn restart" title="Reopen">↩</button>` : ''}
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                ${todo.deleted_at ? 
+                                    `<button onclick="restoreTodo('${todo.id}')" class="service-btn restart" title="Restore task">↩️</button>` :
+                                    `<button onclick="deleteTodo('${todo.id}')" class="service-btn danger" title="Delete task"></button>`
+                                }
+                                ${!todo.deleted_at && todo.status === 'in_progress' ? `<button onclick="markTodoStatus('${todo.id}', 'completed')" class="service-btn start" title="Mark Completed (pending review)">⏳</button>` : ''}
+                                ${!todo.deleted_at && todo.status === 'completed' ? `<button onclick="markTodoStatus('${todo.id}', 'done')" class="service-btn start" title="Approve & Done">✓</button>` : ''}
+                                ${!todo.deleted_at && todo.status !== 'done' && todo.status !== 'in_progress' && todo.status !== 'completed' ? `<button onclick="markTodoStatus('${todo.id}', 'done')" class="service-btn start" title="Mark Done">✓</button>` : ''}
+                                ${!todo.deleted_at && todo.status === 'done' ? `<button onclick="markTodoStatus('${todo.id}', 'open')" class="service-btn restart" title="Reopen">↩</button>` : ''}
                             </div>
                         </div>
                     </div>
@@ -1425,7 +1616,22 @@
         }
 
         // Knowledge Base functions
-        async function loadKnowledge(category) {
+        let allKbCache = [];
+        let currentKbFilter = '';
+        let kbSearchQuery = '';
+
+        async function loadKnowledge(category, forceRefresh = false) {
+            // If we have a filter or search, we need fresh data
+            if (currentKbFilter || kbSearchQuery) {
+                forceRefresh = true;
+            }
+            
+            // Check cache first (only for 'all' without filter)
+            if (!forceRefresh && allKbCache.length > 0 && !category) {
+                renderKnowledge(allKbCache, getKbCategoriesSummary());
+                return;
+            }
+            
             try {
                 let url = '/api/knowledge';
                 if (category && category !== 'all') url += `/category/${category}`;
@@ -1445,37 +1651,126 @@
                 }
 
                 const data = await response.json();
-                renderKnowledge(data.entries || data, data.categories);
+                // Cache all entries for filtering
+                allKbCache = data.entries || data;
+                renderKnowledge(allKbCache, data.categories);
             } catch (e) {
                 console.error('Failed to load knowledge:', e);
             }
         }
 
+        function getKbCategoriesSummary() {
+            const cats = {};
+            allKbCache.forEach(entry => {
+                cats[entry.category] = (cats[entry.category] || 0) + 1;
+            });
+            return Object.entries(cats).map(([name, count]) => ({ name, count }));
+        }
+
+        function setKbFilter(filter) {
+            currentKbFilter = filter;
+            loadKnowledge(filter || 'all', true);
+        }
+
+        function searchKbEntries() {
+            kbSearchQuery = document.getElementById('kbSearch').value.toLowerCase();
+            renderKnowledge(allKbCache, getKbCategoriesSummary());
+        }
+
+        function toggleAddKbForm() {
+            const form = document.getElementById('addKbForm');
+            const btn = document.getElementById('btn-new-kb');
+            if (form.style.display === 'none') {
+                form.style.display = 'block';
+                btn.classList.add('active');
+            } else {
+                form.style.display = 'none';
+                btn.classList.remove('active');
+            }
+        }
+
+        function showKbTitleSuggestions(title) {
+            const suggestionsDiv = document.getElementById('kbTitleSuggestions');
+            if (!title || title.length < 2) {
+                suggestionsDiv.innerHTML = '';
+                return;
+            }
+            
+            const titleLower = title.toLowerCase();
+            const matching = allKbCache.filter(entry => 
+                entry.title.toLowerCase().includes(titleLower)
+            );
+            
+            if (matching.length > 0) {
+                suggestionsDiv.innerHTML = `
+                    <div style="background: var(--bg-card); border-radius: 8px; padding: 10px; border: 1px solid var(--accent-blue);">
+                        <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px;">Similar entries found:</div>
+                        ${matching.slice(0, 5).map(e => `
+                            <div style="display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--bg-dark);">
+                                <span style="background: var(--${e.category === 'lesson' ? 'warning' : e.category === 'skill' ? 'success' : e.category === 'pattern' ? 'accent-neon' : 'working'}); padding: 2px 6px; border-radius: 4px; font-size: 0.7rem;">${e.category}</span>
+                                <span style="color: var(--text-primary);">${e.title}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } else {
+                suggestionsDiv.innerHTML = '';
+            }
+        }
+
         function renderKnowledge(entries, categories) {
-            // Render category counts
+            // Category colors
             const categoryColors = {
                 lesson: 'var(--warning)',
                 skill: 'var(--success)',
                 pattern: 'var(--accent-neon)',
                 reference: 'var(--working)'
             };
-            const catHtml = (categories || []).map(cat => `
-                <div class="category-badge" onclick="loadKnowledge('${cat.name}')"
-                     style="background: ${categoryColors[cat.name] || 'var(--accent-blue)'}; padding: 8px 15px; border-radius: 20px; cursor: pointer; font-size: 0.85rem;">
-                    ${cat.name.charAt(0).toUpperCase() + cat.name.slice(1)}: ${cat.count}
+
+            // Build category summary from cached entries
+            const catSummary = {};
+            allKbCache.forEach(entry => {
+                catSummary[entry.category] = (catSummary[entry.category] || 0) + 1;
+            });
+            const totalCount = allKbCache.length;
+
+            // Render filter cards (like task filter cards)
+            const activeFilter = currentKbFilter || '';
+            let filterCardsHtml = `
+                <div class="cost-card ${activeFilter === '' ? 'active' : ''}" onclick="setKbFilter('')" style="cursor: pointer;">
+                    <div class="label">All</div>
+                    <div class="value" style="font-size: 1.5rem;">${totalCount}</div>
                 </div>
-            `).join('');
-            document.getElementById('kbCategories').innerHTML = `
-                <div class="category-badge" onclick="loadKnowledge('all')"
-                     style="background: var(--accent-blue); padding: 8px 15px; border-radius: 20px; cursor: pointer; font-size: 0.85rem;">
-                    All
-                </div>
-                ${catHtml}
             `;
+            ['lesson', 'skill', 'pattern', 'reference'].forEach(cat => {
+                const count = catSummary[cat] || 0;
+                if (count > 0 || currentKbFilter === cat) {
+                    filterCardsHtml += `
+                        <div class="cost-card ${activeFilter === cat ? 'active' : ''}" onclick="setKbFilter('${cat}')" style="cursor: pointer;">
+                            <div class="label">${cat.charAt(0).toUpperCase() + cat.slice(1)}</div>
+                            <div class="value" style="font-size: 1.5rem;">${count}</div>
+                        </div>
+                    `;
+                }
+            });
+            document.getElementById('kbFilterCards').innerHTML = filterCardsHtml;
+
+            // Apply filters
+            let filtered = entries;
+            if (currentKbFilter) {
+                filtered = filtered.filter(e => e.category === currentKbFilter);
+            }
+            if (kbSearchQuery) {
+                filtered = filtered.filter(e => 
+                    e.title.toLowerCase().includes(kbSearchQuery) ||
+                    (e.content && e.content.toLowerCase().includes(kbSearchQuery)) ||
+                    (e.tags && e.tags.some(t => t.toLowerCase().includes(kbSearchQuery)))
+                );
+            }
 
             // Render entries
-            if (entries && entries.length > 0) {
-                document.getElementById('kbEntries').innerHTML = entries.map(entry => `
+            if (filtered && filtered.length > 0) {
+                document.getElementById('kbEntries').innerHTML = filtered.map(entry => `
                     <div class="kb-entry ${entry.category}" style="border-left-color: ${categoryColors[entry.category] || 'var(--accent-blue)'}">
                         <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
                             <div>
@@ -1495,6 +1790,8 @@
                         </div>
                     </div>
                 `).join('');
+            } else if (kbSearchQuery) {
+                document.getElementById('kbEntries').innerHTML = `<p style="color: var(--text-secondary);">No knowledge entries match "${kbSearchQuery}". 🌙</p>`;
             } else {
                 document.getElementById('kbEntries').innerHTML = '<p style="color: var(--text-secondary);">No knowledge entries yet. Add your first entry above! 📚</p>';
             }
@@ -1521,6 +1818,8 @@
                     document.getElementById('kbTitle').value = '';
                     document.getElementById('kbContent').value = '';
                     document.getElementById('kbTags').value = '';
+                    document.getElementById('kbTitleSuggestions').innerHTML = '';
+                    toggleAddKbForm(); // Close the form
                     loadKnowledge();
                 } else {
                     alert('Failed to add entry');
@@ -1835,7 +2134,7 @@
             }
 
             if (tabName === 'tasks') setTodoFilter(currentTodoFilter || '');
-            if (tabName === 'knowledge') loadKnowledge();
+            if (tabName === 'knowledge') setKbFilter(currentKbFilter || '');
             if (tabName === 'services') {
                 loadServices();
                 // Poll every 10 seconds

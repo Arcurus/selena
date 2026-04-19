@@ -131,6 +131,30 @@ def log_activity(message, log_type='info'):
         activity_log = activity_log[-MAX_ACTIVITY_LOG:]
 
 
+# Error logging (daily rotating files)
+def get_error_log_path():
+    """Get path to today's error log file."""
+    log_dir = os.path.join(os.path.dirname(__file__), '..', 'log')
+    os.makedirs(log_dir, exist_ok=True)
+    today = datetime.datetime.now().strftime('%Y-%m-%d')
+    return os.path.join(log_dir, f'error-log-{today}.log')
+
+def log_error(error_msg, context=''):
+    """Log an error to the daily error log file."""
+    timestamp = datetime.datetime.now().isoformat()
+    log_line = f"[{timestamp}] ERROR: {error_msg}"
+    if context:
+        log_line += f" | Context: {context}"
+    log_line += "\n"
+    try:
+        with open(get_error_log_path(), 'a') as f:
+            f.write(log_line)
+    except Exception as e:
+        # Fallback to stderr if file logging fails
+        import sys
+        print(f"Failed to write to error log: {e}", file=sys.stderr)
+
+
 def generate_token():
     """Generate a simple auth token"""
     import secrets
@@ -683,25 +707,35 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.send_json({'error': 'Unauthorized'}, 401)
                 return
             # Get all todos
-            query = parse_qs(parsed.query)
-            status = query.get('status', [None])[0]
-            sort_by = query.get('sort_by', ['priority'])[0]
-            sensitive = None
-            if 'sensitive' in query:
-                sensitive = query['sensitive'][0].lower() == 'true'
-            todos = todo_manager.get_all_todos(status=status, sort_by=sort_by, sensitive=sensitive)
-            summary = todo_manager.get_summary(sensitive=sensitive)
-            self.send_json({'todos': todos, 'summary': summary})
+            try:
+                query = parse_qs(parsed.query)
+                status = query.get('status', [None])[0]
+                sort_by = query.get('sort_by', ['priority'])[0]
+                sensitive = None
+                if 'sensitive' in query:
+                    sensitive = query['sensitive'][0].lower() == 'true'
+                include_deleted = 'include_deleted' in query and query['include_deleted'][0].lower() == 'true'
+                search = query.get('search', [None])[0]
+                todos = todo_manager.get_all_todos(status=status, sort_by=sort_by, sensitive=sensitive, include_deleted=include_deleted, search=search)
+                summary = todo_manager.get_summary(sensitive=sensitive)
+                self.send_json({'todos': todos, 'summary': summary})
+            except Exception as e:
+                log_error(f'/api/todos failed: {str(e)}', 'GET /api/todos')
+                self.send_json({'error': f'Internal error: {str(e)}'}, 500)
             return
         
         if path == '/api/todos/summary':
             if not self.authenticate():
                 self.send_json({'error': 'Unauthorized'}, 401)
                 return
-            sensitive = None
-            if 'sensitive' in parsed.query:
-                sensitive = parsed.query.split('sensitive=')[1].split('&')[0].lower() == 'true'
-            self.send_json(todo_manager.get_summary(sensitive=sensitive))
+            try:
+                sensitive = None
+                if 'sensitive' in parsed.query:
+                    sensitive = parsed.query.split('sensitive=')[1].split('&')[0].lower() == 'true'
+                self.send_json(todo_manager.get_summary(sensitive=sensitive))
+            except Exception as e:
+                log_error(f'/api/todos/summary failed: {str(e)}', 'GET /api/todos/summary')
+                self.send_json({'error': f'Internal error: {str(e)}'}, 500)
             return
         
         if path == '/api/todos/add':
@@ -741,6 +775,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             if 'long_desc' in query: updates['long_desc'] = query['long_desc'][0]
             if 'priority' in query: updates['priority'] = int(query['priority'][0])
             if 'status' in query: updates['status'] = query['status'][0]
+            if 'deleted_at' in query: updates['deleted_at'] = query['deleted_at'][0] if query['deleted_at'][0] else None
             if 'sensitive' in query: updates['sensitive'] = query['sensitive'][0].lower() == 'true'
             if 'parent_id' in query: updates['parent_id'] = query['parent_id'][0] if query['parent_id'][0] else None
             if 'estimated_llm_calls' in query: updates['estimated_llm_calls'] = int(query['estimated_llm_calls'][0]) if query['estimated_llm_calls'][0] else None
@@ -749,6 +784,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             if 'agent_id' in query: updates['agent_id'] = query['agent_id'][0] if query['agent_id'][0] else None
             if 'block_reason' in query: updates['block_reason'] = query['block_reason'][0] if query['block_reason'][0] else None
             if 'waiting_for' in query: updates['waiting_for'] = query['waiting_for'][0] if query['waiting_for'][0] else None
+            if 'restore' in query: updates['restore'] = query['restore'][0].lower() == 'true'
             todo = todo_manager.update_todo(todo_id, **updates)
             if todo:
                 self.send_json({'success': True, 'todo': todo})
@@ -1326,6 +1362,11 @@ def main():
     
     server = HTTPServer(('0.0.0.0', PORT), RequestHandler)
     print(f"🚀 Server running on http://0.0.0.0:{PORT}")
+    
+    # Auto-purge old deleted todos (older than 1 week)
+    purged = todo_manager.purge_old_deleted(days=7)
+    if purged > 0:
+        print(f"🗑️ Purged {purged} old deleted todo(s)")
     
     # Auto-start self-evolution loop
     print("🧠 Auto-starting Self-Evolution Loop...")

@@ -399,31 +399,87 @@ class TodoManager:
     
     def delete_todo(self, todo_id: str, delete_children: bool = True) -> bool:
         """
-        Delete a todo by ID. Returns True if deleted, False if not found.
+        Soft delete a todo by ID (sets deleted_at timestamp). Returns True if deleted, False if not found.
         
         Args:
             todo_id: ID of todo to delete
-            delete_children: If True, also delete all child todos
+            delete_children: If True, also soft-delete all child todos
+        
+        Returns:
+            True if found and marked as deleted, False if not found
         """
+        now = self._now()
+        
         # Try regular todos first
-        for i, todo in enumerate(self.todos):
+        for todo in self.todos:
             if todo["id"] == todo_id:
+                todo["deleted_at"] = now
+                todo["updated_at"] = now
                 if delete_children:
-                    self._delete_children(todo_id, self.todos)
-                self.todos.pop(i)
+                    self._soft_delete_children(todo_id, self.todos, now)
                 self._save_todos()
                 return True
         
         # Try sensitive todos
-        for i, todo in enumerate(self.sensitive_todos):
+        for todo in self.sensitive_todos:
             if todo["id"] == todo_id:
+                todo["deleted_at"] = now
+                todo["updated_at"] = now
                 if delete_children:
-                    self._delete_children(todo_id, self.sensitive_todos)
-                self.sensitive_todos.pop(i)
+                    self._soft_delete_children(todo_id, self.sensitive_todos, now)
                 self._save_sensitive_todos()
                 return True
         
         return False
+    
+    def _soft_delete_children(self, parent_id: str, todo_list: list, deleted_at: str):
+        """Soft delete all children of a parent todo from a specific list."""
+        children = [t for t in todo_list if t.get("parent_id") == parent_id]
+        for child in children:
+            # Recursively delete grandchildren
+            self._soft_delete_children(child["id"], todo_list, deleted_at)
+            child["deleted_at"] = deleted_at
+            child["updated_at"] = deleted_at
+    
+    def purge_old_deleted(self, days: int = 7) -> int:
+        """
+        Permanently delete todos that have been soft-deleted more than `days` ago.
+        
+        Args:
+            days: Number of days after which to purge deleted todos (default: 7)
+        
+        Returns:
+            Number of todos purged
+        """
+        from datetime import timedelta
+        cutoff = datetime.now() - timedelta(days=days)
+        cutoff_str = cutoff.isoformat()
+        
+        purged_count = 0
+        
+        # Purge from regular todos
+        todos_to_remove = []
+        for todo in self.todos:
+            if todo.get("deleted_at") and todo["deleted_at"] < cutoff_str:
+                todos_to_remove.append(todo)
+        for todo in todos_to_remove:
+            self.todos.remove(todo)
+            purged_count += 1
+        if todos_to_remove:
+            self._save_todos()
+        
+        # Purge from sensitive todos
+        sensitive_to_remove = []
+        for todo in self.sensitive_todos:
+            if todo.get("deleted_at") and todo["deleted_at"] < cutoff_str:
+                sensitive_to_remove.append(todo)
+        for todo in sensitive_to_remove:
+            self.sensitive_todos.remove(todo)
+            purged_count += 1
+        if sensitive_to_remove:
+            self._save_sensitive_todos()
+        
+        return purged_count
     
     def _delete_children(self, parent_id: str, todo_list: list):
         """Delete all children of a parent todo from a specific list."""

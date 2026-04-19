@@ -259,24 +259,26 @@ body {
 }
 
 .tab {
-    padding: 12px 24px; 
-    background: var(--bg-card);
-    border: 1px solid var(--accent-blue); 
-    border-radius: 10px;
-    color: var(--text-secondary); 
-    cursor: pointer; 
+    /* Card-style base - same as cost-card */
+    background: var(--bg-dark);
+    border: 1px solid var(--accent-blue);
+    border-radius: 12px;
+    padding: 12px 20px;
+    color: var(--text-primary);
+    cursor: pointer;
     transition: all 0.3s;
     font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 .tab:hover { 
-    background: rgba(74, 144, 255, 0.2); 
     transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(74, 144, 255, 0.2);
 }
 .tab.active {
-    background: linear-gradient(135deg, var(--accent-blue), var(--accent-glow)); 
-    color: white; 
-    border-color: var(--accent-neon);
-    box-shadow: 0 0 20px rgba(74, 144, 255, 0.4);
+    border-width: 3px;
+    animation: cardPulse 4s ease-in-out infinite;
 }
 
 .tab-content { display: none; }
@@ -340,44 +342,75 @@ body {
     gap: 8px;
 }
 .service-btn {
-    padding: 6px 12px;
-    border: none;
-    border-radius: 6px;
-    font-size: 0.8rem;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-.service-btn.restart {
-    background: rgba(59, 130, 246, 0.3);
-    color: var(--accent-neon);
+    /* Cost-card-like styling */
+    background: var(--bg-dark);
+    border-radius: 12px;
+    padding: 10px 16px;
     border: 1px solid var(--accent-blue);
+    transition: all 0.3s;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--text-primary);
 }
-.service-btn.restart:hover {
-    background: var(--accent-blue);
-    color: white;
+.service-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(74, 144, 255, 0.2);
 }
-.service-btn.stop {
-    background: rgba(239, 68, 68, 0.2);
-    color: var(--danger);
-    border: 1px solid var(--danger);
-}
-.service-btn.stop:hover {
-    background: var(--danger);
-    color: white;
-}
-.service-btn.start {
-    background: rgba(16, 185, 129, 0.2);
-    color: var(--success);
-    border: 1px solid var(--success);
-}
-.service-btn.start:hover {
-    background: var(--success);
-    color: white;
+.service-btn.active {
+    border-width: 3px;
+    animation: cardPulse 4s ease-in-out infinite;
 }
 
-.service-btn.active {
-    border: 3px solid var(--accent-blue);
-    animation: cardPulse 4s ease-in-out infinite;
+/* Variants */
+.service-btn.restart {
+    border-color: var(--accent-blue);
+}
+.service-btn.restart:hover {
+    background: rgba(59, 130, 246, 0.2);
+}
+
+.service-btn.stop {
+    border-color: var(--accent-red);
+}
+.service-btn.stop:hover {
+    background: rgba(239, 68, 68, 0.2);
+}
+
+.service-btn.start {
+    border-color: var(--success);
+}
+.service-btn.start:hover {
+    background: rgba(16, 185, 129, 0.2);
+}
+
+/* Danger/Delete button with tilted red cross */
+.service-btn.danger {
+    border-color: var(--accent-red);
+    padding: 8px 12px;
+    position: relative;
+}
+.service-btn.danger:hover {
+    background: rgba(239, 68, 68, 0.2);
+}
+.service-btn.danger::before,
+.service-btn.danger::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 60%;
+    height: 3px;
+    background: var(--accent-red);
+    border-radius: 2px;
+}
+.service-btn.danger::before {
+    transform: translate(-50%, -50%) rotate(45deg);
+}
+.service-btn.danger::after {
+    transform: translate(-50%, -50%) rotate(-45deg);
+}
+.service-btn.danger.active {
+    animation: cardPulseRed 4s ease-in-out infinite;
 }
 
 .status-badge {
@@ -573,6 +606,17 @@ body {
     50% {
         background: rgba(59, 130, 246, 0.2);
         box-shadow: 0 0 20px 0 rgba(59, 130, 246, 0.4);
+    }
+}
+
+@keyframes cardPulseRed {
+    0%, 100% {
+        background: var(--bg-dark);
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
+    50% {
+        background: rgba(239, 68, 68, 0.2);
+        box-shadow: 0 0 20px 0 rgba(239, 68, 68, 0.4);
     }
 }
 .cost-card h3 { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 10px; }

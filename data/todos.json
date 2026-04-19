@@ -593,7 +593,7 @@
     "short_desc": "Test POST todo",
     "long_desc": "Testing POST method",
     "priority": 7,
-    "status": "open",
+    "status": "done",
     "sensitive": false,
     "parent_id": null,
     "estimated_llm_calls": null,
@@ -603,7 +603,7 @@
     "block_reason": null,
     "waiting_for": null,
     "created_at": "2026-04-19T13:01:05.211886",
-    "updated_at": "2026-04-19T13:01:05.211899"
+    "updated_at": "2026-04-19T14:39:53.714431"
   },
   {
     "id": "29fe32e6",
