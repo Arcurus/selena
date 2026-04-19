@@ -29,7 +29,7 @@ from datetime import datetime
 from typing import Optional, List
 
 # Configuration
-AGENT_ROOT = os.path.expanduser("~/openclaw/workspace/selena")
+AGENT_ROOT = os.path.expanduser("~/openclaw/workspace/selena-project")
 DATA_DIR = os.path.join(AGENT_ROOT, "data")
 TODO_FILE = os.path.join(DATA_DIR, "todos.json")
 SENSITIVE_TODO_FILE = os.path.join(DATA_DIR, "todos.env")  # NOT in git - sensitive todos
