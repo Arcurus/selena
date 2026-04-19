@@ -7,6 +7,9 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+    <!-- Toast Notifications (top right) -->
+    <div id="toastContainer" style="position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px;"></div>
+
     <!-- Starfield Background -->
     <div class="starfield" id="starfield"></div>
     <div class="nebula"></div>
@@ -107,6 +110,40 @@
                                 <h3 id="fileBrowserTitle">📂 Files</h3>
                                 <button onclick="closeFileBrowser()" class="service-btn" style="padding: 8px 16px;">✕ Close</button>
                             </div>
+                            
+                            <!-- Search and Sort Bar -->
+                            <div style="display: flex; gap: 10px; margin-bottom: 15px; align-items: center;">
+                                <input type="text" id="fileSearchInput" placeholder="Search files..." 
+                                    style="flex: 1; padding: 8px 12px; background: var(--bg-dark); border: 1px solid var(--accent-blue); border-radius: 6px; color: var(--text-primary);"
+                                    onkeyup="if(event.key==='Enter')applyFileSearch()">
+                                <button onclick="applyFileSearch()" class="service-btn" style="padding: 8px 16px;">🔍 Search</button>
+                                <select id="fileSortSelect" onchange="applyFileSort()" style="padding: 8px 12px; background: var(--bg-dark); border: 1px solid var(--accent-blue); border-radius: 6px; color: var(--text-primary);">
+                                    <option value="modified">📅 Date Modified</option>
+                                    <option value="name">🔤 Name</option>
+                                    <option value="size">📊 Size</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Recent Files Section -->
+                            <div id="recentFilesSection" style="margin-bottom: 20px;">
+                                <div onclick="toggleRecentFiles()" style="cursor: pointer; padding: 10px; background: var(--bg-dark); border-radius: 8px; border: 1px solid var(--accent-blue); margin-bottom: 10px;">
+                                    <span style="color: var(--accent-blue);">🕐 Recent Files</span>
+                                    <span id="recentFilesCount" style="color: var(--text-secondary); margin-left: 10px;"></span>
+                                    <span id="recentFilesToggle" style="float: right; color: var(--text-secondary);">▼</span>
+                                </div>
+                                <div id="recentFilesList" style="display: none; max-height: 300px; overflow-y: auto;"></div>
+                            </div>
+                            
+                            <!-- Biggest Files Section -->
+                            <div id="biggestFilesSection" style="margin-bottom: 20px;">
+                                <div onclick="toggleBiggestFiles()" style="cursor: pointer; padding: 10px; background: var(--bg-dark); border-radius: 8px; border: 1px solid var(--accent-purple); margin-bottom: 10px;">
+                                    <span style="color: var(--accent-purple);">📦 Biggest Files</span>
+                                    <span id="biggestFilesCount" style="color: var(--text-secondary); margin-left: 10px;"></span>
+                                    <span id="biggestFilesToggle" style="float: right; color: var(--text-secondary);">▼</span>
+                                </div>
+                                <div id="biggestFilesList" style="display: none; max-height: 300px; overflow-y: auto;"></div>
+                            </div>
+                            
                             <div id="fileBrowserBreadcrumb" style="margin-bottom: 15px; color: var(--text-secondary);"></div>
                             <div id="fileList" class="file-list"></div>
                             <div id="fileContent" style="display: none; margin-top: 20px;">
@@ -966,7 +1003,14 @@
                 // Authenticated - show file browser
                 document.getElementById('fileBrowserAuth').style.display = 'none';
                 document.getElementById('fileBrowserContent').style.display = 'block';
+                // Reset search and sort
+                document.getElementById('fileSearchInput').value = '';
+                document.getElementById('fileSortSelect').value = 'modified';
+                currentFileSearch = '';
+                currentFileSort = 'modified';
                 loadFileList(path);
+                loadRecentFiles();
+                loadBiggestFiles();
             }
         }
 
@@ -995,7 +1039,14 @@
                     document.getElementById('fileBrowserAuth').style.display = 'none';
                     document.getElementById('fileBrowserContent').style.display = 'block';
                     if (pendingFilePath) {
+                        // Reset search and sort
+                        document.getElementById('fileSearchInput').value = '';
+                        document.getElementById('fileSortSelect').value = 'modified';
+                        currentFileSearch = '';
+                        currentFileSort = 'modified';
                         loadFileList(pendingFilePath);
+                        loadRecentFiles();
+                        loadBiggestFiles();
                     }
                 } else {
                     errorEl.textContent = 'Invalid password';
@@ -1014,32 +1065,52 @@
             currentFilePath = '';
         }
 
-        async function loadFileList(path) {
+        // Current file browser state (currentFilePath already declared at line 985)
+        let currentFileSearch = '';
+        let currentFileSort = 'modified';
+        let currentProject = 'selena-project';
+        
+        async function loadFileList(path, search = '', sort = currentFileSort) {
             const listEl = document.getElementById('fileList');
             const titleEl = document.getElementById('fileBrowserTitle');
             const breadcrumbEl = document.getElementById('fileBrowserBreadcrumb');
+            
+            // Store current state
+            currentFilePath = path;
+            currentFileSearch = search;
+            currentFileSort = sort;
+            
+            // Extract project from path
+            const pathParts = path.split('/').filter(p => p);
+            if (pathParts.length > 0) {
+                currentProject = pathParts[0];
+            }
 
             titleEl.textContent = '📂 ' + path;
             breadcrumbEl.innerHTML = path.split('/').filter(p => p).map((part, i, arr) => {
                 const partPath = arr.slice(0, i + 1).join('/') + '/';
-                return `<a href="#" onclick="loadFileList('${partPath}'); return false;" style="color: var(--accent-blue);">${part}</a>`;
+                return `<a href="#" onclick="loadFileList('${partPath}', '', '${sort}'); return false;" style="color: var(--accent-blue);">${part}</a>`;
             }).join(' / ');
 
             listEl.innerHTML = '<p style="color: var(--text-secondary);">Loading...</p>';
 
             try {
-                const response = await fetch(`/api/files/list?path=${encodeURIComponent(path)}`, {
+                // Build URL with search and sort params
+                let url = `/api/files/list?path=${encodeURIComponent(path)}&sort_by=${sort}`;
+                if (search) {
+                    url += `&search=${encodeURIComponent(search)}`;
+                }
+                
+                const response = await fetch(url, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 
                 const data = await response.json().catch(() => ({}));
 
-                // Handle unauthorized - show password prompt (check both HTTP status AND response body)
+                // Handle unauthorized - show password prompt
                 if (response.status === 401 || data.error === 'Unauthorized') {
-                    // Clear invalid token
                     token = '';
                     localStorage.removeItem('selena_token');
-                    // Show password prompt in file browser
                     document.getElementById('fileBrowserContent').style.display = 'none';
                     document.getElementById('fileBrowserAuth').style.display = 'flex';
                     document.getElementById('fileBrowserPassword').value = '';
@@ -1054,33 +1125,179 @@
                 }
 
                 if (data.entries.length === 0) {
-                    listEl.innerHTML = '<p style="color: var(--text-secondary);">Empty directory.</p>';
+                    listEl.innerHTML = '<p style="color: var(--text-secondary);">No files found.</p>';
                     return;
                 }
 
-                // Sort: directories first, then files
+                // Sort: directories first, then by the selected sort
                 data.entries.sort((a, b) => {
                     if (a.is_dir && !b.is_dir) return -1;
                     if (!a.is_dir && b.is_dir) return 1;
-                    return a.name.localeCompare(b.name);
+                    if (sort === 'name') return a.name.localeCompare(b.name);
+                    if (sort === 'size') return (b.size || 0) - (a.size || 0);
+                    // modified (default) - already sorted by API, but keep dirs first
+                    return 0;
                 });
 
                 listEl.innerHTML = data.entries.map(entry => {
                     if (entry.is_dir) {
-                        return `<div class="file-item" onclick="loadFileList('${entry.path}/')" style="cursor: pointer;">
+                        return `<div class="file-item" onclick="loadFileList('${entry.path}/', '', '${sort}')" style="cursor: pointer;">
                             <span class="file-icon">📁</span>
                             <span class="file-name">${entry.name}/</span>
                         </div>`;
                     } else {
-                        const ext = entry.name.split('.').pop().toLowerCase();
-                        const icon = getFileIcon(ext);
-                        return `<div class="file-item" onclick="readFile('${entry.path}')" style="cursor: pointer;">
-                            <span class="file-icon">${icon}</span>
-                            <span class="file-name">${entry.name}</span>
-                            <span class="file-size">${formatFileSize(entry.size)}</span>
-                        </div>`;
+                        return renderFileItem(entry, sort);
                     }
                 }).join('');
+            } catch (e) {
+                listEl.innerHTML = `<p style="color: var(--error);">Error: ${e.message}</p>`;
+            }
+        }
+        
+        function renderFileItem(entry, sort = 'modified', clickable = true) {
+            // Derive name from path if name is not provided
+            const name = entry.name || entry.path.split('/').pop();
+            const ext = name.split('.').pop().toLowerCase();
+            const icon = getFileIcon(ext);
+            const encodedPath = encodeURIComponent(entry.path);
+            const modified = entry.modified ? formatDateTime(entry.modified) : '';
+            
+            let clickAction = clickable ? `onclick="readFile('${entry.path}')"` : '';
+            
+            return `<div class="file-item" style="cursor: ${clickable ? 'pointer' : 'default'};">
+                <span class="file-icon">${icon}</span>
+                <span class="file-name" ${clickAction}>${name}</span>
+                <span class="file-modified">${modified}</span>
+                <span class="file-size">${formatFileSize(entry.size)}</span>
+                <button class="file-download-btn" onclick="event.stopPropagation(); downloadFile('${encodedPath}')" title="Download">⬇️</button>
+            </div>`;
+        }
+        
+        function formatDateTime(isoString) {
+            if (!isoString) return '';
+            try {
+                const date = new Date(isoString);
+                const now = new Date();
+                const isToday = date.toDateString() === now.toDateString();
+                
+                if (isToday) {
+                    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                }
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + 
+                       ' ' + date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            } catch {
+                return isoString;
+            }
+        }
+        
+        function applyFileSearch() {
+            const search = document.getElementById('fileSearchInput').value.trim();
+            loadFileList(currentFilePath || 'selena-project/', search, currentFileSort);
+            loadRecentFiles(search);
+            loadBiggestFiles(search);
+        }
+        
+        function applyFileSort() {
+            const sort = document.getElementById('fileSortSelect').value;
+            currentFileSort = sort;
+            loadFileList(currentFilePath || 'selena-project/', currentFileSearch, sort);
+        }
+        
+        function toggleRecentFiles() {
+            const list = document.getElementById('recentFilesList');
+            const toggle = document.getElementById('recentFilesToggle');
+            const isHidden = list.style.display === 'none';
+            list.style.display = isHidden ? 'block' : 'none';
+            toggle.textContent = isHidden ? '▲' : '▼';
+        }
+        
+        function toggleBiggestFiles() {
+            const list = document.getElementById('biggestFilesList');
+            const toggle = document.getElementById('biggestFilesToggle');
+            const isHidden = list.style.display === 'none';
+            list.style.display = isHidden ? 'block' : 'none';
+            toggle.textContent = isHidden ? '▲' : '▼';
+        }
+        
+        async function loadRecentFiles(search = '') {
+            const listEl = document.getElementById('recentFilesList');
+            const countEl = document.getElementById('recentFilesCount');
+            
+            listEl.innerHTML = '<p style="color: var(--text-secondary);">Loading...</p>';
+            
+            try {
+                let url = `/api/files/recent?project=${currentProject}&limit=10`;
+                if (search) {
+                    url += `&search=${encodeURIComponent(search)}`;
+                }
+                
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const data = await response.json().catch(() => ({}));
+                
+                if (response.status === 401 || data.error === 'Unauthorized') {
+                    token = '';
+                    localStorage.removeItem('selena_token');
+                    return;
+                }
+                
+                if (data.error || !data.files) {
+                    listEl.innerHTML = `<p style="color: var(--error);">Error: ${data.error || 'Failed to load'}</p>`;
+                    return;
+                }
+                
+                countEl.textContent = `(${data.count}) ${data.search ? '(filtered)' : ''}`;
+                
+                if (data.files.length === 0) {
+                    listEl.innerHTML = '<p style="color: var(--text-secondary);">No recent files.</p>';
+                    return;
+                }
+                
+                listEl.innerHTML = data.files.map(entry => renderFileItem(entry, 'modified', true)).join('');
+            } catch (e) {
+                listEl.innerHTML = `<p style="color: var(--error);">Error: ${e.message}</p>`;
+            }
+        }
+        
+        async function loadBiggestFiles(search = '') {
+            const listEl = document.getElementById('biggestFilesList');
+            const countEl = document.getElementById('biggestFilesCount');
+            
+            listEl.innerHTML = '<p style="color: var(--text-secondary);">Loading...</p>';
+            
+            try {
+                let url = `/api/files/biggest?project=${currentProject}&limit=10`;
+                if (search) {
+                    url += `&search=${encodeURIComponent(search)}`;
+                }
+                
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const data = await response.json().catch(() => ({}));
+                
+                if (response.status === 401 || data.error === 'Unauthorized') {
+                    token = '';
+                    localStorage.removeItem('selena_token');
+                    return;
+                }
+                
+                if (data.error || !data.files) {
+                    listEl.innerHTML = `<p style="color: var(--error);">Error: ${data.error || 'Failed to load'}</p>`;
+                    return;
+                }
+                
+                countEl.textContent = `(${data.count}) ${data.search ? '(filtered)' : ''}`;
+                
+                if (data.files.length === 0) {
+                    listEl.innerHTML = '<p style="color: var(--text-secondary);">No files found.</p>';
+                    return;
+                }
+                
+                listEl.innerHTML = data.files.map(entry => renderFileItem(entry, 'size', true)).join('');
             } catch (e) {
                 listEl.innerHTML = `<p style="color: var(--error);">Error: ${e.message}</p>`;
             }
@@ -1145,6 +1362,90 @@
 
         function closeFileContent() {
             document.getElementById('fileContent').style.display = 'none';
+        }
+
+        // Toast notification system
+        function showToast(message, type = 'info', duration = 8000) {
+            const container = document.getElementById('toastContainer');
+            if (!container) return;
+            
+            const icons = {
+                success: '✅',
+                error: '❌',
+                info: 'ℹ️',
+                warning: '⚠️'
+            };
+            
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `<span class="toast-icon">${icons[type] || icons.info}</span><span>${message}</span>`;
+            
+            container.appendChild(toast);
+            
+            // Auto-remove after duration
+            setTimeout(() => {
+                toast.style.animation = 'toastOut 0.3s ease-out forwards';
+                setTimeout(() => {
+                    if (toast.parentNode) toast.parentNode.removeChild(toast);
+                }, 300);
+            }, duration);
+        }
+
+        async function downloadFile(path) {
+            // Verify auth first
+            if (!token) {
+                showToast('Please login first to download files.', 'warning');
+                return;
+            }
+            
+            const filename = path.split('/').pop();
+            showToast(`Starting download: ${filename}`, 'info', 2000);
+            
+            try {
+                // Use the download endpoint with auth
+                const downloadUrl = `/api/files/download?path=${path}`;
+                
+                const response = await fetch(downloadUrl, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.status === 401) {
+                    // Auth error - clear token and show login
+                    token = '';
+                    localStorage.removeItem('selena_token');
+                    showToast('Session expired. Please login again.', 'error');
+                    return;
+                }
+                
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    showToast('Download failed: ' + (data.error || 'Unknown error'), 'error');
+                    return;
+                }
+                
+                // Get filename from response headers or path
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let actualFilename = path.split('/').pop();
+                if (contentDisposition) {
+                    const match = contentDisposition.match(/filename="(.+)"/);
+                    if (match) actualFilename = match[1];
+                }
+                
+                // Create blob and trigger download
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = actualFilename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                showToast(`Downloaded: ${actualFilename}`, 'success');
+            } catch (e) {
+                showToast('Download failed: ' + e.message, 'error');
+            }
         }
 
         // Todos functions

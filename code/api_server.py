@@ -647,6 +647,8 @@ class RequestHandler(BaseHTTPRequestHandler):
                 return
             query = parse_qs(parsed.query)
             dir_path = query.get('path', [''])[0]
+            sort_by = query.get('sort_by', ['modified'])[0]  # modified, name, size
+            search = query.get('search', [''])[0].lower()
             
             # Security: Only allow accessing workspace directory
             base_path = os.path.expanduser('~/openclaw/workspace')
@@ -673,13 +675,37 @@ class RequestHandler(BaseHTTPRequestHandler):
                     entry_path = os.path.join(full_path, name)
                     is_dir = os.path.isdir(entry_path)
                     rel_path = os.path.relpath(entry_path, base_path)
+                    
+                    # Filter by search term if provided
+                    if search and search not in name.lower():
+                        continue
+                    
+                    stat = os.stat(entry_path) if not is_dir else None
                     entries.append({
                         'name': name,
                         'path': rel_path,
                         'is_dir': is_dir,
-                        'size': 0 if is_dir else os.path.getsize(entry_path)
+                        'size': 0 if is_dir else os.path.getsize(entry_path),
+                        'modified': datetime.datetime.fromtimestamp(stat.st_mtime).isoformat() if stat else None
                     })
-                self.send_json({'success': True, 'path': dir_path, 'entries': entries})
+                
+                # Sort entries
+                reverse = True  # For modified and size, we want largest first (most recent/largest)
+                if sort_by == 'name':
+                    entries.sort(key=lambda x: x['name'].lower(), reverse=False)
+                    reverse = False
+                elif sort_by == 'size':
+                    entries.sort(key=lambda x: x['size'], reverse=True)
+                else:  # modified (default)
+                    entries.sort(key=lambda x: x.get('modified') or '', reverse=True)
+                
+                self.send_json({
+                    'success': True, 
+                    'path': dir_path, 
+                    'entries': entries,
+                    'sort_by': sort_by,
+                    'search': search if search else None
+                })
             except Exception as e:
                 self.send_json({'error': str(e)}, 500)
             return
@@ -722,6 +748,161 @@ class RequestHandler(BaseHTTPRequestHandler):
                     content = f.read()
                 self.send_json({'success': True, 'path': file_path, 'content': content})
             except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+        
+        if path == '/api/files/download':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            query = parse_qs(parsed.query)
+            file_path = query.get('path', [''])[0]
+            
+            if not file_path:
+                self.send_json({'error': 'File path required'}, 400)
+                return
+            
+            # Security: Only allow accessing workspace directory
+            base_path = os.path.expanduser('~/openclaw/workspace')
+            
+            # Prevent path traversal
+            try:
+                full_path = os.path.abspath(os.path.join(base_path, file_path))
+                if not full_path.startswith(base_path):
+                    self.send_json({'error': 'Access denied'}, 403)
+                    return
+            except:
+                self.send_json({'error': 'Invalid path'}, 400)
+                return
+            
+            if not os.path.exists(full_path) or not os.path.isfile(full_path):
+                self.send_json({'error': 'File not found'}, 404)
+                return
+            
+            # No size limit for download (unlike read which limits to 1MB)
+            try:
+                # Get file size
+                file_size = os.path.getsize(full_path)
+                
+                # Determine content type
+                import mimetypes
+                content_type, _ = mimetypes.guess_type(full_path)
+                if not content_type:
+                    content_type = 'application/octet-stream'
+                
+                # Get filename from path
+                filename = os.path.basename(full_path)
+                
+                # Send response headers for file download
+                self.send_response(200)
+                self.send_header('Content-Type', content_type)
+                self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
+                self.send_header('Content-Length', str(file_size))
+                self.send_cors_headers()
+                self.end_headers()
+                
+                # Stream file in chunks
+                chunk_size = 64 * 1024  # 64KB chunks
+                with open(full_path, 'rb') as f:
+                    while True:
+                        chunk = f.read(chunk_size)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                
+                log_activity(f'Downloaded file: {file_path}', 'info')
+            except Exception as e:
+                log_error(f'File download failed: {file_path}', str(e))
+                self.send_json({'error': str(e)}, 500)
+            return
+        
+        # Recent files endpoint - returns top N most recently modified files
+        if path == '/api/files/recent':
+            if not self.authenticate():
+                log_api('UNAUTHORIZED', f'Attempted to load recent files without auth')
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                query = parse_qs(parsed.query)
+                limit = int(query.get('limit', [10])[0])
+                search = query.get('search', [''])[0].lower()
+                project = query.get('project', ['selena-project'])[0]
+                
+                # Build the search directory
+                base_path = os.path.expanduser('~/openclaw/workspace')
+                search_dir = os.path.join(base_path, project)
+                
+                if not os.path.exists(search_dir):
+                    self.send_json({'error': 'Project not found'}, 404)
+                    return
+                
+                # Get all files recursively
+                all_files = get_files_recursive(search_dir)
+                
+                # Filter by search term if provided
+                if search:
+                    all_files = [f for f in all_files if search in f['path'].lower()]
+                
+                # Sort by modified time (most recent first)
+                all_files.sort(key=lambda x: x.get('modified') or '', reverse=True)
+                
+                # Return top N
+                recent_files = all_files[:limit]
+                
+                log_api('RECENT_FILES', f'Loaded {len(recent_files)} recent files for {project}')
+                self.send_json({
+                    'success': True,
+                    'files': recent_files,
+                    'count': len(recent_files),
+                    'search': search if search else None
+                })
+            except Exception as e:
+                log_error(f'Failed to load recent files', str(e))
+                self.send_json({'error': str(e)}, 500)
+            return
+        
+        # Biggest files endpoint - returns top N largest files
+        if path == '/api/files/biggest':
+            if not self.authenticate():
+                log_api('UNAUTHORIZED', f'Attempted to load biggest files without auth')
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                query = parse_qs(parsed.query)
+                limit = int(query.get('limit', [10])[0])
+                search = query.get('search', [''])[0].lower()
+                project = query.get('project', ['selena-project'])[0]
+                
+                # Build the search directory
+                base_path = os.path.expanduser('~/openclaw/workspace')
+                search_dir = os.path.join(base_path, project)
+                
+                if not os.path.exists(search_dir):
+                    self.send_json({'error': 'Project not found'}, 404)
+                    return
+                
+                # Get all files recursively
+                all_files = get_files_recursive(search_dir)
+                
+                # Filter by search term if provided
+                if search:
+                    all_files = [f for f in all_files if search in f['path'].lower()]
+                
+                # Sort by size (largest first)
+                all_files.sort(key=lambda x: x.get('size', 0), reverse=True)
+                
+                # Return top N
+                biggest_files = all_files[:limit]
+                
+                log_api('BIGGEST_FILES', f'Loaded {len(biggest_files)} biggest files for {project}')
+                self.send_json({
+                    'success': True,
+                    'files': biggest_files,
+                    'count': len(biggest_files),
+                    'search': search if search else None
+                })
+            except Exception as e:
+                log_error(f'Failed to load biggest files', str(e))
                 self.send_json({'error': str(e)}, 500)
             return
         
