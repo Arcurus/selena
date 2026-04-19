@@ -655,8 +655,8 @@
         function getStatusColor(status) {
             switch(status) {
                 case 'done': return 'var(--success)';
-                case 'in_progress': return 'var(--working)';
-                case 'blocked': return 'var(--danger)';
+                case 'in_progress': return 'var(--warning)';
+                case 'blocked': return 'var(--success)';
                 default: return 'var(--text-secondary)';
             }
         }

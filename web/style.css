@@ -56,7 +56,7 @@ body {
     position: absolute;
     width: 100px;
     height: 2px;
-    background: linear-gradient(90deg, var(--accent-blue), transparent);
+    background: linear-gradient(270deg, transparent, var(--accent-blue));
     animation: shoot var(--duration) linear infinite;
     opacity: 0;
 }
