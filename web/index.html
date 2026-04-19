@@ -647,6 +647,21 @@
                 const response = await fetch(`/api/files/list?path=${encodeURIComponent(path)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
+                
+                // Handle unauthorized - show password prompt
+                if (response.status === 401) {
+                    // Clear invalid token
+                    token = '';
+                    localStorage.removeItem('selena_token');
+                    // Show password prompt in file browser
+                    document.getElementById('fileBrowserContent').style.display = 'none';
+                    document.getElementById('fileBrowserAuth').style.display = 'flex';
+                    document.getElementById('fileBrowserPassword').value = '';
+                    document.getElementById('fileBrowserAuthError').style.display = 'none';
+                    document.getElementById('fileBrowserPassword').focus();
+                    return;
+                }
+                
                 const data = await response.json();
                 
                 if (data.error) {
