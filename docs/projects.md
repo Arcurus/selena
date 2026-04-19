@@ -22,6 +22,32 @@
 - **Tech:** Python, Flask, Knowledge Base, Todo System
 - **Features:** API server, web UI, self-evolution loop
 
+### OpenLife
+- **Status:** active
+- **Description:** AI-driven life simulation with autonomous NPCs
+- **Port:** 8000
+- **Repo:** https://github.com/Arcurus/openlife
+- **Tech:** Haxe, JavaScript
+- **Features:** 50 AI NPCs, autonomous villages, dynamic events
+
+### Selena
+- **Status:** active
+- **Description:** Self-development: research, planning, execution, reflection, optimization
+- **Tech:** Python
+- **Features:** Child agent, self-improvement loop
+
+### OHOL Editor
+- **Status:** active
+- **Description:** Web editor for OneLife object files with sprite preview
+- **Tech:** Python, HTML5 Canvas
+- **Features:** Parse .txt object files, binary cache, TGA sprite preview, zoom 25%-400%
+
+### llm-loop-example
+- **Status:** experimental
+- **Description:** Rust example of LLM loop patterns
+- **Tech:** Rust, Cargo
+- **Features:** LLM integration examples
+
 ## Archived Projects
 
 ### open-world (original)
