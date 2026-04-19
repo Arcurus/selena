@@ -116,15 +116,33 @@
             <!-- Tasks Tab -->
             <div class="tab-content" id="tab-tasks">
                 <div class="tasks-panel">
-                    <h2>🎯 Tasks / Loose Ends / Todos</h2>
-
+                    <!-- Header row: Title, Search, New Task button -->
+                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
+                        <h2 style="margin: 0; white-space: nowrap;">🎯 Tasks / Loose Ends / Todos</h2>
+                        
+                        <!-- Search field -->
+                        <div style="flex: 1; min-width: 200px; max-width: 400px;">
+                            <input type="text" id="todoSearch" placeholder="🔍 Search tasks..." 
+                                   oninput="handleTodoSearch(this.value)"
+                                   style="width: 100%; padding: 10px 15px; background: var(--bg-card); border: 1px solid var(--accent-blue); border-radius: 20px; color: var(--text-primary); font-size: 0.9rem;">
+                        </div>
+                        
+                        <!-- New Task Card Button -->
+                        <div id="btn-new-task" onclick="toggleAddTaskForm()" class="cost-card" style="padding: 12px 20px; text-align: center; min-width: 120px; border-radius: 12px;">
+                            <div style="font-size: 1.5rem;">➕</div>
+                            <div style="color: var(--text-primary); font-size: 0.85rem; font-weight: 500;">New task</div>
+                        </div>
+                    </div>
+                    
                     <!-- Add Todo Form -->
-                    <div style="background: var(--bg-dark); border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid var(--accent-blue);">
+                    <div id="addTaskForm" style="background: var(--bg-dark); border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid var(--accent-blue); display: none;">
                         <h3 style="color: var(--accent-neon); margin-bottom: 15px;">Add New Task</h3>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 10px;">
                             <div class="setting-item" style="margin-bottom: 0;">
                                 <label>Title *</label>
-                                <input type="text" id="todoTitle" placeholder="What needs to be done?" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-blue); border-radius: 8px; color: var(--text-primary);">
+                                <input type="text" id="todoTitle" placeholder="What needs to be done?" 
+                                       oninput="handleTitleInput(this.value)"
+                                       style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-blue); border-radius: 8px; color: var(--text-primary);">
                             </div>
                             <div class="setting-item" style="margin-bottom: 0;">
                                 <label>Priority (1-10)</label>
@@ -135,7 +153,24 @@
                                 <input type="text" id="todoDesc" placeholder="Optional description" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--accent-blue); border-radius: 8px; color: var(--text-primary);">
                             </div>
                         </div>
-                        <button onclick="addTodo()" class="save-btn" style="width: auto; padding: 10px 30px;">➕ Add Task</button>
+                        
+                        <!-- Live task suggestions -->
+                        <div id="titleSuggestions" style="display: none; background: var(--bg-card); border: 1px solid var(--accent-blue); border-radius: 8px; margin-bottom: 15px; max-height: 150px; overflow-y: auto;"></div>
+                        
+                        <div style="display: flex; gap: 10px;">
+                            <button onclick="addTodo()" class="save-btn" style="width: auto; padding: 10px 30px;">➕ Add Task</button>
+                            <button onclick="cancelAddTask()" class="service-btn" style="width: auto; padding: 10px 20px;">Cancel</button>
+                        </div>
+                    </div>
+
+                    <!-- Deleted Tasks Section (hidden by default) -->
+                    <div id="deletedSection" style="display: none; margin-bottom: 20px;">
+                        <div onclick="toggleDeletedTasks()" style="cursor: pointer; padding: 10px; background: var(--bg-dark); border-radius: 8px; border: 1px solid var(--accent-red); margin-bottom: 10px;">
+                            <span style="color: var(--accent-red);">🗑️ Deleted Tasks</span>
+                            <span id="deletedCount" style="color: var(--text-secondary); margin-left: 10px;"></span>
+                            <span id="deletedToggle" style="float: right; color: var(--text-secondary);">▼</span>
+                        </div>
+                        <div id="deletedList" style="display: none;"></div>
                     </div>
 
                     <div id="todoSummary" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-bottom: 20px;"></div>
@@ -274,6 +309,10 @@
         let lastServicesState = null;
         let isServicesLoading = false;
         let currentTodoFilter = '';
+        let showingAddTaskForm = false;
+        let todoSearchQuery = '';
+        let deletedTodosExpanded = false;
+        let allTodosCache = []; // Cache all todos for search suggestions
         const settings = { port: localStorage.getItem('selena_port') || '8765' };
 
         // Projects data
@@ -355,12 +394,12 @@
                     }
 
                     this.trail = [];
-                    this.maxTrailLength = 80 + Math.random() * 40; // LONGER bluish trail
+                    this.maxTrailLength = 400 + Math.random() * 200; // Longer trail for slower stars (longer visible path)
                     this.life = 0;
                     // Stagger spawn times for more orderly appearance
-                    this.maxLife = 280 + Math.random() * 120;
+                    this.maxLife = 3000 + Math.random() * 2000; // Longer life for slower stars (5x slower = ~5x longer)
                     this.opacity = 1;
-                    this.delay = Math.random() * 200; // Initial delay for orderly spawn
+                    this.delay = Math.random() * 30; // Shorter initial delay so stars appear sooner
                 }
 
                 update() {
@@ -944,8 +983,26 @@
         // Todos functions
         async function loadTodos() {
             try {
+                // Fetch all todos (including deleted) for cache and suggestions
+                let allUrl = '/api/todos?include_deleted=true';
+                const allResponse = await fetch(allUrl, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (!allResponse.ok) {
+                    if (allResponse.status === 401) {
+                        logout();
+                        return;
+                    }
+                } else {
+                    const allData = await allResponse.json();
+                    allTodosCache = allData.todos || [];
+                }
+                
+                // Fetch filtered todos (excluding deleted by default)
                 let url = '/api/todos?';
                 if (currentTodoFilter) url += `status=${currentTodoFilter}&`;
+                if (todoSearchQuery) url += `search=${encodeURIComponent(todoSearchQuery)}&`;
 
                 const response = await fetch(url, {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -973,7 +1030,174 @@
         
         function setTodoFilter(filter) {
             currentTodoFilter = filter;
+            todoSearchQuery = '';
+            document.getElementById('todoSearch').value = '';
+            showingAddTaskForm = false;
+            document.getElementById('addTaskForm').style.display = 'none';
+            document.getElementById('btn-new-task').classList.remove('active');
+            document.getElementById('todoSummary').style.display = 'grid';
+            document.getElementById('todoList').style.display = 'block';
             loadTodos();
+        }
+        
+        function handleTodoSearch(query) {
+            todoSearchQuery = query.trim();
+            loadTodos();
+        }
+        
+        function handleTitleInput(query) {
+            const suggestionsDiv = document.getElementById('titleSuggestions');
+            const trimmedQuery = query.trim().toLowerCase();
+            
+            if (trimmedQuery.length < 2) {
+                suggestionsDiv.style.display = 'none';
+                return;
+            }
+            
+            // Filter matching tasks from cache (exclude deleted)
+            const matches = allTodosCache.filter(t => 
+                !t.deleted_at && 
+                t.short_desc.toLowerCase().includes(trimmedQuery)
+            ).slice(0, 10); // Limit to 10 suggestions
+            
+            if (matches.length === 0) {
+                suggestionsDiv.style.display = 'none';
+                return;
+            }
+            
+            // Sort by priority (same as main view)
+            const statusOrder = { 'in_progress': 0, 'completed': 1, 'blocked': 2, 'open': 3, 'done': 4 };
+            matches.sort((a, b) => {
+                const statusDiff = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99);
+                if (statusDiff !== 0) return statusDiff;
+                return (b.priority || 0) - (a.priority || 0);
+            });
+            
+            suggestionsDiv.innerHTML = matches.map(t => `
+                <div style="padding: 8px 12px; border-bottom: 1px solid var(--accent-blue); cursor: pointer; display: flex; justify-content: space-between; align-items: center;"
+                     onclick="selectSuggestion('${t.short_desc.replace(/'/g, "\\'")}')">
+                    <div>
+                        <span style="color: ${getPriorityColor(t.priority)}; font-weight: bold;">P${t.priority}</span>
+                        <span style="margin-left: 8px;">${highlightMatch(t.short_desc, trimmedQuery)}</span>
+                    </div>
+                    <span style="font-size: 0.75rem; color: ${getStatusColor(t.status)};">${t.status}</span>
+                </div>
+            `).join('') + '<div style="padding: 5px 12px; font-size: 0.75rem; color: var(--text-secondary);">Click to use this title</div>';
+            suggestionsDiv.style.display = 'block';
+        }
+        
+        function highlightMatch(text, query) {
+            const idx = text.toLowerCase().indexOf(query);
+            if (idx === -1) return text;
+            return text.substring(0, idx) + '<strong style="color: var(--accent-neon);">' + text.substring(idx, idx + query.length) + '</strong>' + text.substring(idx + query.length);
+        }
+        
+        function selectSuggestion(title) {
+            document.getElementById('todoTitle').value = title;
+            document.getElementById('titleSuggestions').style.display = 'none';
+        }
+        
+        async function deleteTodo(todoId) {
+            if (!confirm('Move this task to deleted? It will be permanently removed after 1 week.')) return;
+            
+            try {
+                const response = await fetch(`/api/todos/delete?id=${todoId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        logout();
+                        return;
+                    }
+                    console.error('Failed to delete todo:', response.status);
+                    return;
+                }
+
+                const data = await response.json();
+                if (data.success) {
+                    loadTodos();
+                }
+            } catch (e) {
+                console.error('Failed to delete todo:', e);
+            }
+        }
+        
+        async function restoreTodo(todoId) {
+            try {
+                const response = await fetch(`/api/todos/update?id=${todoId}&restore=true`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        logout();
+                        return;
+                    }
+                    console.error('Failed to restore todo:', response.status);
+                    return;
+                }
+
+                const data = await response.json();
+                if (data.success) {
+                    loadTodos();
+                }
+            } catch (e) {
+                console.error('Failed to restore todo:', e);
+            }
+        }
+        
+        function toggleDeletedTasks() {
+            deletedTodosExpanded = !deletedTodosExpanded;
+            const list = document.getElementById('deletedList');
+            const toggle = document.getElementById('deletedToggle');
+            list.style.display = deletedTodosExpanded ? 'block' : 'none';
+            toggle.textContent = deletedTodosExpanded ? '▲' : '▼';
+        }
+        
+        function getTimeUntilPurge(deletedAt) {
+            const deleted = new Date(deletedAt);
+            const purgeDate = new Date(deleted.getTime() + 7 * 24 * 60 * 60 * 1000); // 1 week
+            const now = new Date();
+            const diff = purgeDate - now;
+            
+            if (diff <= 0) return 'Purging soon...';
+            
+            const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+            const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+            
+            if (days > 0) return `${days}d ${hours}h remaining`;
+            if (hours > 0) return `${hours}h remaining`;
+            return 'Less than 1h remaining';
+        }
+        
+        function toggleAddTaskForm() {
+            showingAddTaskForm = !showingAddTaskForm;
+            const form = document.getElementById('addTaskForm');
+            const btn = document.getElementById('btn-new-task');
+            const summary = document.getElementById('todoSummary');
+            const list = document.getElementById('todoList');
+            
+            if (showingAddTaskForm) {
+                form.style.display = 'block';
+                btn.classList.add('active');
+                summary.style.display = 'none';
+                list.style.display = 'none';
+            } else {
+                form.style.display = 'none';
+                btn.classList.remove('active');
+                summary.style.display = 'grid';
+                list.style.display = 'block';
+            }
+        }
+        
+        function cancelAddTask() {
+            showingAddTaskForm = false;
+            document.getElementById('addTaskForm').style.display = 'none';
+            document.getElementById('btn-new-task').classList.remove('active');
+            document.getElementById('todoSummary').style.display = 'grid';
+            document.getElementById('todoList').style.display = 'block';
         }
 
         async function addTodo() {
@@ -1010,6 +1234,7 @@
                 if (data.success) {
                     document.getElementById('todoTitle').value = '';
                     document.getElementById('todoDesc').value = '';
+                    cancelAddTask(); // Hide form and show list
                     loadTodos();
                 } else {
                     alert('Failed to add task');
@@ -1058,6 +1283,43 @@
                 `;
             }
             
+            // Get deleted todos from cache
+            const deletedTodos = allTodosCache.filter(t => t.deleted_at);
+            
+            // Show deleted section if there are deleted todos
+            const deletedSection = document.getElementById('deletedSection');
+            const deletedCount = document.getElementById('deletedCount');
+            const deletedList = document.getElementById('deletedList');
+            
+            if (deletedTodos.length > 0) {
+                deletedSection.style.display = 'block';
+                deletedCount.textContent = `(${deletedTodos.length})`;
+                
+                // Sort deleted by deletion date (most recent first)
+                deletedTodos.sort((a, b) => new Date(b.deleted_at) - new Date(a.deleted_at));
+                
+                deletedList.innerHTML = deletedTodos.map(todo => `
+                    <div class="todo-card" style="border-color: var(--text-secondary); opacity: 0.8;">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap;">
+                                    <span class="priority-badge" style="background: ${getPriorityColor(todo.priority)}; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">P${todo.priority}</span>
+                                    <span style="color: var(--accent-red); font-size: 0.8rem;">🗑️ Deleted</span>
+                                    <span style="color: var(--text-secondary); font-size: 0.75rem;">${getTimeUntilPurge(todo.deleted_at)}</span>
+                                </div>
+                                <h4 style="margin-bottom: 5px; text-decoration: line-through;">${todo.short_desc}</h4>
+                                ${todo.long_desc ? `<p style="color: var(--text-secondary); font-size: 0.85rem;">${todo.long_desc}</p>` : ''}
+                            </div>
+                            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                                <button onclick="restoreTodo('${todo.id}')" class="service-btn start" title="Restore task">↩️ Restore</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                deletedSection.style.display = 'none';
+            }
+            
             // Sort todos: status (in_progress, completed, blocked, open, done), then priority (desc), then updated_at (desc)
             const statusOrder = { 'in_progress': 0, 'completed': 1, 'blocked': 2, 'open': 3, 'done': 4 };
             if (todos && todos.length > 0) {
@@ -1076,11 +1338,17 @@
             }
 
             if (todos && todos.length > 0) {
-                document.getElementById('todoList').innerHTML = todos.map(todo => `
+                // Search indicator
+                const searchIndicator = todoSearchQuery 
+                    ? `<p style="color: var(--accent-neon); margin-bottom: 10px;">🔍 Searching: "${todoSearchQuery}" (${todos.length} results)</p>` 
+                    : '';
+                
+                document.getElementById('todoList').innerHTML = searchIndicator + todos.map(todo => `
                     <div class="todo-card" style="border-color: ${getPriorityColor(todo.priority)};">
                         <div style="display: flex; justify-content: space-between; align-items: start;">
                             <div style="flex: 1;">
                                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap;">
+                                    <button onclick="deleteTodo('${todo.id}')" class="service-btn" style="padding: 2px 6px; font-size: 0.75rem; border-color: var(--danger); color: var(--danger);" title="Delete task">🗑️</button>
                                     <span class="priority-badge" style="background: ${getPriorityColor(todo.priority)}; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">P${todo.priority}</span>
                                     <span class="status-badge" style="background: ${getStatusColor(todo.status)}; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">${todo.status}</span>
                                     ${todo.block_reason ? `<span style="color: var(--danger); font-size: 0.8rem;">🚫 ${todo.block_reason}</span>` : ''}
@@ -1101,7 +1369,10 @@
                     </div>
                 `).join('');
             } else {
-                document.getElementById('todoList').innerHTML = '<p style="color: var(--text-secondary);">No tasks found. 🌙</p>';
+                const noTasksMsg = todoSearchQuery 
+                    ? `<p style="color: var(--text-secondary);">No tasks match "${todoSearchQuery}". 🌙</p>` 
+                    : `<p style="color: var(--text-secondary);">No tasks found. 🌙</p>`;
+                document.getElementById('todoList').innerHTML = noTasksMsg;
             }
         }
 

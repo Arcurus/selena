@@ -621,5 +621,22 @@
     "waiting_for": null,
     "created_at": "2026-04-19T13:01:05.211886",
     "updated_at": "2026-04-19T13:01:05.211899"
+  },
+  {
+    "id": "6ff30bbc",
+    "short_desc": "test",
+    "long_desc": "test",
+    "priority": 5,
+    "status": "open",
+    "sensitive": false,
+    "parent_id": null,
+    "estimated_llm_calls": null,
+    "creator_id": null,
+    "conversation_id": null,
+    "agent_id": null,
+    "block_reason": null,
+    "waiting_for": null,
+    "created_at": "2026-04-19T14:09:17.298815",
+    "updated_at": "2026-04-19T14:09:17.298828"
   }
 ]
