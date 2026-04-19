@@ -731,6 +731,85 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.send_json({'success': False, 'error': 'Entry not found or update failed'}, 404)
             return
         
+        # Projects endpoints
+        if path == '/api/projects':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            # Load projects from file
+            projects_file = os.path.join(SELENA_ROOT, 'docs', 'projects.md')
+            projects = []
+            if os.path.exists(projects_file):
+                # Parse markdown for projects (simple format)
+                try:
+                    with open(projects_file, 'r') as f:
+                        content = f.read()
+                    # Simple project extraction
+                    import re
+                    # Find project names under ### headers
+                    headers = re.findall(r'^###\s+(.+)$', content, re.MULTILINE)
+                    current_project = None
+                    for line in content.split('\n'):
+                        if line.startswith('### '):
+                            current_project = line[4].strip()
+                        elif current_project and line.strip().startswith('- **') and ':' in line:
+                            key_match = re.search(r'\*\*(.+?)\*\*:\s*(.+)', line)
+                            if key_match:
+                                key = key_match.group(1).lower().replace(' ', '_')
+                                value = key_match.group(2).strip()
+                                if key == 'name':
+                                    projects.append({'name': value, 'description': '', 'status': 'active', 'port': '', 'repo': ''})
+                                elif len(projects) > 0:
+                                    if key == 'description':
+                                        projects[-1]['description'] = value
+                                    elif key == 'status':
+                                        projects[-1]['status'] = value
+                                    elif key == 'port':
+                                        projects[-1]['port'] = value
+                                    elif key == 'repo':
+                                        projects[-1]['repo'] = value
+                except Exception as e:
+                    pass
+            
+            # Add default projects if none found
+            if not projects:
+                projects = [
+                    {'name': 'open-world-selena', 'description': 'Rust-based evolving world with LLM-driven entities', 'status': 'active', 'port': '8081', 'repo': 'https://github.com/Arcurus/openworld-selena'},
+                    {'name': 'selena-project', 'description': 'Self-development, memory, reflection system', 'status': 'active', 'port': '8765', 'repo': 'https://github.com/Arcurus/selena'}
+                ]
+            
+            self.send_json({'projects': projects})
+            return
+        
+        # Cost tracking endpoints
+        if path == '/api/cost/tracking':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            
+            # Load cost tracking from file
+            cost_file = os.path.join(DATA_DIR, 'cost_tracking.json')
+            cost_data = {
+                'tokenPlan': {
+                    'name': 'MiniMax Plus',
+                    'totalCalls': 4500,
+                    'usedCalls': 0,
+                    'leftCalls': 4500,
+                    'history': []
+                },
+                'calls': []
+            }
+            
+            if os.path.exists(cost_file):
+                try:
+                    with open(cost_file, 'r') as f:
+                        cost_data = json.load(f)
+                except:
+                    pass
+            
+            self.send_json(cost_data)
+            return
+        
         if path == '/api/relations':
             if not self.authenticate():
                 self.send_json({'error': 'Unauthorized'}, 401)
