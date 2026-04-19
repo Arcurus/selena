@@ -917,32 +917,60 @@
             document.getElementById(`cost-${tabName}`).classList.add('active');
         }
         
-        // Activity Log (mock for now)
-        const activityLog = [
-            { time: new Date().toLocaleTimeString(), message: 'Dashboard loaded - exploring the stars', type: 'success' },
-            { time: new Date().toLocaleTimeString(), message: 'Services monitoring active', type: '' }
-        ];
-        
         function renderActivityLog() {
             const list = document.getElementById('activityList');
             if (!list) return;
             
-            if (activityLog.length === 0) {
-                list.innerHTML = '<p style="color: var(--text-secondary);">No activity yet.</p>';
-            } else {
-                list.innerHTML = activityLog.map(a => `
-                    <div class="activity-item ${a.type}">
-                        <div class="activity-time">${a.time}</div>
-                        <div class="activity-message">${a.message}</div>
-                    </div>
-                `).join('');
-            }
+            list.innerHTML = '<p style="color: var(--text-secondary);">Loading...</p>';
+            
+            fetch('/api/activity/log', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            .then(r => r.json())
+            .then(data => {
+                const activities = data.activities || [];
+                if (activities.length === 0) {
+                    list.innerHTML = '<p style="color: var(--text-secondary);">No activity yet.</p>';
+                } else {
+                    list.innerHTML = activities.reverse().map(a => `
+                        <div class="activity-item ${a.type}">
+                            <div class="activity-time">${new Date(a.time).toLocaleString()}</div>
+                            <div class="activity-message">${a.message}</div>
+                        </div>
+                    `).join('');
+                }
+            })
+            .catch(() => {
+                list.innerHTML = '<p style="color: var(--danger);">Failed to load activity.</p>';
+            });
         }
         
         function renderErrorLog() {
             const list = document.getElementById('errorList');
             if (!list) return;
-            list.innerHTML = '<p style="color: var(--text-secondary);">No errors recorded. 🌙</p>';
+            
+            list.innerHTML = '<p style="color: var(--text-secondary);">Loading...</p>';
+            
+            fetch('/api/activity/errors', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            .then(r => r.json())
+            .then(data => {
+                const errors = data.errors || [];
+                if (errors.length === 0) {
+                    list.innerHTML = '<p style="color: var(--text-secondary);">No errors recorded. 🌙</p>';
+                } else {
+                    list.innerHTML = errors.reverse().map(e => `
+                        <div class="activity-item error">
+                            <div class="activity-time">${new Date(e.time).toLocaleString()}</div>
+                            <div class="activity-message">${e.message}</div>
+                        </div>
+                    `).join('');
+                }
+            })
+            .catch(() => {
+                list.innerHTML = '<p style="color: var(--danger);">Failed to load errors.</p>';
+            });
         }
         
         // Window resize handler
@@ -957,14 +985,8 @@
             showDashboard();
         }
         
-        // Simulate activity updates
+        // Refresh activity log periodically from API
         setInterval(() => {
-            activityLog.unshift({
-                time: new Date().toLocaleTimeString(),
-                message: 'System heartbeat - all systems nominal',
-                type: 'success'
-            });
-            if (activityLog.length > 50) activityLog.pop();
             if (document.getElementById('activityList')) {
                 renderActivityLog();
             }

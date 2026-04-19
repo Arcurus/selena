@@ -112,6 +112,23 @@ def track_llm_call():
     llm_call_count += 1
     return llm_call_count
 
+# Activity log for tracking API requests and events
+activity_log = []
+MAX_ACTIVITY_LOG = 100
+
+def log_activity(message, log_type='info'):
+    """Log an activity event."""
+    global activity_log
+    timestamp = datetime.datetime.now().isoformat()
+    activity_log.append({
+        'time': timestamp,
+        'message': message,
+        'type': log_type
+    })
+    # Keep only the last MAX_ACTIVITY_LOG entries
+    if len(activity_log) > MAX_ACTIVITY_LOG:
+        activity_log = activity_log[-MAX_ACTIVITY_LOG:]
+
 
 def generate_token():
     """Generate a simple auth token"""
@@ -308,8 +325,10 @@ class RequestHandler(BaseHTTPRequestHandler):
             if verify_password(password):
                 token = generate_token()
                 active_tokens[token] = True
+                log_activity('Successful login', 'success')
                 self.send_json({'success': True, 'token': token})
             else:
+                log_activity('Failed login attempt', 'error')
                 self.send_json({'success': False, 'error': 'Invalid password'}, 401)
             return
         
@@ -968,6 +987,12 @@ class RequestHandler(BaseHTTPRequestHandler):
                 else:
                     result['error'] = f'Unknown service: {service_name}'
             
+            # Log the action
+            if result['success']:
+                log_activity(f"{result['action'].capitalize()} {service_name}: {result.get('message', 'OK')}", 'success')
+            else:
+                log_activity(f"Failed to {result['action']} {service_name}: {result.get('error', 'Unknown error')}", 'error')
+            
             self.send_json(result)
             return
         
@@ -998,6 +1023,29 @@ class RequestHandler(BaseHTTPRequestHandler):
                     pass
             
             self.send_json(cost_data)
+            return
+        
+        # Activity log endpoint
+        if path == '/api/activity/log':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            # Return recent activity log entries
+            limit = 50  # Default limit
+            if '?' in path:
+                query_params = parse_qs(path.split('?')[1])
+                limit = int(query_params.get('limit', [50])[0])
+            entries = activity_log[-limit:] if len(activity_log) > 0 else []
+            self.send_json({'activities': entries, 'total': len(activity_log)})
+            return
+        
+        if path == '/api/activity/errors':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            # Return only error entries
+            errors = [a for a in activity_log if a.get('type') == 'error']
+            self.send_json({'errors': errors, 'total': len(errors)})
             return
         
         if path == '/api/relations':
