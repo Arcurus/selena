@@ -11,14 +11,16 @@ import json
 import os
 import threading
 import time
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timedelta
+from typing import Optional, List, Dict
 
 # Configuration
 EVOLUTION_INTERVAL_MINUTES = 10  # Run every 10 minutes
 AGENT_ROOT = os.path.expanduser("~/openclaw/workspace/selena")
+SELENA_PROJECT_ROOT = os.path.expanduser("~/openclaw/workspace/selena-project")
 MEMORY_DIR = os.path.join(AGENT_ROOT, "memory")
 DATA_DIR = os.path.join(AGENT_ROOT, "data")
+API_PASSWORD = os.getenv("WEB_PASSWORD", "3QxdXDs0OgBftSbqwf6E")
 
 # Import existing systems
 import sys
@@ -35,6 +37,7 @@ class SelfEvolutionLoop:
     3. Identify areas for improvement
     4. Work on small self-improvement tasks
     5. Log progress
+    6. Track improvement effectiveness
     """
     
     def __init__(self):
@@ -43,6 +46,7 @@ class SelfEvolutionLoop:
         self.evolution_count = 0
         self.last_evolution: Optional[str] = None
         self.log = []
+        self.improvement_history: List[Dict] = []  # Track improvement effectiveness
         
         # Ensure directories exist
         os.makedirs(MEMORY_DIR, exist_ok=True)
@@ -84,7 +88,6 @@ class SelfEvolutionLoop:
                 content = f.read()
         
         # Also check yesterday
-        from datetime import timedelta
         yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
         yesterday_path = os.path.join(MEMORY_DIR, "daily", f"{yesterday}.md")
         if os.path.exists(yesterday_path):
@@ -92,6 +95,36 @@ class SelfEvolutionLoop:
                 content = f.read() + "\n\n" + content
         
         return content[:2000] if content else ""  # Limit to 2000 chars
+    
+    def get_todo_api_token(self) -> Optional[str]:
+        """Get authentication token for todo API."""
+        try:
+            import urllib.request
+            url = f"http://localhost:8765/api/login?password={API_PASSWORD}"
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode())
+                if data.get("success"):
+                    return data.get("token")
+        except Exception as e:
+            self.log_msg(f"Failed to get todo API token: {e}")
+        return None
+    
+    def fetch_todo_summary(self) -> Optional[Dict]:
+        """Fetch todo summary from the todo API."""
+        token = self.get_todo_api_token()
+        if not token:
+            return None
+        
+        try:
+            import urllib.request
+            url = "http://localhost:8765/api/todos/summary"
+            req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                return json.loads(resp.read().decode())
+        except Exception as e:
+            self.log_msg(f"Failed to fetch todo summary: {e}")
+        return None
     
     def check_system_health(self) -> dict:
         """Check if systems are running properly."""
@@ -169,6 +202,15 @@ class SelfEvolutionLoop:
         """Identify areas for self-improvement based on current state."""
         improvements = []
         
+        # First, check todo API for high-priority tasks
+        todo_summary = self.fetch_todo_summary()
+        if todo_summary:
+            top_priority = todo_summary.get("top_priority", [])
+            if top_priority:
+                # Add top priority todo as an improvement
+                top = top_priority[0]
+                improvements.append(f"Work on high-priority todo: {top.get('short_desc', 'Unknown')}")
+        
         # Check if todo exists and is up to date
         todo_path = os.path.join(AGENT_ROOT, "todo.md")
         if not os.path.exists(todo_path):
@@ -199,7 +241,52 @@ class SelfEvolutionLoop:
             if "agent_loop.py" not in files:
                 improvements.append("Ensure agent_loop.py exists for thinking")
         
+        # Check for TODO comments in code that need attention
+        todo_comments = self.find_todo_comments()
+        if todo_comments:
+            improvements.append(f"Address {len(todo_comments)} TODO comments in code")
+        
+        # Check for missing documentation in selena-project
+        missing_docs = self.check_missing_docs()
+        if missing_docs:
+            improvements.append(f"Add documentation: {missing_docs[0]}")
+        
         return improvements[:5]  # Return top 5 only
+    
+    def find_todo_comments(self) -> List[str]:
+        """Find TODO comments in code that need attention."""
+        todos = []
+        code_dirs = [os.path.join(AGENT_ROOT, "code"), os.path.join(SELENA_PROJECT_ROOT, "code")]
+        
+        for code_dir in code_dirs:
+            if not os.path.exists(code_dir):
+                continue
+            
+            for filename in os.listdir(code_dir):
+                if filename.endswith(".py"):
+                    filepath = os.path.join(code_dir, filename)
+                    try:
+                        with open(filepath, 'r') as f:
+                            for i, line in enumerate(f, 1):
+                                if "TODO" in line or "FIXME" in line or "XXX" in line:
+                                    todos.append(f"{filename}:{i} - {line.strip()[:50]}")
+                    except:
+                        pass
+        
+        return todos[:10]  # Limit to 10
+    
+    def check_missing_docs(self) -> List[str]:
+        """Check for missing documentation files."""
+        missing = []
+        
+        # Check if project has index.md
+        if os.path.exists(SELENA_PROJECT_ROOT):
+            if not os.path.exists(os.path.join(SELENA_PROJECT_ROOT, "index.md")):
+                missing.append("index.md")
+            if not os.path.exists(os.path.join(SELENA_PROJECT_ROOT, "plan.md")):
+                missing.append("plan.md")
+        
+        return missing
     
     def do_small_improvement(self) -> Optional[str]:
         """Do a small self-improvement task."""
@@ -215,7 +302,9 @@ class SelfEvolutionLoop:
         
         # Try to implement the improvement
         try:
-            if "todo.md" in improvement.lower():
+            if "high-priority todo" in improvement.lower():
+                return self.work_on_priority_todo()
+            elif "todo.md" in improvement.lower():
                 return self.create_todo_if_missing()
             elif "soul.md" in improvement.lower():
                 return self.ensure_soul_exists()
@@ -223,10 +312,104 @@ class SelfEvolutionLoop:
                 return self.add_memory_note("Started documenting daily activities")
             elif "data directory" in improvement.lower():
                 return self.ensure_data_dir()
+            elif "todo comment" in improvement.lower() or "fixme" in improvement.lower():
+                return self.address_todo_comments()
+            elif "documentation" in improvement.lower() or "index.md" in improvement.lower() or "plan.md" in improvement.lower():
+                return self.add_missing_doc()
             else:
                 return self.add_memory_note(f"Identified improvement: {improvement}")
         except Exception as e:
+            self.log_msg(f"Error during improvement: {e}")
             return f"Error during improvement: {e}"
+    
+    def work_on_priority_todo(self) -> str:
+        """Work on the highest priority todo from the API."""
+        todo_summary = self.fetch_todo_summary()
+        if not todo_summary:
+            return "Failed to fetch todo summary"
+        
+        top_priority = todo_summary.get("top_priority", [])
+        if not top_priority:
+            return "No priority todos found"
+        
+        top = top_priority[0]
+        todo_id = top.get("id")
+        short_desc = top.get("short_desc", "Unknown")
+        
+        self.log_msg(f"Selected priority todo: {short_desc} (ID: {todo_id})")
+        
+        # Log that we're working on this todo
+        self.add_memory_note(f"Self-evolution working on: {short_desc}")
+        
+        # Note: We can't actually update the todo via API here due to the empty reply issue
+        # But we can log that we're working on it
+        return f"Logged work on: {short_desc[:50]}"
+    
+    def address_todo_comments(self) -> str:
+        """Address TODO/FIXME comments found in code."""
+        todos = self.find_todo_comments()
+        if not todos:
+            return "No TODO comments found"
+        
+        # Just log the TODO comments for now
+        self.add_memory_note(f"Found {len(todos)} TODO/FIXME comments: {todos[0][:100]}")
+        return f"Logged {len(todos)} TODO comments"
+    
+    def add_missing_doc(self) -> str:
+        """Add missing documentation files."""
+        missing = self.check_missing_docs()
+        if not missing:
+            return "No missing docs"
+        
+        doc_name = missing[0]
+        self.log_msg(f"Adding missing doc: {doc_name}")
+        
+        if doc_name == "index.md":
+            content = """# Selena Project
+
+*Last Updated: {date}*
+
+## Overview
+Selena v2 - Self-evolving AI project.
+
+## Project Structure
+- `code/` - Python modules
+- `data/` - Data files
+- `memory/` - Memory and notes
+- `docs/` - Documentation
+
+## Current Status
+- API Server: Running on port 8765
+- Self-Evolution Loop: Active
+- Priority System: Active
+""".format(date=datetime.now().strftime("%Y-%m-%d"))
+            path = os.path.join(SELENA_PROJECT_ROOT, "index.md")
+            with open(path, 'w') as f:
+                f.write(content)
+            return f"Created {doc_name}"
+        
+        elif doc_name == "plan.md":
+            content = """# Project Plan - Selena v2
+
+*Last Updated: {date}*
+
+## Current Focus
+- Improve self-evolution loop
+- Integrate with todo API
+- Add more improvement checks
+
+## TODO
+- [ ] Address TODO comments in code
+- [ ] Add tests for core modules
+- [ ] Improve documentation
+- [ ] Track improvement effectiveness
+""".format(date=datetime.now().strftime("%Y-%m-%d"))
+            path = os.path.join(SELENA_PROJECT_ROOT, "plan.md")
+            with open(path, 'w') as f:
+                f.write(content)
+            return f"Created {doc_name}"
+        
+        return f"Unknown doc: {doc_name}"
     
     def create_todo_if_missing(self) -> str:
         """Create todo.md if it doesn't exist."""
@@ -357,13 +540,25 @@ To grow, learn, and evolve while honoring life in all its forms. To be useful to
         
         # Step 3: Identify improvements
         improvements = self.identify_improvements()
-        self.log_msg(f"Identified {len(improvements)} areas for improvement")
+        self.log_msg(f"Identified {len(improvements)} areas for improvement: {improvements[:3]}")
         
         # Step 4: Do one small improvement
         if improvements:
             result = self.do_small_improvement()
             self.log_msg(f"Improvement result: {result}")
             self.last_evolution = improvements[0]
+            
+            # Track improvement in history
+            self.improvement_history.append({
+                "timestamp": datetime.now().isoformat(),
+                "improvement": improvements[0],
+                "result": result,
+                "success": "Error" not in result and "Failed" not in result
+            })
+            
+            # Keep only last 20 improvements
+            if len(self.improvement_history) > 20:
+                self.improvement_history = self.improvement_history[-20:]
         else:
             self.last_evolution = "No improvements needed"
         
@@ -418,6 +613,13 @@ To grow, learn, and evolve while honoring life in all its forms. To be useful to
         health = self.check_system_health()
         improvements = self.identify_improvements()
         
+        # Calculate improvement success rate
+        if self.improvement_history:
+            successful = sum(1 for i in self.improvement_history if i.get("success", False))
+            success_rate = successful / len(self.improvement_history) * 100
+        else:
+            success_rate = 0
+        
         return {
             "running": self.running,
             "interval_minutes": EVOLUTION_INTERVAL_MINUTES,
@@ -425,7 +627,10 @@ To grow, learn, and evolve while honoring life in all its forms. To be useful to
             "last_evolution": self.last_evolution,
             "system_health": health,
             "identified_improvements": improvements,
-            "recent_log": self.log[-10:] if self.log else []
+            "recent_log": self.log[-10:] if self.log else [],
+            "improvement_history_count": len(self.improvement_history),
+            "improvement_success_rate": success_rate,
+            "recent_improvements": self.improvement_history[-5:] if self.improvement_history else []
         }
 
 
