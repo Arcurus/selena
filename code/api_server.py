@@ -1261,6 +1261,52 @@ class RequestHandler(BaseHTTPRequestHandler):
         # 404 for everything else
         self.send_html('<html><body><h1>Not found</h1></body></html>', 404)
 
+    def do_POST(self):
+        """Handle POST requests - currently supports /api/todos/add"""
+        parsed = urlparse(self.path)
+        path = parsed.path
+        
+        # Handle CORS preflight
+        if path == '/api/todos/add':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            
+            # Read JSON body
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length == 0:
+                self.send_json({'success': False, 'error': 'Request body is empty'}, 400)
+                return
+            
+            body = self.rfile.read(content_length)
+            try:
+                data = json.loads(body.decode('utf-8'))
+            except json.JSONDecodeError:
+                self.send_json({'success': False, 'error': 'Invalid JSON'}, 400)
+                return
+            
+            # Extract todo fields
+            short_desc = data.get('short_desc', '')
+            long_desc = data.get('long_desc', '')
+            priority = int(data.get('priority', 5))
+            sensitive = data.get('sensitive', False)
+            parent_id = data.get('parent_id')
+            estimated_llm_calls = data.get('estimated_llm_calls')
+            creator_id = data.get('creator_id')
+            conversation_id = data.get('conversation_id')
+            agent_id = data.get('agent_id')
+            
+            if not short_desc:
+                self.send_json({'success': False, 'error': 'short_desc required'}, 400)
+                return
+            
+            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id)
+            self.send_json({'success': True, 'todo': todo})
+            return
+        
+        # 404 for unsupported POST endpoints
+        self.send_json({'error': 'Not found'}, 404)
+
 
 def main():
     """Main entry point"""

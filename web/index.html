@@ -400,6 +400,20 @@
                 const response = await fetch('/api/status', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
+                
+                if (!response.ok) {
+                    // 401 means token is invalid/expired - logout and show login
+                    if (response.status === 401) {
+                        logout();
+                        return;
+                    }
+                    const errorData = await response.json().catch(() => ({}));
+                    const errorMsg = errorData.error || `Error ${response.status}`;
+                    list.innerHTML = `<p style="color: var(--danger);">${errorMsg}</p>`;
+                    isServicesLoading = false;
+                    return;
+                }
+                
                 const data = await response.json();
                 
                 // Build services list
@@ -575,6 +589,10 @@
                 if (response.ok) {
                     const data = await response.json();
                     projects = data.projects || [];
+                } else if (response.status === 401) {
+                    // 401 means token is invalid/expired - logout and show login
+                    logout();
+                    return;
                 }
                 
                 // If no projects from API, use defaults
@@ -813,6 +831,19 @@
                 const response = await fetch(url, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
+                
+                if (!response.ok) {
+                    // 401 means token is invalid/expired - logout and show login
+                    if (response.status === 401) {
+                        logout();
+                        return;
+                    }
+                    const errorData = await response.json().catch(() => ({}));
+                    const errorMsg = errorData.error || `Error ${response.status}`;
+                    document.getElementById('todoList').innerHTML = `<p style="color: var(--danger);">${errorMsg}</p>`;
+                    return;
+                }
+                
                 const data = await response.json();
                 renderTodos(data.todos, data.summary);
             } catch (e) {
@@ -832,12 +863,25 @@
             }
             
             try {
-                let url = `/api/todos/add?short_desc=${encodeURIComponent(title)}&priority=${priority}`;
-                if (desc) url += `&long_desc=${encodeURIComponent(desc)}`;
-                
-                const response = await fetch(url, {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                const response = await fetch('/api/todos/add', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        short_desc: title,
+                        long_desc: desc,
+                        priority: priority
+                    })
                 });
+                
+                // 401 means token is invalid/expired - logout and show login
+                if (response.status === 401) {
+                    logout();
+                    return;
+                }
+                
                 const data = await response.json();
                 if (data.success) {
                     document.getElementById('todoTitle').value = '';
@@ -930,6 +974,17 @@
                 const response = await fetch(`/api/todos/update?id=${todoId}&status=${status}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
+                
+                if (!response.ok) {
+                    // 401 means token is invalid/expired - logout and show login
+                    if (response.status === 401) {
+                        logout();
+                        return;
+                    }
+                    console.error('Failed to update todo:', response.status);
+                    return;
+                }
+                
                 const data = await response.json();
                 if (data.success) {
                     loadTodos();
@@ -948,6 +1003,17 @@
                 const response = await fetch(url, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
+                
+                if (!response.ok) {
+                    // 401 means token is invalid/expired - logout and show login
+                    if (response.status === 401) {
+                        logout();
+                        return;
+                    }
+                    console.error('Failed to load knowledge:', response.status);
+                    return;
+                }
+                
                 const data = await response.json();
                 renderKnowledge(data.entries || data, data.categories);
             } catch (e) {

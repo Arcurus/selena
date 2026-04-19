@@ -54,17 +54,20 @@ body {
 
 .shooting-star {
     position: absolute;
-    width: 100px;
+    width: 150px;
     height: 2px;
-    /* Gradient points in direction of movement (down-right), so tail trails behind (up-left) */
-    background: linear-gradient(45deg, transparent, var(--accent-blue));
+    /* Star moves from upper-left to lower-right */
+    /* 225deg points toward upper-left, so gradient goes from lower-right (0%) to upper-left (100%) */
+    /* Blue at upper-left (tail), transparent at lower-right (head) */
+    background: linear-gradient(225deg, transparent 0%, var(--accent-blue) 70%);
     animation: shoot var(--duration) linear infinite;
     opacity: 0;
 }
 
 @keyframes shoot {
     0% { transform: translateX(-100px) translateY(0); opacity: 0; }
-    10% { opacity: 1; }
+    5% { opacity: 1; }
+    25% { opacity: 1; transform: translateX(300px) translateY(150px); }
     30% { opacity: 0; transform: translateX(400px) translateY(200px); }
     100% { opacity: 0; transform: translateX(400px) translateY(200px); }
 }
