@@ -57,9 +57,9 @@ body {
     width: 150px;
     height: 2px;
     /* Star moves from upper-left to lower-right */
-    /* 225deg points toward upper-left, so gradient goes from lower-right (0%) to upper-left (100%) */
+    /* 315deg points toward upper-left (between up and left) */
     /* Blue at upper-left (tail), transparent at lower-right (head) */
-    background: linear-gradient(225deg, transparent 0%, var(--accent-blue) 70%);
+    background: linear-gradient(315deg, transparent 0%, var(--accent-blue) 100%);
     animation: shoot var(--duration) linear infinite;
     opacity: 0;
 }
