@@ -421,12 +421,12 @@
                     this.y += this.vy;
 
                     this.life++;
-                    // Fade only in last 20% of life - stays bright for most of its journey
+                    // Start fading after 20% of journey - slow transparency
                     const lifeRatio = this.life / this.maxLife;
-                    if (lifeRatio < 0.8) {
+                    if (lifeRatio < 0.2) {
                         this.opacity = 1;
                     } else {
-                        this.opacity = Math.max(0, 1 - Math.pow((lifeRatio - 0.8) / 0.2, 0.5));
+                        this.opacity = Math.max(0, 1 - Math.pow((lifeRatio - 0.2) / 0.8, 0.5));
                     }
 
                     // Reset when it leaves the screen or dies
@@ -470,8 +470,8 @@
                 }
             }
 
-            // Create fewer shooting stars (4 instead of 7)
-            const NUM_STARS = 4;
+            // Create fewer shooting stars (2 instead of 4)
+            const NUM_STARS = 2;
             for (let i = 0; i < NUM_STARS; i++) {
                 const star = new ShootingStar();
                 // Stagger initial spawn times for more orderly appearance
