@@ -793,6 +793,7 @@ body {
     width: 24px;
     height: 24px;
     vertical-align: middle;
+    font-size: 0; /* Hide the emoji, show only CSS star */
 }
 
 .header-star::before {
