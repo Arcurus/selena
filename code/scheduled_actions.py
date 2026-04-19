@@ -48,7 +48,7 @@ from datetime import datetime
 from typing import Optional
 
 # Configuration
-OPEN_WORLD_URL = "http://localhost:8080"
+OPEN_WORLD_URL = "http://localhost:8081"
 SCHEDULE_INTERVAL_SECONDS = 30  # Run every 30 seconds (within 4000 calls/5hr budget)
 ACTIONS_PER_CYCLE = 3  # Run 3 actions per cycle
 MAX_TOKENS_PER_CALL = 500  # Limit per action

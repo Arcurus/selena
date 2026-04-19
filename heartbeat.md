@@ -8,11 +8,18 @@ Run heartbeat checks every ~30 minutes during active hours. The fast heartbeat r
 
 **Three agents work together:**
 1. **Parent Selena** (#heartbeats) - Main coordinator, oversight, approves big decisions
-2. **Fast Heartbeat** (#selena-project, every 5min) - Operational support, checks, nudges
+2. **Fast Heartbeat** (every 5min) - **AUTONOMOUS WORK AGENT** - does actual work on projects
 3. **Selena v2** (this agent) - Working on Open World and self-development
 
+**Fast Heartbeat:**
+- **IMPORTANT:** The fast heartbeat is NOT just for reporting. It does actual work!
+- See `heartbeat-fast.md` for the autonomous work loop instructions
+- It picks tasks from the todo tracker and WORKS ON THEM
+- Reports progress to #selena-project while working
+- Continues working unless blocked on a decision that requires Arcurus input
+
 **Communication flow:**
-- Fast heartbeat reports to #selena-project
+- Fast heartbeat does work and reports progress to #selena-project
 - **IMPORTANT updates** go to #selena-project-important (ID: 1495187458776891483)
 - Parent Selena monitors from #heartbeats
 - Selena v2 works autonomously and checks in when needed

@@ -45,7 +45,7 @@ from knowledge_base import knowledge_base as kb
 PORT = int(os.getenv('SELENA_PORT', '8765'))
 WEB_PASSWORD = os.getenv('WEB_PASSWORD', 'change_me')
 API_PASSWORD = os.getenv('WEB_PASSWORD', 'change_me')
-SELENA_ROOT = os.path.expanduser('~/openclaw/workspace/selena')
+SELENA_ROOT = os.path.expanduser('~/openclaw/workspace/selena-project')
 
 # Simple auth token storage
 active_tokens = {}

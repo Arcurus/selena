@@ -1,0 +1,26 @@
+[
+  {
+    "id": "ba07c027",
+    "category": "pattern",
+    "title": "Fast Heartbeat Does Not Auto-Continue Work",
+    "content": "The selena-fast-heartbeat cron delivers to Discord #selena-project channel but does not automatically continue work. It only notifies, it does not execute. Human or agent needs to pick up the work",
+    "tags": [
+      "heartbeat",
+      "cron",
+      "automation"
+    ],
+    "created_at": "2026-04-19T09:01:23.002876"
+  },
+  {
+    "id": "01d151a1",
+    "category": "pattern",
+    "title": "Save File Incompatibility",
+    "content": "When entity structures change (power_tier, entity_history, etc.), old save files become incompatible. Solution: delete save.owbl files and start fresh. Location: world_data/save.owbl",
+    "tags": [
+      "save",
+      "compatibility",
+      "entities"
+    ],
+    "created_at": "2026-04-19T09:01:34.353285"
+  }
+]

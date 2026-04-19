@@ -17,7 +17,7 @@ from datetime import datetime
 from typing import Optional, List
 
 # Configuration
-SELENA_ROOT = os.path.expanduser("~/openclaw/workspace/selena")
+SELENA_ROOT = os.path.expanduser("~/openclaw/workspace/selena-project")
 KNOWLEDGE_DIR = os.path.join(SELENA_ROOT, "data", "knowledge")
 CATEGORIES = ["lesson", "skill", "pattern", "reference"]
 

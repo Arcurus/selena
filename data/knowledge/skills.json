@@ -1,0 +1,14 @@
+[
+  {
+    "id": "4dc8e031",
+    "category": "skill",
+    "title": "API Authentication Flow",
+    "content": "To access protected endpoints: 1) GET /api/login?password={password} to get token, 2) Use Authorization: Bearer {token} header for subsequent requests",
+    "tags": [
+      "api",
+      "authentication",
+      "token"
+    ],
+    "created_at": "2026-04-19T09:01:34.380506"
+  }
+]

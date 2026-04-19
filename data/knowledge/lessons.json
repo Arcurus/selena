@@ -1,0 +1,26 @@
+[
+  {
+    "id": "c21888aa",
+    "category": "lesson",
+    "title": "API Server Path Bug",
+    "content": "api_server.py and knowledge_base.py had SELENA_ROOT pointing to selena instead of selena-project. This caused web interface and knowledge base to fail. Fixed by changing path from ~/openclaw/workspace/selena to ~/openclaw/workspace/selena-project",
+    "tags": [
+      "bug",
+      "fix",
+      "path"
+    ],
+    "created_at": "2026-04-19T09:01:22.951603"
+  },
+  {
+    "id": "4b6cb038",
+    "category": "lesson",
+    "title": "Open World Server Restart Needed",
+    "content": "After code updates to open-world-selena, the server needs to be rebuilt (cargo build) and restarted. Old save files may be incompatible with new entity structures and need to be deleted to start fresh",
+    "tags": [
+      "open-world",
+      "server",
+      "restart"
+    ],
+    "created_at": "2026-04-19T09:01:22.977161"
+  }
+]
