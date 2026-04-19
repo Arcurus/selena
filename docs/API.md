@@ -23,6 +23,8 @@ Authorization: Bearer YOUR_TOKEN_HERE
 
 Login to get an auth token.
 
+> **Note:** Password is stored in `.env` file (WEB_PASSWORD variable).
+
 **Response:**
 ```json
 {

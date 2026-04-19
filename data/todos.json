@@ -295,10 +295,270 @@
     "updated_at": "2026-04-19T10:35:14.811106"
   },
   {
-    "id": "0d43b637",
-    "short_desc": "Add web interface verification to tracked todos",
-    "long_desc": "",
+    "id": "55fd9fe1",
+    "short_desc": "Get real data from MiniMax token plan API",
+    "long_desc": "Priority 0 LLM Calls: Get real data from MiniMax token plan API instead of estimated values. The token plan has a real API we can query.",
+    "priority": 9,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "50470cbe",
+    "short_desc": "Create systemd service for Selena v2 API server",
+    "long_desc": "Priority 1.1 Core Infrastructure: Create systemd service for Selena v2 API server to auto-start on boot. Enable on reboot. Test that it starts correctly after system restart.",
     "priority": 7,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "42c70413",
+    "short_desc": "Update OpenClaw heartbeat to check Selena v2 status",
+    "long_desc": "Priority 1.2 Heartbeat Monitoring: Update current OpenClaw heartbeat to check Selena v2 status. Monitor: API server, Shiba workers, Open World, Nginx.",
+    "priority": 7,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "62502a6d",
+    "short_desc": "HTTPS setup with nginx and Let's Encrypt",
+    "long_desc": "Priority 1.3 HTTPS Setup: Check nginx configuration on VPS. Create nginx site configuration for Selena v2. Set up SSL certificate (Let's Encrypt). Configure reverse proxy.",
+    "priority": 7,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "a0628b8f",
+    "short_desc": "Real service status in web interface",
+    "long_desc": "Priority 1.4 Service Monitoring: Get real service status from API instead of mock data. Connect to actual running services. Show real port, uptime, last seen data.",
+    "priority": 7,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "3204694f",
+    "short_desc": "Add Open World to services panel",
+    "long_desc": "Priority 2.1 Open World Integration: Add Open World to services panel in Selena v2 dashboard.",
+    "priority": 7,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "e5610d43",
+    "short_desc": "Add webhook forwarding in nginx",
+    "long_desc": "Priority 2.1 Open World Integration: Add webhook forwarding in nginx for Open World integration.",
+    "priority": 7,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "4d88c668",
+    "short_desc": "Connect Open World status to Selena v2 dashboard",
+    "long_desc": "Priority 2.1 Open World Integration: Connect Open World status to Selena v2 dashboard.",
+    "priority": 7,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "3e258986",
+    "short_desc": "Design hook structure (webhook, cron, event)",
+    "long_desc": "Priority 2.2 Hooks System: Design hook structure (webhook, cron, event). Create hooks directory and storage. Implement basic hook execution.",
+    "priority": 6,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "6cf27390",
+    "short_desc": "Create hooks directory and storage",
+    "long_desc": "Priority 2.2 Hooks System: Create hooks directory and storage for hook configurations.",
+    "priority": 6,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "5e518279",
+    "short_desc": "Implement basic hook execution",
+    "long_desc": "Priority 2.2 Hooks System: Implement basic hook execution system.",
+    "priority": 6,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "ac6f70ca",
+    "short_desc": "Shiba Miner implementation (context mining)",
+    "long_desc": "Priority 2.3 Sub-Worker System: Shiba Miner implementation for context mining.",
+    "priority": 6,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "5d1ae721",
+    "short_desc": "Failure reporting to main Selena",
+    "long_desc": "Priority 2.3 Sub-Worker System: Implement failure reporting to main Selena for sub-workers.",
+    "priority": 6,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "9ef159c0",
+    "short_desc": "Task queue for workers",
+    "long_desc": "Priority 2.3 Sub-Worker System: Implement task queue for workers.",
+    "priority": 6,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "7c261304",
+    "short_desc": "Connect API server to real data sources",
+    "long_desc": "Priority 3.1 Real Data: Connect API server to real data sources instead of mock data.",
+    "priority": 6,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "1d689257",
+    "short_desc": "Real cost tracking from providers",
+    "long_desc": "Priority 3.1 Real Data: Real cost tracking from providers instead of estimated values.",
+    "priority": 6,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "f7a9f3f6",
+    "short_desc": "Real activity log from system events",
+    "long_desc": "Priority 3.1 Real Data: Real activity log from system events instead of mock data.",
+    "priority": 6,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "621be7cd",
+    "short_desc": "Improve graphs and visualization",
+    "long_desc": "Priority 3.2 User Experience: Improve graphs and visualization in web interface.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "31ad3f45",
+    "short_desc": "Add notifications/alerts",
+    "long_desc": "Priority 3.2 User Experience: Add notifications/alerts to web interface.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "513a5dd0",
+    "short_desc": "Mobile responsive design",
+    "long_desc": "Priority 3.2 User Experience: Make web interface mobile responsive.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "3f020f46",
+    "short_desc": "Update setup.md with actual steps",
+    "long_desc": "Priority 4 Documentation: Update setup.md with actual steps from experience.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "a9beb76c",
+    "short_desc": "Create API documentation",
+    "long_desc": "Priority 4 Documentation: Create comprehensive API documentation.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "3761fdff",
+    "short_desc": "Document hook system",
+    "long_desc": "Priority 4 Documentation: Document hook system design and usage.",
+    "priority": 5,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "62751e78",
+    "short_desc": "Build Knowledge Base System",
+    "long_desc": "Build comprehensive knowledge base that captures: Lessons learned, Skills, Patterns, Best practices, Reference information. Requires: API endpoints, Web client display, Categories, Searchable and filterable, Persistent storage.",
+    "priority": 8,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "5143f67c",
+    "short_desc": "DRY refactoring for entity_action",
+    "long_desc": "Refactor entity_action to call context_builder and action_handler instead of duplicating code. Part of open-world-selena improvements.",
+    "priority": 7,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "e23e3910",
+    "short_desc": "World mechanics improvements",
+    "long_desc": "Improve world mechanics in open-world-selena. Part of open-world-selena subproject.",
+    "priority": 6,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "038ba67f",
+    "short_desc": "Testing and bug fixes",
+    "long_desc": "Test and fix bugs in open-world-selena and selena-project.",
+    "priority": 7,
+    "status": "open",
+    "created_at": "2026-04-19T10:38:22.359261",
+    "updated_at": "2026-04-19T10:38:22.359261"
+  },
+  {
+    "id": "3b4983e1",
+    "short_desc": "Test Task",
+    "long_desc": "Test description",
+    "priority": 5,
+    "status": "open",
+    "sensitive": false,
+    "parent_id": null,
+    "estimated_llm_calls": null,
+    "creator_id": null,
+    "conversation_id": null,
+    "agent_id": null,
+    "block_reason": null,
+    "waiting_for": null,
+    "created_at": "2026-04-19T12:47:06.714909",
+    "updated_at": "2026-04-19T12:47:06.714922"
+  },
+  {
+    "id": "56bcb5f0",
+    "short_desc": "Test todo from API",
+    "long_desc": "Testing the todo API",
+    "priority": 3,
     "status": "done",
     "sensitive": false,
     "parent_id": null,
@@ -308,250 +568,24 @@
     "agent_id": null,
     "block_reason": null,
     "waiting_for": null,
-    "created_at": "2026-04-19T10:35:02.983552",
-    "updated_at": "2026-04-19T10:35:14.811106"
+    "created_at": "2026-04-19T12:59:07.342334",
+    "updated_at": "2026-04-19T12:59:17.332876"
   },
   {
-    "id": "55fd9fe1",
-    "short_desc": "Get real data from MiniMax token plan API",
-    "long_desc": "Priority 0 LLM Calls: Get real data from MiniMax token plan API instead of estimated values. The token plan has a real API we can query.",
-    "priority": 9,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "50470cbe",
-    "short_desc": "Create systemd service for Selena v2 API server",
-    "long_desc": "Priority 1.1 Core Infrastructure: Create systemd service for Selena v2 API server to auto-start on boot. Enable on reboot. Test that it starts correctly after system restart.",
-    "priority": 7,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "42c70413",
-    "short_desc": "Update OpenClaw heartbeat to check Selena v2 status",
-    "long_desc": "Priority 1.2 Heartbeat Monitoring: Update current OpenClaw heartbeat to check Selena v2 status. Monitor: API server, Shiba workers, Open World, Nginx.",
-    "priority": 7,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "62502a6d",
-    "short_desc": "HTTPS setup with nginx and Let's Encrypt",
-    "long_desc": "Priority 1.3 HTTPS Setup: Check nginx configuration on VPS. Create nginx site configuration for Selena v2. Set up SSL certificate (Let's Encrypt). Configure reverse proxy.",
-    "priority": 7,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "a0628b8f",
-    "short_desc": "Real service status in web interface",
-    "long_desc": "Priority 1.4 Service Monitoring: Get real service status from API instead of mock data. Connect to actual running services. Show real port, uptime, last seen data.",
-    "priority": 7,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "3204694f",
-    "short_desc": "Add Open World to services panel",
-    "long_desc": "Priority 2.1 Open World Integration: Add Open World to services panel in Selena v2 dashboard.",
-    "priority": 7,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "e5610d43",
-    "short_desc": "Add webhook forwarding in nginx",
-    "long_desc": "Priority 2.1 Open World Integration: Add webhook forwarding in nginx for Open World integration.",
-    "priority": 7,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "4d88c668",
-    "short_desc": "Connect Open World status to Selena v2 dashboard",
-    "long_desc": "Priority 2.1 Open World Integration: Connect Open World status to Selena v2 dashboard.",
-    "priority": 7,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "3e258986",
-    "short_desc": "Design hook structure (webhook, cron, event)",
-    "long_desc": "Priority 2.2 Hooks System: Design hook structure (webhook, cron, event). Create hooks directory and storage. Implement basic hook execution.",
-    "priority": 6,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "6cf27390",
-    "short_desc": "Create hooks directory and storage",
-    "long_desc": "Priority 2.2 Hooks System: Create hooks directory and storage for hook configurations.",
-    "priority": 6,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "5e518279",
-    "short_desc": "Implement basic hook execution",
-    "long_desc": "Priority 2.2 Hooks System: Implement basic hook execution system.",
-    "priority": 6,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "ac6f70ca",
-    "short_desc": "Shiba Miner implementation (context mining)",
-    "long_desc": "Priority 2.3 Sub-Worker System: Shiba Miner implementation for context mining.",
-    "priority": 6,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "5d1ae721",
-    "short_desc": "Failure reporting to main Selena",
-    "long_desc": "Priority 2.3 Sub-Worker System: Implement failure reporting to main Selena for sub-workers.",
-    "priority": 6,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "9ef159c0",
-    "short_desc": "Task queue for workers",
-    "long_desc": "Priority 2.3 Sub-Worker System: Implement task queue for workers.",
-    "priority": 6,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "7c261304",
-    "short_desc": "Connect API server to real data sources",
-    "long_desc": "Priority 3.1 Real Data: Connect API server to real data sources instead of mock data.",
-    "priority": 6,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "1d689257",
-    "short_desc": "Real cost tracking from providers",
-    "long_desc": "Priority 3.1 Real Data: Real cost tracking from providers instead of estimated values.",
-    "priority": 6,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "f7a9f3f6",
-    "short_desc": "Real activity log from system events",
-    "long_desc": "Priority 3.1 Real Data: Real activity log from system events instead of mock data.",
-    "priority": 6,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "621be7cd",
-    "short_desc": "Improve graphs and visualization",
-    "long_desc": "Priority 3.2 User Experience: Improve graphs and visualization in web interface.",
-    "priority": 5,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "31ad3f45",
-    "short_desc": "Add notifications/alerts",
-    "long_desc": "Priority 3.2 User Experience: Add notifications/alerts to web interface.",
-    "priority": 5,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "513a5dd0",
-    "short_desc": "Mobile responsive design",
-    "long_desc": "Priority 3.2 User Experience: Make web interface mobile responsive.",
-    "priority": 5,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "3f020f46",
-    "short_desc": "Update setup.md with actual steps",
-    "long_desc": "Priority 4 Documentation: Update setup.md with actual steps from experience.",
-    "priority": 5,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "a9beb76c",
-    "short_desc": "Create API documentation",
-    "long_desc": "Priority 4 Documentation: Create comprehensive API documentation.",
-    "priority": 5,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "3761fdff",
-    "short_desc": "Document hook system",
-    "long_desc": "Priority 4 Documentation: Document hook system design and usage.",
-    "priority": 5,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "62751e78",
-    "short_desc": "Build Knowledge Base System",
-    "long_desc": "Build comprehensive knowledge base that captures: Lessons learned, Skills, Patterns, Best practices, Reference information. Requires: API endpoints, Web client display, Categories, Searchable and filterable, Persistent storage.",
-    "priority": 8,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "5143f67c",
-    "short_desc": "DRY refactoring for entity_action",
-    "long_desc": "Refactor entity_action to call context_builder and action_handler instead of duplicating code. Part of open-world-selena improvements.",
-    "priority": 7,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "e23e3910",
-    "short_desc": "World mechanics improvements",
-    "long_desc": "Improve world mechanics in open-world-selena. Part of open-world-selena subproject.",
-    "priority": 6,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
-  },
-  {
-    "id": "038ba67f",
-    "short_desc": "Testing and bug fixes",
-    "long_desc": "Test and fix bugs in open-world-selena and selena-project.",
-    "priority": 7,
-    "status": "open",
-    "created_at": "2026-04-19T10:38:22.359261Z",
-    "updated_at": "2026-04-19T10:38:22.359261Z"
+    "id": "56bcb5f0",
+    "short_desc": "Test todo from API",
+    "long_desc": "Testing the todo API",
+    "priority": 3,
+    "status": "done",
+    "sensitive": false,
+    "parent_id": null,
+    "estimated_llm_calls": null,
+    "creator_id": null,
+    "conversation_id": null,
+    "agent_id": null,
+    "block_reason": null,
+    "waiting_for": null,
+    "created_at": "2026-04-19T12:59:07.342334",
+    "updated_at": "2026-04-19T12:59:17.332876"
   }
 ]
