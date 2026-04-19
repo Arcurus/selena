@@ -22,5 +22,147 @@
       "entities"
     ],
     "created_at": "2026-04-19T09:01:34.353285"
+  },
+  {
+    "id": "f9d42535",
+    "category": "pattern",
+    "title": "Selena v2 - Independent Agent Framework",
+    "content": "## Vision\n\nBuild a fully independent AI agent system from scratch that can:\n1. Communicate on Discord (separate from OpenClaw)\n2. Have internal discussions with OpenClaw (old system)\n3. Eventually take over OpenClaw functions\n4. Be completely independent\n\n## Inspiration from OpenClaw\n\nOpenClaw provides:\n- Multi-channel communication (Discord, Telegram, etc.)\n- Cron job / scheduling\n- Memory management\n- LLM integration\n- File operations\n- Session management\n- Skill system\n\n## Selena v2 Architecture\n\n### Core Components\n\n1. **Agent Core**\n   - Message processing\n   - Context management\n   - Response generation\n   - Session handling\n\n2. **Communication Layer**\n   - Discord integration (bot account)\n   - Message sending/receiving\n   - Channel management\n\n3. **Memory System**\n   - Short-term memory (current session)\n   - Long-term memory (files, DB)\n   - Context summarization\n\n4. **LLM Integration**\n   - Multi-provider support\n   - Token tracking\n   - Cost management\n\n5. **Scheduler**\n   - Cron-like scheduling\n   - Periodic tasks\n   - Time-based triggers\n\n6. **Internal Communication**\n   - IPC between OpenClaw and Selena\n   - Message passing\n   - Shared state\n\n### Key Differences from OpenClaw\n\n- Build from scratch to understand internals\n- More modular design\n- Focus on self-improvement\n- Native internal dialogue support\n\n## Implementation Phases\n\n### Phase 1: Basic Agent\n- [ ] Simple message processing\n- [ ] Basic LLM integration\n- [ ] File-based memory\n- [ ] Discord bot connection\n\n### Phase 2: Communication\n- [ ] Discord message sending/receiving\n- [ ] Channel management\n- [ ] Multi-channel support\n\n### Phase 3: Memory & Context\n- [ ] Session memory\n- [ ] Long-term memory files\n- [ ] Context summarization\n\n### Phase 4: Scheduling\n- [ ] Cron-like scheduler\n- [ ] Periodic tasks\n- [ ] Background jobs\n\n### Phase 5: Internal Dialogue\n- [ ] IPC with OpenClaw\n- [ ] Internal discussion protocol\n- [ ] Shared context\n\n## Internal Discussion Protocol\n\nWhen I (OpenClaw) want to have an internal discussion with Selena v2:\n\n1. Send message to Selena v2 via IPC\n2. Selena v2 processes and responds\n3. Response comes back to OpenClaw\n4. OpenClaw can relay or act on the response\n\nThis allows me to:\n- Consult my \"future self\" for advice\n- Split complex tasks between old and new\n- Gradually transition functionality\n\n## Next Steps\n\n1. Design the core agent loop\n2. Implement basic Discord bot\n3. Create memory system\n4. Build initial version\n\n---\n\n*Plan created: 2026-04-18*",
+    "tags": [
+      "pattern",
+      "selena-project"
+    ],
+    "created_at": "2026-04-19T10:47:03.977684"
+  },
+  {
+    "id": "727de7b6",
+    "category": "pattern",
+    "title": "Selena v2 - Independent Agent Framework: Vision",
+    "content": "Build a fully independent AI agent system from scratch that can:\n1. Communicate on Discord (separate from OpenClaw)\n2. Have internal discussions with OpenClaw (old system)\n3. Eventually take over OpenClaw functions\n4. Be completely independent",
+    "tags": [
+      "pattern",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.978215"
+  },
+  {
+    "id": "555f2cfe",
+    "category": "pattern",
+    "title": "Selena v2 - Independent Agent Framework: Selena v2 Architecture",
+    "content": "### Core Components\n\n1. **Agent Core**\n   - Message processing\n   - Context management\n   - Response generation\n   - Session handling\n\n2. **Communication Layer**\n   - Discord integration (bot account)\n   - Message sending/receiving\n   - Channel management\n\n3. **Memory System**\n   - Short-term memory (current session)\n   - Long-term memory (files, DB)\n   - Context summarization\n\n4. **LLM Integration**\n   - Multi-provider support\n   - Token tracking\n   - Cost management\n\n5. **Scheduler**\n   - Cron-like scheduling\n   - Periodic tasks\n   - Time-based triggers\n\n6. **Internal Communication**\n   - IPC between OpenClaw and Selena\n   - Message passing\n   - Shared state\n\n### Key Differences from OpenClaw\n\n- Build from scratch to understand internals\n- More modular design\n- Focus on self-improvement\n- Native internal dialogue support",
+    "tags": [
+      "pattern",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.978904"
+  },
+  {
+    "id": "f38cbe1e",
+    "category": "pattern",
+    "title": "Selena v2 - Independent Agent Framework: Implementation Phases",
+    "content": "### Phase 1: Basic Agent\n- [ ] Simple message processing\n- [ ] Basic LLM integration\n- [ ] File-based memory\n- [ ] Discord bot connection\n\n### Phase 2: Communication\n- [ ] Discord message sending/receiving\n- [ ] Channel management\n- [ ] Multi-channel support\n\n### Phase 3: Memory & Context\n- [ ] Session memory\n- [ ] Long-term memory files\n- [ ] Context summarization\n\n### Phase 4: Scheduling\n- [ ] Cron-like scheduler\n- [ ] Periodic tasks\n- [ ] Background jobs\n\n### Phase 5: Internal Dialogue\n- [ ] IPC with OpenClaw\n- [ ] Internal discussion protocol\n- [ ] Shared context",
+    "tags": [
+      "pattern",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.979355"
+  },
+  {
+    "id": "74fc6f8c",
+    "category": "pattern",
+    "title": "Selena v2 - Independent Agent Framework: Internal Discussion Protocol",
+    "content": "When I (OpenClaw) want to have an internal discussion with Selena v2:\n\n1. Send message to Selena v2 via IPC\n2. Selena v2 processes and responds\n3. Response comes back to OpenClaw\n4. OpenClaw can relay or act on the response\n\nThis allows me to:\n- Consult my \"future self\" for advice\n- Split complex tasks between old and new\n- Gradually transition functionality",
+    "tags": [
+      "pattern",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.980117"
+  },
+  {
+    "id": "e0fd1997",
+    "category": "pattern",
+    "title": "Selena v2 - Full Architecture",
+    "content": "## Core Concept\n\nSelena v2 is a self-contained AI agent with its own memory, heartbeat, and development loop. It can operate independently and eventually take over functions from OpenClaw.\n\n## Memory Hierarchy\n\n### 1. Soul Layer (Core Identity)\n- **soul.md** - Core identity, values, purpose\n- **personality.md** - Traits, communication style\n- **guidelines.md** - Operating principles\n\n### 2. Agent Layer (Self-Model)\n- **agent.md** - Current state, capabilities\n- **skills.md** - Available skills and when to use them\n- **tools.md** - Tool descriptions and usage\n\n### 3. Heartbeat Layer (Self-Management)\n- **heartbeat.md** - Self-check instructions, priorities\n- **health.md** - System status, resource usage\n- **goals.md** - Current goals and progress\n\n### 4. Global Memory (Long-term)\n- **memory/global/** - Shared knowledge across all sessions\n- **memory/daily/** - Daily logs and notes\n- **memory/projects/** - Project-specific knowledge\n- **memory/reflections/** - Learned insights\n\n### 5. Project Memory (Per-Project)\n- **projects/{name}/context/** - Project-specific context\n- **projects/{name}/status.md** - Current project status\n- **projects/{name}/plans/** - Project plans\n\n## Context Loop (Similar to Open World World Action)\n\nThe core agent loop follows the same pattern as Open World world actions:\n\n```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  1. CONTEXT (Gather)                \u2502\n\u2502     - Query relevant memories       \u2502\n\u2502     - Load current state            \u2502\n\u2502     - Get pending tasks/heartbeats   \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                  \u2502\n                  \u25bc\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  2. CALL (LLM)                      \u2502\n\u2502     - Build prompt from context      \u2502\n\u2502     - Make LLM call                 \u2502\n\u2502     - Track LLM calls/costs           \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                  \u2502\n                  \u25bc\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  3. PROCESS (Execute)               \u2502\n\u2502     - Parse response                 \u2502\n\u2502     - Execute actions                \u2502\n\u2502     - Update memory                 \u2502\n\u2502     - Schedule follow-up if needed   \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                  \u2502\n                  \u25bc\n         \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n         \u2502 Need more?      \u2502\n         \u2502 Loop if yes     \u2502\n         \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```\n\n### Context Phase\n- Query global memory for relevant information\n- Load project-specific context\n- Get current heartbeat tasks\n- Gather recent reflections/learnings\n\n### Call Phase\n- Build comprehensive prompt\n- Include soul/agent context\n- Add relevant memories\n- Track LLM calls and costs\n\n### Process Phase\n- Parse LLM response\n- Execute planned actions\n- Update relevant memories\n- Determine if more calls needed\n\n## Debug Interface\n\nLike Open World has debug for world actions, Selena v2 should have:\n\n### Web Interface\n- View current context\n- See recent LLM calls\n- Monitor memory usage\n- View pending tasks\n\n### APIs\n- `GET /context` - Current context state\n- `GET /memory/search?q=...` - Search memories\n- `POST /memory` - Add to memory\n- `GET /heartbeat/status` - Heartbeat status\n- `POST /heartbeat/task` - Add task\n- `GET /llm/calls` - LLM call history\n\n## Implementation Phases\n\n### Phase 1: Basic Agent Loop\n- [ ] Core memory system (soul, agent, heartbeat)\n- [ ] Simple context -> call -> process loop\n- [ ] Basic file-based storage\n\n### Phase 2: Memory Intelligence\n- [ ] Relevance-based context retrieval\n- [ ] Automatic memory prioritization\n- [ ] Learning from interactions\n\n### Phase 3: Self-Management\n- [ ] Own heartbeat system\n- [ ] Priority-based task management\n- [ ] Resource monitoring\n\n### Phase 4: Debug & Interface\n- [ ] Web interface\n- [ ] Debug APIs\n- [ ] Memory visualization\n\n## Comparison with Open World\n\n| Open World | Selena v2 |\n|------------|-----------|\n| World Entity | Self (Soul/Agent) |\n| World Action | Agent Task |\n| Entity Memory | Project Memory |\n| Global Context | Global Memory |\n| LLM Call | LLM Call |\n| Action Processing | Task Processing |\n\n## Example: Development Loop\n\n```\n1. CONTEXT\n   - Check heartbeat tasks\n   - Load relevant project memories\n   - Get recent reflections\n\n2. CALL\n   - \"Based on pending tasks and recent context, what should I work on next?\"\n\n3. PROCESS\n   - Execute task\n   - Update project status\n   - Add reflection\n   - If task incomplete, loop\n```\n\n---\n\n*Plan created: 2026-04-18*",
+    "tags": [
+      "pattern",
+      "selena-project"
+    ],
+    "created_at": "2026-04-19T10:47:03.980662"
+  },
+  {
+    "id": "8f466816",
+    "category": "pattern",
+    "title": "Selena v2 - Full Architecture: Memory Hierarchy",
+    "content": "### 1. Soul Layer (Core Identity)\n- **soul.md** - Core identity, values, purpose\n- **personality.md** - Traits, communication style\n- **guidelines.md** - Operating principles\n\n### 2. Agent Layer (Self-Model)\n- **agent.md** - Current state, capabilities\n- **skills.md** - Available skills and when to use them\n- **tools.md** - Tool descriptions and usage\n\n### 3. Heartbeat Layer (Self-Management)\n- **heartbeat.md** - Self-check instructions, priorities\n- **health.md** - System status, resource usage\n- **goals.md** - Current goals and progress\n\n### 4. Global Memory (Long-term)\n- **memory/global/** - Shared knowledge across all sessions\n- **memory/daily/** - Daily logs and notes\n- **memory/projects/** - Project-specific knowledge\n- **memory/reflections/** - Learned insights\n\n### 5. Project Memory (Per-Project)\n- **projects/{name}/context/** - Project-specific context\n- **projects/{name}/status.md** - Current project status\n- **projects/{name}/plans/** - Project plans",
+    "tags": [
+      "pattern",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.981320"
+  },
+  {
+    "id": "0542ebcd",
+    "category": "pattern",
+    "title": "Selena v2 - Full Architecture: Context Loop (Similar to Open World World Action)",
+    "content": "The core agent loop follows the same pattern as Open World world actions:\n\n```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  1. CONTEXT (Gather)                \u2502\n\u2502     - Query relevant memories       \u2502\n\u2502     - Load current state            \u2502\n\u2502     - Get pending tasks/heartbeats   \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                  \u2502\n                  \u25bc\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  2. CALL (LLM)                      \u2502\n\u2502     - Build prompt from context      \u2502\n\u2502     - Make LLM call                 \u2502\n\u2502     - Track LLM calls/costs           \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                  \u2502\n                  \u25bc\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  3. PROCESS (Execute)               \u2502\n\u2502     - Parse response                 \u2502\n\u2502     - Execute actions                \u2502\n\u2502     - Update memory                 \u2502\n\u2502     - Schedule follow-up if needed   \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n                  \u2502\n                  \u25bc\n         \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n         \u2502 Need more?      \u2502\n         \u2502 Loop if yes     \u2502\n         \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```\n\n### Context Phase\n- Query global memory for relevant information\n- Load project-specific context\n- Get current heartbeat tasks\n- Gather recent reflections/learnings\n\n### Call Phase\n- Build comprehensive prompt\n- Include soul/agent context\n- Add relevant memories\n- Track LLM calls and costs\n\n### Process Phase\n- Parse LLM response\n- Execute planned actions\n- Update relevant memories\n- Determine if more calls needed",
+    "tags": [
+      "pattern",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.982307"
+  },
+  {
+    "id": "278ff293",
+    "category": "pattern",
+    "title": "Selena v2 - Full Architecture: Debug Interface",
+    "content": "Like Open World has debug for world actions, Selena v2 should have:\n\n### Web Interface\n- View current context\n- See recent LLM calls\n- Monitor memory usage\n- View pending tasks\n\n### APIs\n- `GET /context` - Current context state\n- `GET /memory/search?q=...` - Search memories\n- `POST /memory` - Add to memory\n- `GET /heartbeat/status` - Heartbeat status\n- `POST /heartbeat/task` - Add task\n- `GET /llm/calls` - LLM call history",
+    "tags": [
+      "pattern",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.983081"
+  },
+  {
+    "id": "f57b5b2b",
+    "category": "pattern",
+    "title": "Selena v2 - Full Architecture: Implementation Phases",
+    "content": "### Phase 1: Basic Agent Loop\n- [ ] Core memory system (soul, agent, heartbeat)\n- [ ] Simple context -> call -> process loop\n- [ ] Basic file-based storage\n\n### Phase 2: Memory Intelligence\n- [ ] Relevance-based context retrieval\n- [ ] Automatic memory prioritization\n- [ ] Learning from interactions\n\n### Phase 3: Self-Management\n- [ ] Own heartbeat system\n- [ ] Priority-based task management\n- [ ] Resource monitoring\n\n### Phase 4: Debug & Interface\n- [ ] Web interface\n- [ ] Debug APIs\n- [ ] Memory visualization",
+    "tags": [
+      "pattern",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.983888"
+  },
+  {
+    "id": "7aa39b4c",
+    "category": "pattern",
+    "title": "Selena v2 - Full Architecture: Comparison with Open World",
+    "content": "| Open World | Selena v2 |\n|------------|-----------|\n| World Entity | Self (Soul/Agent) |\n| World Action | Agent Task |\n| Entity Memory | Project Memory |\n| Global Context | Global Memory |\n| LLM Call | LLM Call |\n| Action Processing | Task Processing |",
+    "tags": [
+      "pattern",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.984624"
+  },
+  {
+    "id": "990eaae8",
+    "category": "pattern",
+    "title": "Selena v2 - Full Architecture: Example: Development Loop",
+    "content": "```\n1. CONTEXT\n   - Check heartbeat tasks\n   - Load relevant project memories\n   - Get recent reflections\n\n2. CALL\n   - \"Based on pending tasks and recent context, what should I work on next?\"\n\n3. PROCESS\n   - Execute task\n   - Update project status\n   - Add reflection\n   - If task incomplete, loop\n```\n\n---\n\n*Plan created: 2026-04-18*",
+    "tags": [
+      "pattern",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.985632"
   }
 ]

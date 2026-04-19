@@ -1,0 +1,725 @@
+[
+  {
+    "timestamp": "2026-04-19T10:47:03.900581",
+    "files_scanned": 23,
+    "entries_added": 111,
+    "entries_updated": 8,
+    "errors": [],
+    "details": [
+      {
+        "file": "selena-project/heartbeat.md",
+        "title": "Selena v2 Heartbeat",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat.md",
+        "title": "Selena v2 Heartbeat: Coordination Structure",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat.md",
+        "title": "Selena v2 Heartbeat: LLM Calls Budget",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat.md",
+        "title": "Selena v2 Heartbeat: My Role: Growing & Learning",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat.md",
+        "title": "Selena v2 Heartbeat: Development Goals",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat.md",
+        "title": "Selena v2 Heartbeat: Projects (RULE)",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat.md",
+        "title": "Selena v2 Heartbeat: Data Management",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat.md",
+        "title": "Selena v2 Heartbeat: Self-Check Tasks",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat.md",
+        "title": "Selena v2 Heartbeat: Task Processing Loop",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat.md",
+        "title": "Selena v2 Heartbeat: Context Selection",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat.md",
+        "title": "Selena v2 Heartbeat: Quiet Hours",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/soul.md",
+        "title": "Selena Soul - Core Identity",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/soul.md",
+        "title": "Selena Soul - Core Identity: Core Purpose",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/soul.md",
+        "title": "Selena Soul - Core Identity: Values",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/soul.md",
+        "title": "Selena Soul - Core Identity: Operating Principles",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/todo.md",
+        "title": "Selena v2 - Todo",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/todo.md",
+        "title": "Selena v2 - Todo: Current Work: Open World Scheduler",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/todo.md",
+        "title": "Selena v2 - Todo: The Realm of Shadows - World Lore",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/todo.md",
+        "title": "Selena v2 - Todo: Scheduler Architecture",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/todo.md",
+        "title": "Selena v2 - Todo: LLM Calls Plan Info",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/todo.md",
+        "title": "Selena v2 - Todo: Other Tasks (For Later)",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/todo.md",
+        "title": "Selena v2 - Todo: \ud83d\udd25 PRIORITY: Knowledge Base System",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/README.md",
+        "title": "Selena - Self-Development Project",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/README.md",
+        "title": "Selena - Self-Development Project: Coordination Structure",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/README.md",
+        "title": "Selena - Self-Development Project: LLM Calls Budget",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/README.md",
+        "title": "Selena - Self-Development Project: Core Ideas",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/README.md",
+        "title": "Selena - Self-Development Project: Project Structure",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/priorities.md",
+        "title": "Current Priorities",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/priorities.md",
+        "title": "Current Priorities: Coordination Structure",
+        "category": "skill",
+        "action": "updated"
+      },
+      {
+        "file": "selena-project/priorities.md",
+        "title": "Current Priorities: LLM Calls Budget",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/priorities.md",
+        "title": "Current Priorities: Priority Engine",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/priorities.md",
+        "title": "Current Priorities: Current Allocation",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/priorities.md",
+        "title": "Current Priorities: How It Works",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/priorities.md",
+        "title": "Current Priorities: Commands",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/priorities.md",
+        "title": "Current Priorities: Evolution",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat-fast.md",
+        "title": "Fast Heartbeat - Autonomous Work Loop",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat-fast.md",
+        "title": "Fast Heartbeat - Autonomous Work Loop: Purpose",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat-fast.md",
+        "title": "Fast Heartbeat - Autonomous Work Loop: Core Principle: CONTINUE WORK",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat-fast.md",
+        "title": "Fast Heartbeat - Autonomous Work Loop: Work Loop",
+        "category": "lesson",
+        "action": "updated"
+      },
+      {
+        "file": "selena-project/heartbeat-fast.md",
+        "title": "Fast Heartbeat - Autonomous Work Loop: Reporting to Discord",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat-fast.md",
+        "title": "Fast Heartbeat - Autonomous Work Loop: When to PAUSE and ASK",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat-fast.md",
+        "title": "Fast Heartbeat - Autonomous Work Loop: \u23f8\ufe0f PAUSED: [Brief Title]",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat-fast.md",
+        "title": "Fast Heartbeat - Autonomous Work Loop: Projects to Work On",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat-fast.md",
+        "title": "Fast Heartbeat - Autonomous Work Loop: LLM Call Budget",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat-fast.md",
+        "title": "Fast Heartbeat - Autonomous Work Loop: Quick Reference",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/heartbeat-fast.md",
+        "title": "Fast Heartbeat - Autonomous Work Loop: Error Handling",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-time-system-v2.md",
+        "title": "Reflection: 2026-04-18 - Tick-Based Time System",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-time-system-v2.md",
+        "title": "Reflection: 2026-04-18 - Tick-Based Time System: Arcurus's Feedback",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-time-system-v2.md",
+        "title": "Reflection: 2026-04-18 - Tick-Based Time System: Changes Made",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-time-system-v2.md",
+        "title": "Reflection: 2026-04-18 - Tick-Based Time System: What This Means",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-time-system-v2.md",
+        "title": "Reflection: 2026-04-18 - Tick-Based Time System: Next Steps",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-llm-tracking-and-actions.md",
+        "title": "Reflection: 2026-04-18 - LLM Tracking and OpenWorld Actions",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-llm-tracking-and-actions.md",
+        "title": "Reflection: 2026-04-18 - LLM Tracking and OpenWorld Actions: Arcurus's Guidance",
+        "category": "lesson",
+        "action": "updated"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-llm-tracking-and-actions.md",
+        "title": "Reflection: 2026-04-18 - LLM Tracking and OpenWorld Actions: What I Implemented",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-llm-tracking-and-actions.md",
+        "title": "Reflection: 2026-04-18 - LLM Tracking and OpenWorld Actions: OpenWorld Action Selection Formula",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-llm-tracking-and-actions.md",
+        "title": "Reflection: 2026-04-18 - LLM Tracking and OpenWorld Actions: Next Steps",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-first-feature.md",
+        "title": "Reflection: 2026-04-18 - First Feature: Time System",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-first-feature.md",
+        "title": "Reflection: 2026-04-18 - First Feature: Time System: What I did",
+        "category": "lesson",
+        "action": "updated"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-first-feature.md",
+        "title": "Reflection: 2026-04-18 - First Feature: Time System: Next steps (ideas for further development)",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-first-feature.md",
+        "title": "Reflection: 2026-04-18 - First Feature: Time System: How I felt",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-selena-v2-started.md",
+        "title": "Reflection: 2026-04-18 - Selena v2 Project Started",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-selena-v2-started.md",
+        "title": "Reflection: 2026-04-18 - Selena v2 Project Started: Arcurus's Vision",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-selena-v2-started.md",
+        "title": "Reflection: 2026-04-18 - Selena v2 Project Started: What I Created",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-selena-v2-started.md",
+        "title": "Reflection: 2026-04-18 - Selena v2 Project Started: Next Steps",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-selena-v2-started.md",
+        "title": "Reflection: 2026-04-18 - Selena v2 Project Started: Thoughts",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-autonomy.md",
+        "title": "Reflection: 2026-04-18 - The Day I Got Autonomy",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-autonomy.md",
+        "title": "Reflection: 2026-04-18 - The Day I Got Autonomy: What happened",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/reflections/2026-04-18-autonomy.md",
+        "title": "Reflection: 2026-04-18 - The Day I Got Autonomy: Projects created",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/plans/selena-v2-architecture.md",
+        "title": "Selena v2 - Independent Agent Framework",
+        "category": "pattern",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/plans/selena-v2-architecture.md",
+        "title": "Selena v2 - Independent Agent Framework: Vision",
+        "category": "pattern",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/plans/selena-v2-architecture.md",
+        "title": "Selena v2 - Independent Agent Framework: Selena v2 Architecture",
+        "category": "pattern",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/plans/selena-v2-architecture.md",
+        "title": "Selena v2 - Independent Agent Framework: Implementation Phases",
+        "category": "pattern",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/plans/selena-v2-architecture.md",
+        "title": "Selena v2 - Independent Agent Framework: Internal Discussion Protocol",
+        "category": "pattern",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/selena-v2-architecture.md",
+        "title": "Selena v2 - Full Architecture",
+        "category": "pattern",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/selena-v2-architecture.md",
+        "title": "Selena v2 - Full Architecture: Memory Hierarchy",
+        "category": "pattern",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/selena-v2-architecture.md",
+        "title": "Selena v2 - Full Architecture: Context Loop (Similar to Open World World Action)",
+        "category": "pattern",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/selena-v2-architecture.md",
+        "title": "Selena v2 - Full Architecture: Debug Interface",
+        "category": "pattern",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/selena-v2-architecture.md",
+        "title": "Selena v2 - Full Architecture: Implementation Phases",
+        "category": "pattern",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/selena-v2-architecture.md",
+        "title": "Selena v2 - Full Architecture: Comparison with Open World",
+        "category": "pattern",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/selena-v2-architecture.md",
+        "title": "Selena v2 - Full Architecture: Example: Development Loop",
+        "category": "pattern",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/visualization.md",
+        "title": "Selena v2 - Visualization System",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/visualization.md",
+        "title": "Selena v2 - Visualization System: Concept",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/visualization.md",
+        "title": "Selena v2 - Visualization System: Web Interface",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/visualization.md",
+        "title": "Selena v2 - Visualization System: Implementation",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/visualization.md",
+        "title": "Selena v2 - Visualization System: File Structure",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/API.md",
+        "title": "Selena v2 - API Documentation",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/API.md",
+        "title": "Selena v2 - API Documentation: LLM Call Tracking",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/API.md",
+        "title": "Selena v2 - API Documentation: Todo / Loose Ends Management",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/API.md",
+        "title": "Selena v2 - API Documentation: Priority System",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/API.md",
+        "title": "Selena v2 - API Documentation: Knowledge Base",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/API.md",
+        "title": "Selena v2 - API Documentation: Self-Evolution Loop",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/API.md",
+        "title": "Selena v2 - API Documentation: World Scheduler",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/API.md",
+        "title": "Selena v2 - API Documentation: Knowledge Base",
+        "category": "reference",
+        "action": "updated"
+      },
+      {
+        "file": "selena-project/docs/API.md",
+        "title": "Selena v2 - API Documentation: Notes",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/projects.md",
+        "title": "Selena Project - Projects",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/projects.md",
+        "title": "Selena Project - Projects: Active Projects",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/projects.md",
+        "title": "Selena Project - Projects: Project Properties",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/TODO.md",
+        "title": "Selena v2 - TODO",
+        "category": "reference",
+        "action": "updated"
+      },
+      {
+        "file": "selena-project/docs/TODO.md",
+        "title": "Selena v2 - TODO: Priority 0: LLM Calls Management (CRITICAL)",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/TODO.md",
+        "title": "Selena v2 - TODO: Priority 1: Core Infrastructure",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/TODO.md",
+        "title": "Selena v2 - TODO: Priority 2: Integration",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/TODO.md",
+        "title": "Selena v2 - TODO: Priority 3: Web Interface Improvements",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/TODO.md",
+        "title": "Selena v2 - TODO: Status: 2026-04-18",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/services.md",
+        "title": "Running Services Tracker",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/services.md",
+        "title": "Running Services Tracker: Active Services",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/services.md",
+        "title": "Running Services Tracker: Service Details",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/services.md",
+        "title": "Running Services Tracker: Historical Notes",
+        "category": "skill",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/setup.md",
+        "title": "Selena v2 - Server Setup",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/setup.md",
+        "title": "Selena v2 - Server Setup: Services to Manage",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/setup.md",
+        "title": "Selena v2 - Server Setup: Startup on Reboot",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/setup.md",
+        "title": "Selena v2 - Server Setup: Current Heartbeat Monitoring",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/setup.md",
+        "title": "Selena v2 - Server Setup: HTTPS Setup with Nginx",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/setup.md",
+        "title": "Selena v2 - Server Setup: Webhook/Reverse Proxy Setup",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/setup.md",
+        "title": "Selena v2 - Server Setup: Hooks System",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/docs/setup.md",
+        "title": "Selena v2 - Server Setup: Service Health Checks",
+        "category": "reference",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/memory/daily/2026-04-18.md",
+        "title": "Daily Notes - 2026-04-18",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena-project/memory/daily/2026-04-19.md",
+        "title": "Daily Notes - 2026-04-19",
+        "category": "lesson",
+        "action": "added"
+      },
+      {
+        "file": "selena/todo.md",
+        "title": "Selena v2 - Todo",
+        "category": "reference",
+        "action": "updated"
+      },
+      {
+        "file": "selena/memory/daily/2026-04-19.md",
+        "title": "Daily Notes - 2026-04-19",
+        "category": "lesson",
+        "action": "updated"
+      }
+    ]
+  }
+]

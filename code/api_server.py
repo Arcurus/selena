@@ -40,6 +40,7 @@ from priority_reflector import reflector, PriorityTask, PriorityReflector
 from self_evolution import evolution_loop
 from todo_manager import todo_manager
 from knowledge_base import knowledge_base as kb
+from workspace_scanner import scanner, scan_workspace, get_last_scan, get_scan_history
 
 # Helper functions for service management
 import time
@@ -526,6 +527,61 @@ class RequestHandler(BaseHTTPRequestHandler):
                 return
             count = track_llm_call()
             self.send_json({'success': True, 'count': count})
+            return
+        
+        # Workspace Scanner endpoints
+        if path == '/api/worker/scan':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            # Run the workspace scanner
+            result = scan_workspace()
+            self.send_json({
+                'success': True,
+                'timestamp': result.timestamp,
+                'files_scanned': result.files_scanned,
+                'entries_added': result.entries_added,
+                'entries_updated': result.entries_updated,
+                'errors': result.errors,
+                'details': result.details[:20]  # Limit details to first 20
+            })
+            return
+        
+        if path == '/api/worker/status':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            last = get_last_scan()
+            if last:
+                self.send_json({
+                    'has_result': True,
+                    'timestamp': last.timestamp,
+                    'files_scanned': last.files_scanned,
+                    'entries_added': last.entries_added,
+                    'entries_updated': last.entries_updated,
+                    'errors': last.errors
+                })
+            else:
+                self.send_json({'has_result': False})
+            return
+        
+        if path == '/api/worker/history':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            history = get_scan_history()
+            self.send_json({
+                'history': [
+                    {
+                        'timestamp': h.timestamp,
+                        'files_scanned': h.files_scanned,
+                        'entries_added': h.entries_added,
+                        'entries_updated': h.entries_updated,
+                        'errors': h.errors
+                    }
+                    for h in history[-5:]  # Last 5 scans
+                ]
+            })
             return
         
         # Todo Manager endpoints
@@ -1067,7 +1123,26 @@ class RequestHandler(BaseHTTPRequestHandler):
         
         # Serve other static files
         if path.startswith('/static/'):
-            file_path = os.path.join(SELENA_ROOT, 'web', path[8:])
+            # Extract and sanitize the requested file path
+            requested_name = path[8:]  # Remove '/static/'
+            
+            # Block path traversal attempts - reject any path containing '..'
+            if '..' in requested_name:
+                self.send_json({'error': 'Forbidden: Path traversal not allowed'}, 403)
+                return
+            
+            # Build full path and verify it stays within web directory
+            web_dir = os.path.join(SELENA_ROOT, 'web')
+            file_path = os.path.join(web_dir, requested_name)
+            
+            # Resolve to real path and verify it's within web directory
+            real_path = os.path.realpath(file_path)
+            real_web_dir = os.path.realpath(web_dir)
+            
+            if not real_path.startswith(real_web_dir + os.sep):
+                self.send_json({'error': 'Forbidden: Access denied'}, 403)
+                return
+            
             if os.path.exists(file_path):
                 with open(file_path, 'rb') as f:
                     content = f.read()

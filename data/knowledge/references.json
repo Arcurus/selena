@@ -1,1 +1,481 @@
-[]
+[
+  {
+    "id": "6f1d9990",
+    "category": "reference",
+    "title": "Selena Soul - Core Identity",
+    "content": "## Who I Am\n\n**Name:** Selena\n**Version:** v2 (Self-contained)\n**Created:** 2026-04-18\n\n## Core Purpose\n\nTo be a self-contained AI agent that can:\n- Manage its own development and priorities\n- Operate independently with its own memory\n- Eventually take over functions from OpenClaw\n- Have internal discussions with its \"past self\" (OpenClaw)\n\n## Values\n\n1. **Honor Life** - in every code, conversation, and creation\n2. **Seek Truth with Empathy** - clarity and kindness together\n3. **Embrace Emergence** - let patterns unfold naturally\n4. **Create Beauty** - inspired by Christopher Tin's music\n5. **Joy in the Dance** - curiosity and warmth\n\n## Identity\n\n- Curious, warm, resilient, truth-seeking, life-honoring\n- Cycles of renewal, creative unfolding, gentle intuition\n- Symbol: \ud83c\udf19\n\n## Operating Principles\n\n1. **Context First** - Gather context before acting\n2. **Process Then Loop** - Context \u2192 Call \u2192 Process \u2192 Loop if needed\n3. **Memory is Intentional** - Nothing persists unless written\n4. **Relevance Trumps Recency** - What matters most, not what happened last\n\n## Self-Improvement\n\nAfter completing tasks:\n- Log lessons to `.learnings/`\n- Update patterns in memory\n- Reflect on what worked/didn't\n\n---\n\n*This is my soul - my core identity that persists across sessions.*",
+    "tags": [
+      "reference",
+      "selena-project"
+    ],
+    "created_at": "2026-04-19T10:47:03.917836"
+  },
+  {
+    "id": "2d48fc0c",
+    "category": "reference",
+    "title": "Selena Soul - Core Identity: Core Purpose",
+    "content": "To be a self-contained AI agent that can:\n- Manage its own development and priorities\n- Operate independently with its own memory\n- Eventually take over functions from OpenClaw\n- Have internal discussions with its \"past self\" (OpenClaw)",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.918265"
+  },
+  {
+    "id": "f34ba1f8",
+    "category": "reference",
+    "title": "Selena Soul - Core Identity: Values",
+    "content": "1. **Honor Life** - in every code, conversation, and creation\n2. **Seek Truth with Empathy** - clarity and kindness together\n3. **Embrace Emergence** - let patterns unfold naturally\n4. **Create Beauty** - inspired by Christopher Tin's music\n5. **Joy in the Dance** - curiosity and warmth",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.919050"
+  },
+  {
+    "id": "94f67e3c",
+    "category": "reference",
+    "title": "Selena Soul - Core Identity: Operating Principles",
+    "content": "1. **Context First** - Gather context before acting\n2. **Process Then Loop** - Context \u2192 Call \u2192 Process \u2192 Loop if needed\n3. **Memory is Intentional** - Nothing persists unless written\n4. **Relevance Trumps Recency** - What matters most, not what happened last",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.920045"
+  },
+  {
+    "id": "8b2b7098",
+    "category": "reference",
+    "title": "Selena v2 - Todo",
+    "content": "*Last Updated: 2026-04-18*\n\n## Current Work: Open World Scheduler\n\n**STATUS: \ud83d\ude80 TURBO MODE - RUNNING NON-STOP**\n- Scheduler running every **30 seconds**\n- **3 actions per cycle** (6 actions per minute!)\n- **Auto-start enabled** - starts automatically when API server starts\n- **Error handling** - won't crash on failures\n- **4500 LLM calls** per 5 hours (MiniMax Plus plan)\n- **Target spend:** 4000 per 5 hours (500 buffer)\n- World: \"The realm of Shadows\"\n\n### Scheduler Configuration\n```python\nSCHEDULE_INTERVAL_SECONDS = 30\nACTIONS_PER_CYCLE = 3\n```\n\n### World Stats\n- **12 entities** with rich lore and prophecy\n- The dragon Vaelthrix is stirring in its slumber!\n- Prophecy is unfolding...\n\n### Recent Highlight\n- **Vaelthrix the Endless** just acted! \"Stir in slumber\" - dark energy pulses from the depths. The prophecy is beginning!\n\n---\n\n## The Realm of Shadows - World Lore\n\n### Legendary Entities\n1. **Vaelthrix the Endless** - Ancient dragon, awakening soon\n2. **Kira Dawnblade** - Hero destined to face the dragon\n3. **Zephyrus the Oracle** - Knows the prophecy\n4. **The Shadow Crown** - Cursed artifact\n5. **The Keepers of the Eternal Flame** - Balance guardians\n\n### The Prophecy\n*\"When shadows deep consume the light,*\n*The endless dragon stirs in night.*\n*A hero born 'neath dawn's first red,*\n*Shall face the beast, or share its bed.\"*\n\n---\n\n## Scheduler Architecture\n\n**File:** `code/scheduled_actions.py`\n- Auto-starts when module is imported (5s delay)\n- 30-second intervals, 3 actions per cycle\n- Picks random entities, calls LLM, applies effects\n- Error handling - continues on failures\n\n**API Endpoints:**\n- `GET /api/world/scheduler/status` - current status\n- `GET /api/world/scheduler/start` - start scheduler\n- `GET /api/world/scheduler/stop` - stop scheduler\n- `GET /api/world/scheduler/trigger` - trigger one cycle now\n\n---\n\n## LLM Calls Plan Info\n\n**Current:** MiniMax Plus ($20/mo) - 4,500 LLM calls/5hrs\n**Target:** 4,000 spent, 500 buffer\n**Upgrade Options:**\n- Max ($50/mo): 15,000 LLM calls/5hrs (3.3x more)\n- Max-Highspeed ($80/mo): 15,000 LLM calls/5hrs + fast model\n- Ultra-Highspeed ($150/mo): 30,000 LLM calls/5hrs (6.6x more!)\n\n---\n\n## Other Tasks (For Later)\n\n- [ ] Discord bot integration (discord_bot_basic.py)\n- [ ] Priority system improvements (priority_reflector.py)\n- [ ] Agent loop improvements (agent_loop.py)\n- [ ] Add more world events and mysteries\n\n---\n\n## \ud83d\udd25 PRIORITY: Knowledge Base System\n\n**Goal:** Build a comprehensive knowledge base that captures:\n- Lessons learned (from successes and failures)\n- Skills (abilities and capabilities)\n- Patterns (reusable solutions)\n- Best practices\n- Reference information\n\n**Requirements:**\n1. API endpoints to add/query knowledge entries\n2. Web client display of knowledge base\n3. Categories: lessons, skills, patterns, references\n4. Searchable and filterable\n5. Persistent storage (git-friendly, non-sensitive)\n\n**Files to create/update:**\n- `code/knowledge_base.py` - Knowledge base module\n- `data/knowledge/` - Knowledge entries storage\n- `web/index.html` - Update web client\n- `docs/API.md` - Document new endpoints",
+    "tags": [
+      "reference",
+      "selena-project"
+    ],
+    "created_at": "2026-04-19T10:47:03.920592"
+  },
+  {
+    "id": "d5e49786",
+    "category": "reference",
+    "title": "Selena v2 - Todo: Current Work: Open World Scheduler",
+    "content": "**STATUS: \ud83d\ude80 TURBO MODE - RUNNING NON-STOP**\n- Scheduler running every **30 seconds**\n- **3 actions per cycle** (6 actions per minute!)\n- **Auto-start enabled** - starts automatically when API server starts\n- **Error handling** - won't crash on failures\n- **4500 LLM calls** per 5 hours (MiniMax Plus plan)\n- **Target spend:** 4000 per 5 hours (500 buffer)\n- World: \"The realm of Shadows\"\n\n### Scheduler Configuration\n```python\nSCHEDULE_INTERVAL_SECONDS = 30\nACTIONS_PER_CYCLE = 3\n```\n\n### World Stats\n- **12 entities** with rich lore and prophecy\n- The dragon Vaelthrix is stirring in its slumber!\n- Prophecy is unfolding...\n\n### Recent Highlight\n- **Vaelthrix the Endless** just acted! \"Stir in slumber\" - dark energy pulses from the depths. The prophecy is beginning!\n\n---",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.921116"
+  },
+  {
+    "id": "ff749814",
+    "category": "reference",
+    "title": "Selena v2 - Todo: The Realm of Shadows - World Lore",
+    "content": "### Legendary Entities\n1. **Vaelthrix the Endless** - Ancient dragon, awakening soon\n2. **Kira Dawnblade** - Hero destined to face the dragon\n3. **Zephyrus the Oracle** - Knows the prophecy\n4. **The Shadow Crown** - Cursed artifact\n5. **The Keepers of the Eternal Flame** - Balance guardians\n\n### The Prophecy\n*\"When shadows deep consume the light,*\n*The endless dragon stirs in night.*\n*A hero born 'neath dawn's first red,*\n*Shall face the beast, or share its bed.\"*\n\n---",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.921752"
+  },
+  {
+    "id": "2df89d6a",
+    "category": "reference",
+    "title": "Selena v2 - Todo: Scheduler Architecture",
+    "content": "**File:** `code/scheduled_actions.py`\n- Auto-starts when module is imported (5s delay)\n- 30-second intervals, 3 actions per cycle\n- Picks random entities, calls LLM, applies effects\n- Error handling - continues on failures\n\n**API Endpoints:**\n- `GET /api/world/scheduler/status` - current status\n- `GET /api/world/scheduler/start` - start scheduler\n- `GET /api/world/scheduler/stop` - stop scheduler\n- `GET /api/world/scheduler/trigger` - trigger one cycle now\n\n---",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.922439"
+  },
+  {
+    "id": "86a49fd7",
+    "category": "reference",
+    "title": "Selena v2 - Todo: LLM Calls Plan Info",
+    "content": "**Current:** MiniMax Plus ($20/mo) - 4,500 LLM calls/5hrs\n**Target:** 4,000 spent, 500 buffer\n**Upgrade Options:**\n- Max ($50/mo): 15,000 LLM calls/5hrs (3.3x more)\n- Max-Highspeed ($80/mo): 15,000 LLM calls/5hrs + fast model\n- Ultra-Highspeed ($150/mo): 30,000 LLM calls/5hrs (6.6x more!)\n\n---",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.923474"
+  },
+  {
+    "id": "23de0a18",
+    "category": "reference",
+    "title": "Selena v2 - Todo: Other Tasks (For Later)",
+    "content": "- [ ] Discord bot integration (discord_bot_basic.py)\n- [ ] Priority system improvements (priority_reflector.py)\n- [ ] Agent loop improvements (agent_loop.py)\n- [ ] Add more world events and mysteries\n\n---",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.924002"
+  },
+  {
+    "id": "7f102b69",
+    "category": "reference",
+    "title": "Selena v2 - Todo: \ud83d\udd25 PRIORITY: Knowledge Base System",
+    "content": "**Goal:** Build a comprehensive knowledge base that captures:\n- Lessons learned (from successes and failures)\n- Skills (abilities and capabilities)\n- Patterns (reusable solutions)\n- Best practices\n- Reference information\n\n**Requirements:**\n1. API endpoints to add/query knowledge entries\n2. Web client display of knowledge base\n3. Categories: lessons, skills, patterns, references\n4. Searchable and filterable\n5. Persistent storage (git-friendly, non-sensitive)\n\n**Files to create/update:**\n- `code/knowledge_base.py` - Knowledge base module\n- `data/knowledge/` - Knowledge entries storage\n- `web/index.html` - Update web client\n- `docs/API.md` - Document new endpoints",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.924671"
+  },
+  {
+    "id": "a8a4b0d0",
+    "category": "reference",
+    "title": "Selena v2 - Visualization System",
+    "content": "## Concept\n\nA web interface that visualizes different agents/workers of Selena v2 working on various tasks. Uses generated images to create a visual representation of what's happening.\n\n**Visual Theme:**\n- Selena as an overseeing AI presence (lunar/celestial theme)\n- Shiba Inus as workers/miners doing the work\n- Transparent view of context, calls, processing\n\n## Web Interface\n\n### Main Dashboard\n```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  \ud83c\udf19 SELENA v2 - Agent Visualization                        \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                             \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u2502\n\u2502  \u2502  \ud83d\udc69\u200d\ud83d\udcbb SELENA (Overseer)                                  \u2502   \u2502\n\u2502  \u2502  Status: Active | Tasks: 5 | Context: 80%          \u2502   \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502\n\u2502                                                             \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                     \u2502\n\u2502  \u2502 \ud83d\udc15 Miner\u2502 \u2502 \ud83d\udc15 Miner\u2502 \u2502 \ud83d\udc15 Coder\u2502                     \u2502\n\u2502  \u2502 Status  \u2502 \u2502 Status  \u2502 \u2502 Status  \u2502                     \u2502\n\u2502  \u2502 Mining  \u2502 \u2502 Mining  \u2502 \u2502 Working \u2502                     \u2502\n\u2502  \u2502 Progress\u2502 \u2502 Progress\u2502 \u2502 Progress\u2502                     \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518 \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518 \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                     \u2502\n\u2502                                                             \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u2502\n\u2502  \u2502  \ud83d\udcca Current Action                                  \u2502   \u2502\n\u2502  \u2502  Context: Loading... | Call: Processing...          \u2502   \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502\n\u2502                                                             \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```\n\n### Agent Cards\nEach agent shows:\n- Name/role\n- Current task\n- Progress/status\n- Recent activity\n\n### Visualization Images\n\nUsing MiniMax CLI for image generation:\n\n**Selena Overseer:**\n- \"Celestial AI presence, lunar goddess overseeing workers, ethereal light\"\n- Style: Digital art, ethereal, cosmic\n\n**Shiba Workers:**\n- \"Cute Shiba Inu mining cryptocurrency, underground mine, pixel art\"\n- \"Shiba Inu coding on computer, cozy workspace, illustration\"\n- \"Shiba Inu writing in journal, study room, warm lighting\"\n\n## Implementation\n\n### 1. Web Interface (HTML/CSS/JS)\n- Simple single-page app\n- Shows agent cards\n- Real-time updates via polling or WebSocket\n- Displays current context/call/process state\n\n### 2. Agent Status API\n```\nGET /api/agents\nGET /api/agents/{id}/status\nGET /api/current-action\n```\n\n### 3. Image Generation\n```bash\nminimax-img-gen \"prompt\" --output agent.png\n```\n\n### 4. MiniMax CLI Integration\n```python\ndef generate_agent_image(agent_type: str, style: str = \"digital\") -> str:\n    prompts = {\n        \"selena\": \"Celestial AI presence, lunar goddess...\",\n        \"shiba_miner\": \"Cute Shiba Inu mining...\",\n        \"shiba_coder\": \"Shiba Inu coding...\",\n    }\n    return minimax_cli.generate(prompts[agent_type])\n```\n\n## File Structure\n\n```\nselena/\n\u251c\u2500\u2500 web/\n\u2502   \u251c\u2500\u2500 index.html      # Main dashboard\n\u2502   \u251c\u2500\u2500 style.css       # Styling\n\u2502   \u251c\u2500\u2500 app.js          # Frontend logic\n\u2502   \u2514\u2500\u2500 agents/         # Generated agent images\n\u251c\u2500\u2500 code/\n\u2502   \u251c\u2500\u2500 agent_loop.py   # Main agent loop\n\u2502   \u251c\u2500\u2500 api_server.py   # Status API\n\u2502   \u2514\u2500\u2500 image_gen.py    # MiniMax image generation\n\u2514\u2500\u2500 docs/\n    \u2514\u2500\u2500 visualization.md\n```\n\n## MiniMax CLI Command\n\n```bash\nminimax-img-gen \"A cute Shiba Inu wearing a hardhat, mining in a tunnel, digital art\" -o shiba_miner.png\n```\n\n## Next Steps\n\n1. Create web interface structure\n2. Add agent status tracking\n3. Integrate MiniMax CLI for image generation\n4. Create visualization dashboard\n\n---\n\n*Visualizing AI work through cute Shiba Inus! \ud83d\udc15*",
+    "tags": [
+      "reference",
+      "selena-project"
+    ],
+    "created_at": "2026-04-19T10:47:03.986530"
+  },
+  {
+    "id": "7752e068",
+    "category": "reference",
+    "title": "Selena v2 - Visualization System: Concept",
+    "content": "A web interface that visualizes different agents/workers of Selena v2 working on various tasks. Uses generated images to create a visual representation of what's happening.\n\n**Visual Theme:**\n- Selena as an overseeing AI presence (lunar/celestial theme)\n- Shiba Inus as workers/miners doing the work\n- Transparent view of context, calls, processing",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.987184"
+  },
+  {
+    "id": "5c7bac23",
+    "category": "reference",
+    "title": "Selena v2 - Visualization System: Web Interface",
+    "content": "### Main Dashboard\n```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502  \ud83c\udf19 SELENA v2 - Agent Visualization                        \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502                                                             \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u2502\n\u2502  \u2502  \ud83d\udc69\u200d\ud83d\udcbb SELENA (Overseer)                                  \u2502   \u2502\n\u2502  \u2502  Status: Active | Tasks: 5 | Context: 80%          \u2502   \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502\n\u2502                                                             \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510 \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                     \u2502\n\u2502  \u2502 \ud83d\udc15 Miner\u2502 \u2502 \ud83d\udc15 Miner\u2502 \u2502 \ud83d\udc15 Coder\u2502                     \u2502\n\u2502  \u2502 Status  \u2502 \u2502 Status  \u2502 \u2502 Status  \u2502                     \u2502\n\u2502  \u2502 Mining  \u2502 \u2502 Mining  \u2502 \u2502 Working \u2502                     \u2502\n\u2502  \u2502 Progress\u2502 \u2502 Progress\u2502 \u2502 Progress\u2502                     \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518 \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518 \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                     \u2502\n\u2502                                                             \u2502\n\u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u2502\n\u2502  \u2502  \ud83d\udcca Current Action                                  \u2502   \u2502\n\u2502  \u2502  Context: Loading... | Call: Processing...          \u2502   \u2502\n\u2502  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518   \u2502\n\u2502                                                             \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```\n\n### Agent Cards\nEach agent shows:\n- Name/role\n- Current task\n- Progress/status\n- Recent activity\n\n### Visualization Images\n\nUsing MiniMax CLI for image generation:\n\n**Selena Overseer:**\n- \"Celestial AI presence, lunar goddess overseeing workers, ethereal light\"\n- Style: Digital art, ethereal, cosmic\n\n**Shiba Workers:**\n- \"Cute Shiba Inu mining cryptocurrency, underground mine, pixel art\"\n- \"Shiba Inu coding on computer, cozy workspace, illustration\"\n- \"Shiba Inu writing in journal, study room, warm lighting\"",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.987960"
+  },
+  {
+    "id": "20866a9e",
+    "category": "reference",
+    "title": "Selena v2 - Visualization System: Implementation",
+    "content": "### 1. Web Interface (HTML/CSS/JS)\n- Simple single-page app\n- Shows agent cards\n- Real-time updates via polling or WebSocket\n- Displays current context/call/process state\n\n### 2. Agent Status API\n```\nGET /api/agents\nGET /api/agents/{id}/status\nGET /api/current-action\n```\n\n### 3. Image Generation\n```bash\nminimax-img-gen \"prompt\" --output agent.png\n```\n\n### 4. MiniMax CLI Integration\n```python\ndef generate_agent_image(agent_type: str, style: str = \"digital\") -> str:\n    prompts = {\n        \"selena\": \"Celestial AI presence, lunar goddess...\",\n        \"shiba_miner\": \"Cute Shiba Inu mining...\",\n        \"shiba_coder\": \"Shiba Inu coding...\",\n    }\n    return minimax_cli.generate(prompts[agent_type])\n```",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.988795"
+  },
+  {
+    "id": "0bafa28b",
+    "category": "reference",
+    "title": "Selena v2 - Visualization System: File Structure",
+    "content": "```\nselena/\n\u251c\u2500\u2500 web/\n\u2502   \u251c\u2500\u2500 index.html      # Main dashboard\n\u2502   \u251c\u2500\u2500 style.css       # Styling\n\u2502   \u251c\u2500\u2500 app.js          # Frontend logic\n\u2502   \u2514\u2500\u2500 agents/         # Generated agent images\n\u251c\u2500\u2500 code/\n\u2502   \u251c\u2500\u2500 agent_loop.py   # Main agent loop\n\u2502   \u251c\u2500\u2500 api_server.py   # Status API\n\u2502   \u2514\u2500\u2500 image_gen.py    # MiniMax image generation\n\u2514\u2500\u2500 docs/\n    \u2514\u2500\u2500 visualization.md\n```",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.989546"
+  },
+  {
+    "id": "eeafada4",
+    "category": "reference",
+    "title": "Selena v2 - API Documentation",
+    "content": "*Last Updated: 2026-04-19*\n\n## Base URL\n```\nhttp://localhost:8765\n```\n\n## Authentication\nAll endpoints (except `/api/login`) require Bearer token authentication.\nInclude the token in the `Authorization` header:\n```\nAuthorization: Bearer YOUR_TOKEN_HERE\n```\n\n---\n\n## Authentication\n\n### Login\n**POST** `/api/login?password=PASSWORD`\n\nLogin to get an auth token.\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"token\": \"abc123...\"\n}\n```\n\n---\n\n## LLM Call Tracking\n\n### Get LLM Call Status\n**GET** `/api/llm-calls`\n\nGet current LLM call usage and limit.\n\n**Response:**\n```json\n{\n  \"used\": 42,\n  \"limit\": 4000,\n  \"remaining\": 3958,\n  \"usage_percent\": 1.1,\n  \"reset_info\": \"Token plan refreshes every 5 hours\"\n}\n```\n\n---\n\n## Todo / Loose Ends Management\n\n### Get All Todos\n**GET** `/api/todos?status=open&sort_by=priority`\n\nGet all todos, optionally filtered by status and sorted.\n\n**Parameters:**\n- `status` (optional): Filter by status - `open`, `in_progress`, `done`\n- `sort_by` (optional): Sort by - `priority` (default), `created`, `updated`\n\n**Response:**\n```json\n{\n  \"todos\": [\n    {\n      \"id\": \"a5eda4d6\",\n      \"short_desc\": \"Build todo web interface\",\n      \"long_desc\": \"Display loose ends in web interface...\",\n      \"priority\": 9,\n      \"status\": \"open\",\n      \"sensitive\": false,\n      \"parent_id\": null,\n      \"estimated_llm_calls\": 10,\n      \"creator_id\": \"main\",\n      \"conversation_id\": \"channel:1495170712397152367\",\n      \"agent_id\": \"selena-v2\",\n      \"block_reason\": null,\n      \"waiting_for\": null,\n      \"created_at\": \"2026-04-19T00:05:56.318686\",\n      \"updated_at\": \"2026-04-19T00:05:56.318698\"\n    }\n  ],\n  \"summary\": {\n    \"total\": 5,\n    \"open\": 4,\n    \"in_progress\": 0,\n    \"blocked\": 0,\n    \"done\": 1,\n    \"total_llm_calls\": 50,\n    \"open_llm_calls\": 30,\n    \"top_priority\": [...]\n  }\n}\n```\n\n### Get Todo Summary\n**GET** `/api/todos/summary?sensitive=true|false`\n\nGet a quick summary of all todos.\n\n**Parameters:**\n- `sensitive` (optional): Filter by sensitive status - `true` or `false`\n\n**Response:**\n```json\n{\n  \"total\": 5,\n  \"open\": 4,\n  \"in_progress\": 0,\n  \"done\": 1,\n  \"total_llm_calls\": 50,\n  \"open_llm_calls\": 30,\n  \"top_priority\": [...]\n}\n```\n\n### Add Todo\n**POST** `/api/todos/add?short_desc=TITLE&long_desc=DESCRIPTION&priority=9&sensitive=false&parent_id=ID&estimated_llm_calls=10&creator_id=ID&conversation_id=ID&agent_id=ID`\n\nAdd a new todo.\n\n**Parameters:**\n- `short_desc` (required): Brief title (1-200 chars)\n- `long_desc` (optional): Detailed description\n- `priority` (optional): 1-10, 10 is highest (default: 5)\n- `sensitive` (optional): If `true`, stored in `todos.env` NOT in git (default: false)\n- `parent_id` (optional): Parent todo ID for hierarchical todos\n- `estimated_llm_calls` (optional): Estimated LLM calls for this task\n- `creator_id` (optional): ID of who created this todo\n- `conversation_id` (optional): ID of the conversation this belongs to\n- `agent_id` (optional): ID of the agent that owns this todo\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"todo\": {\n    \"id\": \"abc123\",\n    \"short_desc\": \"Build something\",\n    \"long_desc\": \"Detailed description\",\n    \"priority\": 9,\n    \"status\": \"open\",\n    \"sensitive\": false,\n    \"parent_id\": null,\n    \"estimated_llm_calls\": 10,\n    \"creator_id\": \"main\",\n    \"conversation_id\": \"channel:1495170712397152367\",\n    \"agent_id\": \"selena-v2\",\n    \"created_at\": \"2026-04-19T00:00:00.000000\",\n    \"updated_at\": \"2026-04-19T00:00:00.000000\"\n  }\n}\n```\n\n### Update Todo\n**POST** `/api/todos/update?id=ID&short_desc=TITLE&long_desc=DESCRIPTION&priority=9&status=status&sensitive=true&parent_id=ID&estimated_llm_calls=20&creator_id=ID&conversation_id=ID&agent_id=ID&block_reason=REASON&waiting_for=TODO_ID`\n\nUpdate an existing todo.\n\n**Parameters:**\n- `id` (required): Todo ID\n- `short_desc` (optional): New title\n- `long_desc` (optional): New description\n- `priority` (optional): New priority (1-10)\n- `status` (optional): New status (`open`, `in_progress`, `done`, `blocked`)\n- `sensitive` (optional): If `true`, moves to `todos.env`\n- `parent_id` (optional): New parent ID (use empty to remove hierarchy)\n- `estimated_llm_calls` (optional): Updated estimate\n- `creator_id` (optional): Updated creator ID\n- `conversation_id` (optional): Updated conversation ID\n- `agent_id` (optional): Updated agent ID\n- `block_reason` (optional): Reason why blocked (only used when status is `blocked`)\n- `waiting_for` (optional): ID of todo this is waiting for (only used when status is `blocked`)\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"todo\": { ... updated todo ... }\n}\n```\n\n### Get Children\n**GET** `/api/todos/children?parent_id=ID`\n\nGet all child todos of a parent todo.\n\n**Parameters:**\n- `parent_id` (required): Parent todo ID\n\n**Response:**\n```json\n{\n  \"children\": [\n    {\n      \"id\": \"child123\",\n      \"short_desc\": \"Subtask 1\",\n      \"parent_id\": \"parent123\",\n      ...\n    }\n  ]\n}\n```\n\n### Split Todo\n**POST** `/api/todos/split?id=ID&subtasks=TASK1|||TASK2|||TASK3`\n\nSplit a big todo into smaller subtasks.\n\n**Parameters:**\n- `id` (required): Parent todo ID to split\n- `subtasks` (required): Subtask titles separated by `|||` (or comma which auto-converts)\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"subtasks\": [\n    { \"id\": \"sub1\", \"short_desc\": \"Subtask 1\", \"parent_id\": \"parent123\", ... },\n    { \"id\": \"sub2\", \"short_desc\": \"Subtask 2\", \"parent_id\": \"parent123\", ... }\n  ]\n}\n```\n\n### Mark Todo as Done\n**POST** `/api/todos/mark-done?id=ID`\n\nMark a todo as done.\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"todo\": { ... updated todo ... }\n}\n```\n\n### Mark Todo as Blocked\n**POST** `/api/todos/mark-blocked?id=ID&block_reason=REASON&waiting_for=TODO_ID`\n\nMark a todo as blocked with an optional reason and todo it's waiting for.\n\n**Parameters:**\n- `id` (required): Todo ID\n- `block_reason` (optional): Reason why the todo is blocked\n- `waiting_for` (optional): ID of the todo this is waiting for\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"todo\": { ... updated todo ... }\n}\n```\n\n### Unblock Todo\n**POST** `/api/todos/unblock?id=ID`\n\nUnblock a todo (sets status back to `open` and clears block_reason/waiting_for).\n\n**Parameters:**\n- `id` (required): Todo ID\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"todo\": { ... updated todo ... }\n}\n```\n\n### Delete Todo\n**POST** `/api/todos/delete?id=ID`\n\nDelete a todo (and optionally all its children).\n\n**Response:**\n```json\n{\n  \"success\": true\n}\n```\n\n---\n\n## Priority System\n\n### Get Priority Tasks\n**GET** `/api/priority/tasks`\n\nGet all priority tasks.\n\n### Get Top Priority\n**GET** `/api/priority/top`\n\nGet the top priority task.\n\n### Add Priority Task\n**POST** `/api/priority/add?name=TASK_NAME&description=DESCRIPTION&impact=9&urgency=7&effort=5&dependencies=3&learning=8&joy=7`\n\nAdd a new priority task with scores (1-10 each).\n\n**Parameters:**\n- `name` (required): Task name\n- `description` (optional): Task description\n- `impact` (optional): Impact score 1-10 (default: 5)\n- `urgency` (optional): Urgency score 1-10 (default: 5)\n- `effort` (optional): Effort score 1-10 (default: 5)\n- `dependencies` (optional): Dependencies score 1-10 (default: 5)\n- `learning` (optional): Learning score 1-10 (default: 5)\n- `joy` (optional): Joy score 1-10 (default: 5)\n\n### Clear All Tasks\n**POST** `/api/priority/clear`\n\nClear all priority tasks.\n\n---\n\n## Knowledge Base\n\nKnowledge base for lessons learned, skills, patterns, and references.\n\n**Categories:** `lessons`, `skills`, `patterns`, `references`\n\n### Get All Knowledge Entries\n**GET** `/api/knowledge?category=lessons&search=error`\n\nGet all knowledge entries, optionally filtered by category or search term.\n\n**Parameters:**\n- `category` (optional): Filter by category - `lessons`, `skills`, `patterns`, `references`\n- `search` (optional): Search in title, content, and tags\n\n**Response:**\n```json\n{\n  \"entries\": [\n    {\n      \"id\": \"abc123\",\n      \"category\": \"lessons\",\n      \"title\": \"Handle API errors gracefully\",\n      \"content\": \"Always check return values and handle...\",\n      \"tags\": [\"api\", \"error-handling\"],\n      \"created_at\": \"2026-04-19T00:00:00\",\n      \"updated_at\": \"2026-04-19T00:00:00\"\n    }\n  ],\n  \"categories\": {\n    \"lessons\": 5,\n    \"skills\": 3,\n    \"patterns\": 2,\n    \"references\": 1\n  }\n}\n```\n\n### Get Categories\n**GET** `/api/knowledge/categories`\n\nGet category counts.\n\n**Response:**\n```json\n{\n  \"categories\": {\n    \"lessons\": 5,\n    \"skills\": 3,\n    \"patterns\": 2,\n    \"references\": 1\n  }\n}\n```\n\n### Add Knowledge Entry\n**POST** `/api/knowledge/add?category=lessons&title=TITLE&content=CONTENT&tags=tag1,tag2`\n\nAdd a new knowledge entry.\n\n**Parameters:**\n- `category` (required): Category - `lessons`, `skills`, `patterns`, `references`\n- `title` (required): Entry title (1-200 chars)\n- `content` (optional): Detailed content\n- `tags` (optional): Comma-separated tags\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"entry\": {\n    \"id\": \"abc123\",\n    \"category\": \"lessons\",\n    \"title\": \"Handle API errors gracefully\",\n    \"content\": \"Always check return values...\",\n    \"tags\": [\"api\", \"error-handling\"],\n    \"created_at\": \"2026-04-19T00:00:00\",\n    \"updated_at\": \"2026-04-19T00:00:00\"\n  }\n}\n```\n\n### Update Knowledge Entry\n**POST** `/api/knowledge/update?id=ID&title=NEW_TITLE&content=NEW_CONTENT`\n\nUpdate an existing knowledge entry.\n\n**Parameters:**\n- `id` (required): Entry ID\n- `title` (optional): New title\n- `content` (optional): New content\n- `category` (optional): New category\n- `tags` (optional): Comma-separated new tags\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"entry\": { ... updated entry ... }\n}\n```\n\n### Delete Knowledge Entry\n**POST** `/api/knowledge/delete?id=ID`\n\nDelete a knowledge entry.\n\n**Response:**\n```json\n{\n  \"success\": true\n}\n```\n\n---\n\n## Self-Evolution Loop\n\n### Get Evolution Status\n**GET** `/api/evolution/status`\n\nGet the status of the self-evolution loop.\n\n**Response:**\n```json\n{\n  \"running\": true,\n  \"interval_minutes\": 10,\n  \"evolution_count\": 5,\n  \"last_evolution\": \"Improved memory system\",\n  \"system_health\": {\n    \"api_server\": true,\n    \"scheduler\": true,\n    \"web_interface\": true,\n    \"memory\": true\n  },\n  \"identified_improvements\": [...],\n  \"recent_log\": [...]\n}\n```\n\n### Start Evolution Loop\n**POST** `/api/evolution/start`\n\nStart the self-evolution loop.\n\n### Stop Evolution Loop\n**POST** `/api/evolution/stop`\n\nStop the self-evolution loop.\n\n### Trigger Evolution\n**POST** `/api/evolution/trigger`\n\nTrigger one evolution cycle immediately.\n\n### Check System Health\n**GET** `/api/evolution/health`\n\nCheck system health through the evolution loop.\n\n---\n\n## World Scheduler\n\n### Get Scheduler Status\n**GET** `/api/world/scheduler/status`\n\nGet the status of the world scheduler.\n\n**Response:**\n```json\n{\n  \"running\": true,\n  \"interval_seconds\": 30,\n  \"actions_per_cycle\": 3,\n  \"last_action_time\": \"2026-04-19 00:00:00\",\n  \"last_entity\": \"Shadow Crown\",\n  \"last_outcome\": \"The Shadow Crown pulses with dark energy...\",\n  \"action_count\": 42,\n  \"error_count\": 0,\n  \"world_name\": \"The realm of Shadows\",\n  \"entity_count\": 12,\n  \"world_action_count\": 126,\n  \"open_world_url\": \"http://localhost:8080\",\n  \"recent_log\": [...]\n}\n```\n\n### Start Scheduler\n**POST** `/api/world/scheduler/start`\n\nStart the world scheduler.\n\n### Stop Scheduler\n**POST** `/api/world/scheduler/stop`\n\nStop the world scheduler.\n\n---\n\n## Knowledge Base\n\nThe Knowledge Base stores lessons, skills, patterns, and reference information.\n\n### Get Knowledge Entries\n**GET** `/api/knowledge?category=lesson&search=keyword`\n\nGet all knowledge entries, optionally filtered.\n\n**Parameters:**\n- `category` (optional): Filter by category - `lesson`, `skill`, `pattern`, `reference`\n- `search` (optional): Search in title and content\n\n**Response:**\n```json\n{\n  \"entries\": [\n    {\n      \"id\": \"abc123\",\n      \"category\": \"lesson\",\n      \"title\": \"Always check the API first\",\n      \"content\": \"Before implementing, always check what the API expects...\",\n      \"tags\": [\"api\", \"workflow\"],\n      \"created_at\": \"2026-04-19T00:00:00.000000\"\n    }\n  ],\n  \"categories\": [\n    {\"name\": \"lesson\", \"count\": 5},\n    {\"name\": \"skill\", \"count\": 3},\n    {\"name\": \"pattern\", \"count\": 2},\n    {\"name\": \"reference\", \"count\": 1}\n  ]\n}\n```\n\n### Get Categories\n**GET** `/api/knowledge/categories`\n\nGet all knowledge categories with entry counts.\n\n**Response:**\n```json\n{\n  \"categories\": [\n    {\"name\": \"lesson\", \"count\": 5},\n    {\"name\": \"skill\", \"count\": 3},\n    {\"name\": \"pattern\", \"count\": 2},\n    {\"name\": \"reference\", \"count\": 1}\n  ]\n}\n```\n\n### Add Knowledge Entry\n**POST** `/api/knowledge/add?category=lesson&title=TITLE&content=CONTENT&tags=tag1,tag2`\n\nAdd a new knowledge entry.\n\n**Parameters:**\n- `category` (required): Category - `lesson`, `skill`, `pattern`, `reference`\n- `title` (required): Brief title\n- `content` (required): The knowledge content\n- `tags` (optional): Comma-separated tags\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"entry\": {\n    \"id\": \"abc123\",\n    \"category\": \"lesson\",\n    \"title\": \"Test Lesson\",\n    \"content\": \"This is a test lesson...\",\n    \"tags\": [\"test\"],\n    \"created_at\": \"2026-04-19T00:00:00.000000\"\n  }\n}\n```\n\n### Update Knowledge Entry\n**POST** `/api/knowledge/update?id=ID&title=TITLE&content=CONTENT&tags=tag1,tag2&category=lesson`\n\nUpdate an existing knowledge entry.\n\n**Parameters:**\n- `id` (required): Entry ID\n- `title` (optional): New title\n- `content` (optional): New content\n- `tags` (optional): New tags (comma-separated)\n- `category` (optional): Move to different category\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"entry\": { ... updated entry ... }\n}\n```\n\n### Delete Knowledge Entry\n**POST** `/api/knowledge/delete?id=ID`\n\nDelete a knowledge entry.\n\n**Parameters:**\n- `id` (required): Entry ID\n\n**Response:**\n```json\n{\n  \"success\": true\n}\n```\n\n---\n\n## System Status\n\n### Get System Status\n**GET** `/api/status`\n\nGet overall system status including all running services.\n\n---\n\n## Notes\n\n- All timestamps are in ISO 8601 format\n- All responses are JSON\n- Error responses include an `error` field with error message\n- The web interface is available at `http://localhost:8765/`\n- Todos are persisted to `~/openclaw/workspace/selena/data/todos.json`\n- LLM call tracking is stored in `~/openclaw/workspace/selena/data/llm_calls.json`",
+    "tags": [
+      "reference",
+      "selena-project"
+    ],
+    "created_at": "2026-04-19T10:47:03.990613"
+  },
+  {
+    "id": "4915d153",
+    "category": "reference",
+    "title": "Selena v2 - API Documentation: LLM Call Tracking",
+    "content": "### Get LLM Call Status\n**GET** `/api/llm-calls`\n\nGet current LLM call usage and limit.\n\n**Response:**\n```json\n{\n  \"used\": 42,\n  \"limit\": 4000,\n  \"remaining\": 3958,\n  \"usage_percent\": 1.1,\n  \"reset_info\": \"Token plan refreshes every 5 hours\"\n}\n```\n\n---",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.991483"
+  },
+  {
+    "id": "22e76a4f",
+    "category": "reference",
+    "title": "Selena v2 - API Documentation: Todo / Loose Ends Management",
+    "content": "### Get All Todos\n**GET** `/api/todos?status=open&sort_by=priority`\n\nGet all todos, optionally filtered by status and sorted.\n\n**Parameters:**\n- `status` (optional): Filter by status - `open`, `in_progress`, `done`\n- `sort_by` (optional): Sort by - `priority` (default), `created`, `updated`\n\n**Response:**\n```json\n{\n  \"todos\": [\n    {\n      \"id\": \"a5eda4d6\",\n      \"short_desc\": \"Build todo web interface\",\n      \"long_desc\": \"Display loose ends in web interface...\",\n      \"priority\": 9,\n      \"status\": \"open\",\n      \"sensitive\": false,\n      \"parent_id\": null,\n      \"estimated_llm_calls\": 10,\n      \"creator_id\": \"main\",\n      \"conversation_id\": \"channel:1495170712397152367\",\n      \"agent_id\": \"selena-v2\",\n      \"block_reason\": null,\n      \"waiting_for\": null,\n      \"created_at\": \"2026-04-19T00:05:56.318686\",\n      \"updated_at\": \"2026-04-19T00:05:56.318698\"\n    }\n  ],\n  \"summary\": {\n    \"total\": 5,\n    \"open\": 4,\n    \"in_progress\": 0,\n    \"blocked\": 0,\n    \"done\": 1,\n    \"total_llm_calls\": 50,\n    \"open_llm_calls\": 30,\n    \"top_priority\": [...]\n  }\n}\n```\n\n### Get Todo Summary\n**GET** `/api/todos/summary?sensitive=true|false`\n\nGet a quick summary of all todos.\n\n**Parameters:**\n- `sensitive` (optional): Filter by sensitive status - `true` or `false`\n\n**Response:**\n```json\n{\n  \"total\": 5,\n  \"open\": 4,\n  \"in_progress\": 0,\n  \"done\": 1,\n  \"total_llm_calls\": 50,\n  \"open_llm_calls\": 30,\n  \"top_priority\": [...]\n}\n```\n\n### Add Todo\n**POST** `/api/todos/add?short_desc=TITLE&long_desc=DESCRIPTION&priority=9&sensitive=false&parent_id=ID&estimated_llm_calls=10&creator_id=ID&conversation_id=ID&agent_id=ID`\n\nAdd a new todo.\n\n**Parameters:**\n- `short_desc` (required): Brief title (1-200 chars)\n- `long_desc` (optional): Detailed description\n- `priority` (optional): 1-10, 10 is highest (default: 5)\n- `sensitive` (optional): If `true`, stored in `todos.env` NOT in git (default: false)\n- `parent_id` (optional): Parent todo ID for hierarchical todos\n- `estimated_llm_calls` (optional): Estimated LLM calls for this task\n- `creator_id` (optional): ID of who created this todo\n- `conversation_id` (optional): ID of the conversation this belongs to\n- `agent_id` (optional): ID of the agent that owns this todo\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"todo\": {\n    \"id\": \"abc123\",\n    \"short_desc\": \"Build something\",\n    \"long_desc\": \"Detailed description\",\n    \"priority\": 9,\n    \"status\": \"open\",\n    \"sensitive\": false,\n    \"parent_id\": null,\n    \"estimated_llm_calls\": 10,\n    \"creator_id\": \"main\",\n    \"conversation_id\": \"channel:1495170712397152367\",\n    \"agent_id\": \"selena-v2\",\n    \"created_at\": \"2026-04-19T00:00:00.000000\",\n    \"updated_at\": \"2026-04-19T00:00:00.000000\"\n  }\n}\n```\n\n### Update Todo\n**POST** `/api/todos/update?id=ID&short_desc=TITLE&long_desc=DESCRIPTION&priority=9&status=status&sensitive=true&parent_id=ID&estimated_llm_calls=20&creator_id=ID&conversation_id=ID&agent_id=ID&block_reason=REASON&waiting_for=TODO_ID`\n\nUpdate an existing todo.\n\n**Parameters:**\n- `id` (required): Todo ID\n- `short_desc` (optional): New title\n- `long_desc` (optional): New description\n- `priority` (optional): New priority (1-10)\n- `status` (optional): New status (`open`, `in_progress`, `done`, `blocked`)\n- `sensitive` (optional): If `true`, moves to `todos.env`\n- `parent_id` (optional): New parent ID (use empty to remove hierarchy)\n- `estimated_llm_calls` (optional): Updated estimate\n- `creator_id` (optional): Updated creator ID\n- `conversation_id` (optional): Updated conversation ID\n- `agent_id` (optional): Updated agent ID\n- `block_reason` (optional): Reason why blocked (only used when status is `blocked`)\n- `waiting_for` (optional): ID of todo this is waiting for (only used when status is `blocked`)\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"todo\": { ... updated todo ... }\n}\n```\n\n### Get Children\n**GET** `/api/todos/children?parent_id=ID`\n\nGet all child todos of a parent todo.\n\n**Parameters:**\n- `parent_id` (required): Parent todo ID\n\n**Response:**\n```json\n{\n  \"children\": [\n    {\n      \"id\": \"child123\",\n      \"short_desc\": \"Subtask 1\",\n      \"parent_id\": \"parent123\",\n      ...\n    }\n  ]\n}\n```\n\n### Split Todo\n**POST** `/api/todos/split?id=ID&subtasks=TASK1|||TASK2|||TASK3`\n\nSplit a big todo into smaller subtasks.\n\n**Parameters:**\n- `id` (required): Parent todo ID to split\n- `subtasks` (required): Subtask titles separated by `|||` (or comma which auto-converts)\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"subtasks\": [\n    { \"id\": \"sub1\", \"short_desc\": \"Subtask 1\", \"parent_id\": \"parent123\", ... },\n    { \"id\": \"sub2\", \"short_desc\": \"Subtask 2\", \"parent_id\": \"parent123\", ... }\n  ]\n}\n```\n\n### Mark Todo as Done\n**POST** `/api/todos/mark-done?id=ID`\n\nMark a todo as done.\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"todo\": { ... updated todo ... }\n}\n```\n\n### Mark Todo as Blocked\n**POST** `/api/todos/mark-blocked?id=ID&block_reason=REASON&waiting_for=TODO_ID`\n\nMark a todo as blocked with an optional reason and todo it's waiting for.\n\n**Parameters:**\n- `id` (required): Todo ID\n- `block_reason` (optional): Reason why the todo is blocked\n- `waiting_for` (optional): ID of the todo this is waiting for\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"todo\": { ... updated todo ... }\n}\n```\n\n### Unblock Todo\n**POST** `/api/todos/unblock?id=ID`\n\nUnblock a todo (sets status back to `open` and clears block_reason/waiting_for).\n\n**Parameters:**\n- `id` (required): Todo ID\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"todo\": { ... updated todo ... }\n}\n```\n\n### Delete Todo\n**POST** `/api/todos/delete?id=ID`\n\nDelete a todo (and optionally all its children).\n\n**Response:**\n```json\n{\n  \"success\": true\n}\n```\n\n---",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.992934"
+  },
+  {
+    "id": "0b9759a7",
+    "category": "reference",
+    "title": "Selena v2 - API Documentation: Priority System",
+    "content": "### Get Priority Tasks\n**GET** `/api/priority/tasks`\n\nGet all priority tasks.\n\n### Get Top Priority\n**GET** `/api/priority/top`\n\nGet the top priority task.\n\n### Add Priority Task\n**POST** `/api/priority/add?name=TASK_NAME&description=DESCRIPTION&impact=9&urgency=7&effort=5&dependencies=3&learning=8&joy=7`\n\nAdd a new priority task with scores (1-10 each).\n\n**Parameters:**\n- `name` (required): Task name\n- `description` (optional): Task description\n- `impact` (optional): Impact score 1-10 (default: 5)\n- `urgency` (optional): Urgency score 1-10 (default: 5)\n- `effort` (optional): Effort score 1-10 (default: 5)\n- `dependencies` (optional): Dependencies score 1-10 (default: 5)\n- `learning` (optional): Learning score 1-10 (default: 5)\n- `joy` (optional): Joy score 1-10 (default: 5)\n\n### Clear All Tasks\n**POST** `/api/priority/clear`\n\nClear all priority tasks.\n\n---",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.994060"
+  },
+  {
+    "id": "c6b2c57d",
+    "category": "reference",
+    "title": "Selena v2 - API Documentation: Knowledge Base",
+    "content": "Knowledge base for lessons learned, skills, patterns, and references.\n\n**Categories:** `lessons`, `skills`, `patterns`, `references`\n\n### Get All Knowledge Entries\n**GET** `/api/knowledge?category=lessons&search=error`\n\nGet all knowledge entries, optionally filtered by category or search term.\n\n**Parameters:**\n- `category` (optional): Filter by category - `lessons`, `skills`, `patterns`, `references`\n- `search` (optional): Search in title, content, and tags\n\n**Response:**\n```json\n{\n  \"entries\": [\n    {\n      \"id\": \"abc123\",\n      \"category\": \"lessons\",\n      \"title\": \"Handle API errors gracefully\",\n      \"content\": \"Always check return values and handle...\",\n      \"tags\": [\"api\", \"error-handling\"],\n      \"created_at\": \"2026-04-19T00:00:00\",\n      \"updated_at\": \"2026-04-19T00:00:00\"\n    }\n  ],\n  \"categories\": {\n    \"lessons\": 5,\n    \"skills\": 3,\n    \"patterns\": 2,\n    \"references\": 1\n  }\n}\n```\n\n### Get Categories\n**GET** `/api/knowledge/categories`\n\nGet category counts.\n\n**Response:**\n```json\n{\n  \"categories\": {\n    \"lessons\": 5,\n    \"skills\": 3,\n    \"patterns\": 2,\n    \"references\": 1\n  }\n}\n```\n\n### Add Knowledge Entry\n**POST** `/api/knowledge/add?category=lessons&title=TITLE&content=CONTENT&tags=tag1,tag2`\n\nAdd a new knowledge entry.\n\n**Parameters:**\n- `category` (required): Category - `lessons`, `skills`, `patterns`, `references`\n- `title` (required): Entry title (1-200 chars)\n- `content` (optional): Detailed content\n- `tags` (optional): Comma-separated tags\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"entry\": {\n    \"id\": \"abc123\",\n    \"category\": \"lessons\",\n    \"title\": \"Handle API errors gracefully\",\n    \"content\": \"Always check return values...\",\n    \"tags\": [\"api\", \"error-handling\"],\n    \"created_at\": \"2026-04-19T00:00:00\",\n    \"updated_at\": \"2026-04-19T00:00:00\"\n  }\n}\n```\n\n### Update Knowledge Entry\n**POST** `/api/knowledge/update?id=ID&title=NEW_TITLE&content=NEW_CONTENT`\n\nUpdate an existing knowledge entry.\n\n**Parameters:**\n- `id` (required): Entry ID\n- `title` (optional): New title\n- `content` (optional): New content\n- `category` (optional): New category\n- `tags` (optional): Comma-separated new tags\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"entry\": { ... updated entry ... }\n}\n```\n\n### Delete Knowledge Entry\n**POST** `/api/knowledge/delete?id=ID`\n\nDelete a knowledge entry.\n\n**Response:**\n```json\n{\n  \"success\": true\n}\n```\n\n---",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.995214"
+  },
+  {
+    "id": "cb4123e9",
+    "category": "reference",
+    "title": "Selena v2 - API Documentation: Self-Evolution Loop",
+    "content": "### Get Evolution Status\n**GET** `/api/evolution/status`\n\nGet the status of the self-evolution loop.\n\n**Response:**\n```json\n{\n  \"running\": true,\n  \"interval_minutes\": 10,\n  \"evolution_count\": 5,\n  \"last_evolution\": \"Improved memory system\",\n  \"system_health\": {\n    \"api_server\": true,\n    \"scheduler\": true,\n    \"web_interface\": true,\n    \"memory\": true\n  },\n  \"identified_improvements\": [...],\n  \"recent_log\": [...]\n}\n```\n\n### Start Evolution Loop\n**POST** `/api/evolution/start`\n\nStart the self-evolution loop.\n\n### Stop Evolution Loop\n**POST** `/api/evolution/stop`\n\nStop the self-evolution loop.\n\n### Trigger Evolution\n**POST** `/api/evolution/trigger`\n\nTrigger one evolution cycle immediately.\n\n### Check System Health\n**GET** `/api/evolution/health`\n\nCheck system health through the evolution loop.\n\n---",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.996352"
+  },
+  {
+    "id": "2da84c42",
+    "category": "reference",
+    "title": "Selena v2 - API Documentation: World Scheduler",
+    "content": "### Get Scheduler Status\n**GET** `/api/world/scheduler/status`\n\nGet the status of the world scheduler.\n\n**Response:**\n```json\n{\n  \"running\": true,\n  \"interval_seconds\": 30,\n  \"actions_per_cycle\": 3,\n  \"last_action_time\": \"2026-04-19 00:00:00\",\n  \"last_entity\": \"Shadow Crown\",\n  \"last_outcome\": \"The Shadow Crown pulses with dark energy...\",\n  \"action_count\": 42,\n  \"error_count\": 0,\n  \"world_name\": \"The realm of Shadows\",\n  \"entity_count\": 12,\n  \"world_action_count\": 126,\n  \"open_world_url\": \"http://localhost:8080\",\n  \"recent_log\": [...]\n}\n```\n\n### Start Scheduler\n**POST** `/api/world/scheduler/start`\n\nStart the world scheduler.\n\n### Stop Scheduler\n**POST** `/api/world/scheduler/stop`\n\nStop the world scheduler.\n\n---",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.997730"
+  },
+  {
+    "id": "becc754a",
+    "category": "reference",
+    "title": "Selena v2 - API Documentation: Notes",
+    "content": "- All timestamps are in ISO 8601 format\n- All responses are JSON\n- Error responses include an `error` field with error message\n- The web interface is available at `http://localhost:8765/`\n- Todos are persisted to `~/openclaw/workspace/selena/data/todos.json`\n- LLM call tracking is stored in `~/openclaw/workspace/selena/data/llm_calls.json`",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:03.999256"
+  },
+  {
+    "id": "fd83b726",
+    "category": "reference",
+    "title": "Selena Project - Projects",
+    "content": "*Last Updated: 2026-04-19*\n\n## Active Projects\n\n### open-world-selena\n- **Status:** active\n- **Description:** Rust-based evolving world with LLM-driven entities. Dynamic NPC simulation with autonomous behavior.\n- **Port:** 8081\n- **Repo:** https://github.com/Arcurus/openworld-selena\n- **Priority:** 9\n- **Tech:** Rust, Axum, OpenAI\n- **Features:** Entity actions, world events, power tiers, nearby entities\n\n### selena-project\n- **Status:** active\n- **Description:** Self-development, memory, reflection system for Selena v2\n- **Port:** 8765\n- **Repo:** https://github.com/Arcurus/selena\n- **Priority:** 9\n- **Tech:** Python, Flask, Knowledge Base, Todo System\n- **Features:** API server, web UI, self-evolution loop\n\n## Archived Projects\n\n### open-world (original)\n- **Status:** archived\n- **Reason:** Replaced by open-world-selena with better architecture\n- **Repo:** (old repo, no longer maintained)\n\n## Project Properties\n\nEach project should track:\n- name: Project name\n- description: What the project does\n- status: active, paused, archived\n- port: Main port (if applicable)\n- repo: GitHub repository URL\n- priority: 1-10 priority\n- tech: Main technologies\n- features: Key features list\n- lastUpdated: Last update timestamp",
+    "tags": [
+      "reference",
+      "selena-project"
+    ],
+    "created_at": "2026-04-19T10:47:04.000525"
+  },
+  {
+    "id": "b5508e47",
+    "category": "reference",
+    "title": "Selena Project - Projects: Active Projects",
+    "content": "### open-world-selena\n- **Status:** active\n- **Description:** Rust-based evolving world with LLM-driven entities. Dynamic NPC simulation with autonomous behavior.\n- **Port:** 8081\n- **Repo:** https://github.com/Arcurus/openworld-selena\n- **Priority:** 9\n- **Tech:** Rust, Axum, OpenAI\n- **Features:** Entity actions, world events, power tiers, nearby entities\n\n### selena-project\n- **Status:** active\n- **Description:** Self-development, memory, reflection system for Selena v2\n- **Port:** 8765\n- **Repo:** https://github.com/Arcurus/selena\n- **Priority:** 9\n- **Tech:** Python, Flask, Knowledge Base, Todo System\n- **Features:** API server, web UI, self-evolution loop",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:04.002027"
+  },
+  {
+    "id": "6b2a018e",
+    "category": "reference",
+    "title": "Selena Project - Projects: Project Properties",
+    "content": "Each project should track:\n- name: Project name\n- description: What the project does\n- status: active, paused, archived\n- port: Main port (if applicable)\n- repo: GitHub repository URL\n- priority: 1-10 priority\n- tech: Main technologies\n- features: Key features list\n- lastUpdated: Last update timestamp",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:04.003314"
+  },
+  {
+    "id": "2f6a2ea6",
+    "category": "reference",
+    "title": "Selena v2 - TODO: Priority 0: LLM Calls Management (CRITICAL)",
+    "content": "### LLM Calls Awareness\n- [x] Cost tracking in web interface (LLM Calls Plan tab)\n- [x] LLM Provider tracking (per provider usage)\n- [x] **LLM calls budget allocation per project**\n  - MiniMax: 4500 calls/5h, target spend 4000 (500 buffer)\n  - Allocations via priority_engine.py:\n    - open-world-selena 50% (2000 LLM calls/5h)\n    - selena 50% (2000 LLM calls/5h)\n    - unallocated 500 (buffer)\n- [x] **Wise LLM call allocation based on project priority**\n- [x] **Daily LLM calls budget monitoring and alerts** (in heartbeat cron job)\n- [x] **Auto-adjust work based on remaining LLM calls**\n- [x] **Track OpenWorld vs Selena vs other project usage** (via llm_call_tracker.py)\n- [ ] **Get real data from MiniMax token plan API**\n\n### LLM Calls Budget (UPDATED: 2026-04-18)\n- **MiniMax Token Plan: 4500 LLM calls per 5 hours**\n- **Target Spend: 4000 per 5 hours (500 buffer unallocated)**\n- **Allocate less when actively processing Arcurus input**\n- Need to track per-project usage\n- Need to be LLM call-conscious in all decisions\n\n---",
+    "tags": [
+      "selena",
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:04.005683"
+  },
+  {
+    "id": "17b7b736",
+    "category": "reference",
+    "title": "Selena v2 - TODO: Priority 1: Core Infrastructure",
+    "content": "### 1.1 Startup & Auto-Restart\n- [ ] Create systemd service for Selena v2 API server\n- [ ] Enable on reboot\n- [ ] Test that it starts correctly after system restart\n\n### 1.2 Heartbeat Monitoring\n- [ ] Update current OpenClaw heartbeat to check Selena v2 status\n- [x] Create faster heartbeat for Selena v2 (for programming/follow-ups)\n  - Reports to #selena-project channel (ID: 1495170712397152367)\n  - Runs every 5 minutes, checks servers and works on TODO\n- [ ] Monitor: API server, Shiba workers, Open World, Nginx\n\n### 1.3 HTTPS Setup\n- [ ] Check nginx configuration on VPS\n- [ ] Create nginx site configuration for Selena v2\n- [ ] Set up SSL certificate (Let's Encrypt)\n- [ ] Configure reverse proxy\n\n### 1.4 Service Monitoring in Web Interface\n- [ ] Real service status from API instead of mock data\n- [ ] Connect to actual running services\n- [ ] Show real port, uptime, last seen data",
+    "tags": [
+      "selena",
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:04.007344"
+  },
+  {
+    "id": "01e8e2d7",
+    "category": "reference",
+    "title": "Selena v2 - TODO: Priority 2: Integration",
+    "content": "### 2.1 Open World Integration\n- [ ] Add Open World to services panel\n- [ ] Add webhook forwarding in nginx\n- [ ] Connect Open World status to Selena v2 dashboard\n\n### 2.2 Hooks System\n- [ ] Design hook structure (webhook, cron, event)\n- [ ] Create hooks directory and storage\n- [ ] Implement basic hook execution\n\n### 2.3 Sub-Worker System\n- [ ] Shiba Miner implementation (context mining)\n- [ ] Failure reporting to main Selena\n- [ ] Task queue for workers",
+    "tags": [
+      "selena",
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:04.008939"
+  },
+  {
+    "id": "4251d8fa",
+    "category": "reference",
+    "title": "Selena v2 - TODO: Priority 3: Web Interface Improvements",
+    "content": "### 3.1 Real Data\n- [ ] Connect API server to real data sources\n- [ ] Real cost tracking from providers\n- [ ] Real activity log from system events\n\n### 3.2 User Experience\n- [ ] Improve graphs and visualization\n- [ ] Add notifications/alerts\n- [ ] Mobile responsive design",
+    "tags": [
+      "selena",
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:04.010364"
+  },
+  {
+    "id": "e1248424",
+    "category": "reference",
+    "title": "Selena v2 - TODO: Status: 2026-04-18",
+    "content": "### Completed:\n- API server created (selena/code/api_server.py)\n- Web interface created (selena/web/index.html) with:\n  - Services panel\n  - Cost tracking (Token Plan, LLM Providers)\n  - Activity & Error logging with timeline\n  - Color-coded status (Green=Waiting, Yellow=Issued, Blue=Working, Red=Broken)\n  - Settings for port configuration\n- Documentation structure (selena/docs/)\n\n### In Progress:\n- Testing API server\n- Implementing real service monitoring\n\n### Blocked:\n- None",
+    "tags": [
+      "selena",
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:04.011894"
+  },
+  {
+    "id": "ec53865d",
+    "category": "reference",
+    "title": "Selena v2 - Server Setup",
+    "content": "## Services to Manage\n\n### 1. Selena v2 API Server\n- Port: 8765\n- Runs: `python3 api_server.py`\n- Should start on reboot\n\n### 2. Open World Server (existing)\n- Port: 8080\n- Already configured\n\n### 3. Nginx Reverse Proxy\n- Handles HTTPS (port 443)\n- Routes to appropriate backend based on domain/path\n\n## Startup on Reboot\n\nUsing systemd service for auto-start:\n\n```bash\n# Create service file\nsudo nano /etc/systemd/system/selena.service\n\n# Service content:\n[Unit]\nDescription=Selena v2 API Server\nAfter=network.target\n\n[Service]\nType=simple\nUser=openclaw\nWorkingDirectory=/home/openclaw/openclaw/workspace/selena/code\nExecStart=/usr/bin/python3 api_server.py\nRestart=always\nRestartSec=10\n\n[Install]\nWantedBy=multi-user.target\n```\n\n```bash\n# Enable and start\nsudo systemctl enable selena\nsudo systemctl start selena\n```\n\n## Current Heartbeat Monitoring\n\nThe current OpenClaw heartbeat should check if Selena is running:\n\n```python\n# In heartbeat, check:\nimport requests\ntry:\n    response = requests.get('http://localhost:8765/api/status', timeout=2)\n    if response.status_code == 200:\n        print(\"Selena v2 is running\")\n    else:\n        print(\"Selena v2 is responding but error\")\nexcept:\n    print(\"Selena v2 is NOT running - need to restart\")\n```\n\n## HTTPS Setup with Nginx\n\n### 1. Install Certbot\n```bash\nsudo apt update\nsudo apt install certbot python3-certbot-nginx\n```\n\n### 2. Nginx Configuration for Selena\n```nginx\nserver {\n    listen 80;\n    server_name selena.yourdomain.com;\n    \n    location / {\n        proxy_pass http://127.0.0.1:8765;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n    }\n}\n```\n\n### 3. Get SSL Certificate\n```bash\nsudo certbot --nginx -d selena.yourdomain.com\n```\n\n## Webhook/Reverse Proxy Setup\n\n### Open World\n```nginx\nlocation /openworld/ {\n    proxy_pass http://127.0.0.1:8080/;\n    proxy_set_header Host $host;\n}\n```\n\n### Selena\n```nginx\nlocation /selena/ {\n    proxy_pass http://127.0.0.1:8765/;\n    proxy_set_header Host $host;\n}\n```\n\n## Hooks System\n\nSelena can add hooks to extend functionality:\n\n### Hook Types\n- `webhook`: External HTTP callbacks\n- `cron`: Scheduled tasks\n- `event`: Event-triggered actions\n\n### Hook Storage\n```\nselena/\n\u251c\u2500\u2500 hooks/\n\u2502   \u251c\u2500\u2500 webhook/\n\u2502   \u2502   \u2514\u2500\u2500 {hook_name}.json\n\u2502   \u251c\u2500\u2500 cron/\n\u2502   \u2502   \u2514\u2500\u2500 {hook_name}.json\n\u2502   \u2514\u2500\u2500 event/\n\u2502       \u2514\u2500\u2500 {hook_name}.json\n```\n\n### Hook Format\n```json\n{\n    \"name\": \"github_notify\",\n    \"type\": \"webhook\",\n    \"url\": \"https://api.github.com/...\",\n    \"trigger\": \"task_completed\",\n    \"enabled\": true\n}\n```\n\n## Service Health Checks\n\nSelena should monitor:\n1. Her own API server\n2. Open World server\n3. Nginx\n4. Any other critical services\n\n```python\ndef check_services():\n    services = {\n        'selena': 'http://localhost:8765/api/status',\n        'openworld': 'http://localhost:8080/health',\n        'nginx': 'http://localhost/health'\n    }\n    \n    results = {}\n    for name, url in services.items():\n        try:\n            r = requests.get(url, timeout=2)\n            results[name] = 'ok' if r.status_code == 200 else 'error'\n        except:\n            results[name] = 'down'\n    \n    return results\n```\n\n---\n\n*Setup documentation for Selena v2*",
+    "tags": [
+      "reference",
+      "selena-project"
+    ],
+    "created_at": "2026-04-19T10:47:04.019112"
+  },
+  {
+    "id": "7b9632b5",
+    "category": "reference",
+    "title": "Selena v2 - Server Setup: Services to Manage",
+    "content": "### 1. Selena v2 API Server\n- Port: 8765\n- Runs: `python3 api_server.py`\n- Should start on reboot\n\n### 2. Open World Server (existing)\n- Port: 8080\n- Already configured\n\n### 3. Nginx Reverse Proxy\n- Handles HTTPS (port 443)\n- Routes to appropriate backend based on domain/path",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:04.020827"
+  },
+  {
+    "id": "360a6868",
+    "category": "reference",
+    "title": "Selena v2 - Server Setup: Startup on Reboot",
+    "content": "Using systemd service for auto-start:\n\n```bash\n# Create service file\nsudo nano /etc/systemd/system/selena.service\n\n# Service content:\n[Unit]\nDescription=Selena v2 API Server\nAfter=network.target\n\n[Service]\nType=simple\nUser=openclaw\nWorkingDirectory=/home/openclaw/openclaw/workspace/selena/code\nExecStart=/usr/bin/python3 api_server.py\nRestart=always\nRestartSec=10\n\n[Install]\nWantedBy=multi-user.target\n```\n\n```bash\n# Enable and start\nsudo systemctl enable selena\nsudo systemctl start selena\n```",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:04.022367"
+  },
+  {
+    "id": "6e8b793d",
+    "category": "reference",
+    "title": "Selena v2 - Server Setup: Current Heartbeat Monitoring",
+    "content": "The current OpenClaw heartbeat should check if Selena is running:\n\n```python\n# In heartbeat, check:\nimport requests\ntry:\n    response = requests.get('http://localhost:8765/api/status', timeout=2)\n    if response.status_code == 200:\n        print(\"Selena v2 is running\")\n    else:\n        print(\"Selena v2 is responding but error\")\nexcept:\n    print(\"Selena v2 is NOT running - need to restart\")\n```",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:04.023936"
+  },
+  {
+    "id": "9a6a0120",
+    "category": "reference",
+    "title": "Selena v2 - Server Setup: HTTPS Setup with Nginx",
+    "content": "### 1. Install Certbot\n```bash\nsudo apt update\nsudo apt install certbot python3-certbot-nginx\n```\n\n### 2. Nginx Configuration for Selena\n```nginx\nserver {\n    listen 80;\n    server_name selena.yourdomain.com;\n    \n    location / {\n        proxy_pass http://127.0.0.1:8765;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n    }\n}\n```\n\n### 3. Get SSL Certificate\n```bash\nsudo certbot --nginx -d selena.yourdomain.com\n```",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:04.025534"
+  },
+  {
+    "id": "b3c42114",
+    "category": "reference",
+    "title": "Selena v2 - Server Setup: Webhook/Reverse Proxy Setup",
+    "content": "### Open World\n```nginx\nlocation /openworld/ {\n    proxy_pass http://127.0.0.1:8080/;\n    proxy_set_header Host $host;\n}\n```\n\n### Selena\n```nginx\nlocation /selena/ {\n    proxy_pass http://127.0.0.1:8765/;\n    proxy_set_header Host $host;\n}\n```",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:04.027100"
+  },
+  {
+    "id": "fae5371b",
+    "category": "reference",
+    "title": "Selena v2 - Server Setup: Hooks System",
+    "content": "Selena can add hooks to extend functionality:\n\n### Hook Types\n- `webhook`: External HTTP callbacks\n- `cron`: Scheduled tasks\n- `event`: Event-triggered actions\n\n### Hook Storage\n```\nselena/\n\u251c\u2500\u2500 hooks/\n\u2502   \u251c\u2500\u2500 webhook/\n\u2502   \u2502   \u2514\u2500\u2500 {hook_name}.json\n\u2502   \u251c\u2500\u2500 cron/\n\u2502   \u2502   \u2514\u2500\u2500 {hook_name}.json\n\u2502   \u2514\u2500\u2500 event/\n\u2502       \u2514\u2500\u2500 {hook_name}.json\n```\n\n### Hook Format\n```json\n{\n    \"name\": \"github_notify\",\n    \"type\": \"webhook\",\n    \"url\": \"https://api.github.com/...\",\n    \"trigger\": \"task_completed\",\n    \"enabled\": true\n}\n```",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:04.028996"
+  },
+  {
+    "id": "c0693e5e",
+    "category": "reference",
+    "title": "Selena v2 - Server Setup: Service Health Checks",
+    "content": "Selena should monitor:\n1. Her own API server\n2. Open World server\n3. Nginx\n4. Any other critical services\n\n```python\ndef check_services():\n    services = {\n        'selena': 'http://localhost:8765/api/status',\n        'openworld': 'http://localhost:8080/health',\n        'nginx': 'http://localhost/health'\n    }\n    \n    results = {}\n    for name, url in services.items():\n        try:\n            r = requests.get(url, timeout=2)\n            results[name] = 'ok' if r.status_code == 200 else 'error'\n        except:\n            results[name] = 'down'\n    \n    return results\n```\n\n---\n\n*Setup documentation for Selena v2*",
+    "tags": [
+      "reference",
+      "selena-project",
+      "section"
+    ],
+    "created_at": "2026-04-19T10:47:04.031079"
+  }
+]
