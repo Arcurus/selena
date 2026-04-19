@@ -1369,6 +1369,47 @@ class RequestHandler(BaseHTTPRequestHandler):
         # 404 for unsupported POST endpoints
         self.send_json({'error': 'Not found'}, 404)
 
+    def do_PUT(self):
+        """Handle PUT requests - supports /api/todos/update"""
+        parsed = urlparse(self.path)
+        path = parsed.path
+        
+        # Handle CORS preflight
+        if path == '/api/todos/update':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            query = parse_qs(parsed.query)
+            todo_id = query.get('id', [''])[0]
+            if not todo_id:
+                self.send_json({'success': False, 'error': 'id required'}, 400)
+                return
+            # Extract update fields
+            updates = {}
+            if 'short_desc' in query: updates['short_desc'] = query['short_desc'][0]
+            if 'long_desc' in query: updates['long_desc'] = query['long_desc'][0]
+            if 'priority' in query: updates['priority'] = int(query['priority'][0])
+            if 'status' in query: updates['status'] = query['status'][0]
+            if 'deleted_at' in query: updates['deleted_at'] = query['deleted_at'][0] if query['deleted_at'][0] else None
+            if 'sensitive' in query: updates['sensitive'] = query['sensitive'][0].lower() == 'true'
+            if 'parent_id' in query: updates['parent_id'] = query['parent_id'][0] if query['parent_id'][0] else None
+            if 'estimated_llm_calls' in query: updates['estimated_llm_calls'] = int(query['estimated_llm_calls'][0]) if query['estimated_llm_calls'][0] else None
+            if 'creator_id' in query: updates['creator_id'] = query['creator_id'][0] if query['creator_id'][0] else None
+            if 'conversation_id' in query: updates['conversation_id'] = query['conversation_id'][0] if query['conversation_id'][0] else None
+            if 'agent_id' in query: updates['agent_id'] = query['agent_id'][0] if query['agent_id'][0] else None
+            if 'block_reason' in query: updates['block_reason'] = query['block_reason'][0] if query['block_reason'][0] else None
+            if 'waiting_for' in query: updates['waiting_for'] = query['waiting_for'][0] if query['waiting_for'][0] else None
+            if 'restore' in query: updates['restore'] = query['restore'][0].lower() == 'true'
+            todo = todo_manager.update_todo(todo_id, **updates)
+            if todo:
+                self.send_json({'success': True, 'todo': todo})
+            else:
+                self.send_json({'success': False, 'error': 'Todo not found'}, 404)
+            return
+        
+        # 404 for unsupported PUT endpoints
+        self.send_json({'error': 'Not found'}, 404)
+
 
 def main():
     """Main entry point"""
