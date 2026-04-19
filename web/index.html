@@ -51,12 +51,6 @@
                         <h2>⚙️ Running Services</h2>
                         <div id="serviceList" class="service-list"></div>
                         
-                        <!-- Task Summary Cards -->
-                        <div style="margin-top: 20px;">
-                            <h3 style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 10px;">📋 Tasks</h3>
-                            <div id="servicesTaskSummary" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;"></div>
-                        </div>
-                        
                         <div style="margin-top: 20px; text-align: center;">
                             <button onclick="refreshServices()" class="save-btn" style="width: auto; padding: 10px 30px;">🔄 Refresh Services</button>
                         </div>
@@ -68,6 +62,13 @@
                             <div class="shiba-status status-working" id="shibaStatus">Working</div>
                             <div class="shiba-task" id="shibaTask">Exploring the cosmos...</div>
                         </div>
+                        
+                        <!-- Task Summary Cards -->
+                        <div class="task-summary-panel">
+                            <h3 style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 10px;">📋 Tasks</h3>
+                            <div id="servicesTaskSummary" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;"></div>
+                        </div>
+                        
                         <div class="settings-panel">
                             <h3>🔧 Quick Settings</h3>
                             <div class="setting-item">
@@ -1545,10 +1546,6 @@
                     <div class="cost-card ${activeFilter === 'deleted' ? 'active' : ''}" onclick="setTodoFilter('deleted')" id="card-deleted">
                         <h3>Deleted</h3>
                         <div class="value" style="font-size: 1.5rem; color: var(--accent-red)">${deletedTodos.length || 0}</div>
-                    </div>
-                    <div class="cost-card">
-                        <h3>LLM Calls</h3>
-                        <div class="value" style="font-size: 1.5rem;">${summary.open_llm_calls || 0}</div>
                     </div>
                 `;
             }
