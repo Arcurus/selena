@@ -56,7 +56,8 @@ body {
     position: absolute;
     width: 100px;
     height: 2px;
-    background: linear-gradient(270deg, transparent, var(--accent-blue));
+    /* Gradient points in direction of movement (down-right), so tail trails behind (up-left) */
+    background: linear-gradient(45deg, transparent, var(--accent-blue));
     animation: shoot var(--duration) linear infinite;
     opacity: 0;
 }
@@ -64,8 +65,8 @@ body {
 @keyframes shoot {
     0% { transform: translateX(-100px) translateY(0); opacity: 0; }
     10% { opacity: 1; }
-    30% { opacity: 0; transform: translateX(300px) translateY(100px); }
-    100% { opacity: 0; transform: translateX(300px) translateY(100px); }
+    30% { opacity: 0; transform: translateX(400px) translateY(200px); }
+    100% { opacity: 0; transform: translateX(400px) translateY(200px); }
 }
 
 /* Nebula glow effect */
