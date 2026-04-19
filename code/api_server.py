@@ -527,6 +527,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             if 'creator_id' in query: updates['creator_id'] = query['creator_id'][0] if query['creator_id'][0] else None
             if 'conversation_id' in query: updates['conversation_id'] = query['conversation_id'][0] if query['conversation_id'][0] else None
             if 'agent_id' in query: updates['agent_id'] = query['agent_id'][0] if query['agent_id'][0] else None
+            if 'block_reason' in query: updates['block_reason'] = query['block_reason'][0] if query['block_reason'][0] else None
+            if 'waiting_for' in query: updates['waiting_for'] = query['waiting_for'][0] if query['waiting_for'][0] else None
             todo = todo_manager.update_todo(todo_id, **updates)
             if todo:
                 self.send_json({'success': True, 'todo': todo})
@@ -595,6 +597,40 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.send_json({'success': False, 'error': 'id required'}, 400)
                 return
             todo = todo_manager.mark_done(todo_id)
+            if todo:
+                self.send_json({'success': True, 'todo': todo})
+            else:
+                self.send_json({'success': False, 'error': 'Todo not found'}, 404)
+            return
+        
+        if path == '/api/todos/mark-blocked':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            query = parse_qs(parsed.query)
+            todo_id = query.get('id', [''])[0]
+            if not todo_id:
+                self.send_json({'success': False, 'error': 'id required'}, 400)
+                return
+            block_reason = query.get('block_reason', [''])[0] if 'block_reason=' in parsed.query else ''
+            waiting_for = query.get('waiting_for', [''])[0] if 'waiting_for=' in parsed.query else None
+            todo = todo_manager.mark_blocked(todo_id, block_reason=block_reason, waiting_for=waiting_for)
+            if todo:
+                self.send_json({'success': True, 'todo': todo})
+            else:
+                self.send_json({'success': False, 'error': 'Todo not found'}, 404)
+            return
+        
+        if path == '/api/todos/unblock':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            query = parse_qs(parsed.query)
+            todo_id = query.get('id', [''])[0]
+            if not todo_id:
+                self.send_json({'success': False, 'error': 'id required'}, 400)
+                return
+            todo = todo_manager.unblock(todo_id)
             if todo:
                 self.send_json({'success': True, 'todo': todo})
             else:

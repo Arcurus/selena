@@ -80,6 +80,8 @@ Get all todos, optionally filtered by status and sorted.
       "creator_id": "main",
       "conversation_id": "channel:1495170712397152367",
       "agent_id": "selena-v2",
+      "block_reason": null,
+      "waiting_for": null,
       "created_at": "2026-04-19T00:05:56.318686",
       "updated_at": "2026-04-19T00:05:56.318698"
     }
@@ -88,6 +90,7 @@ Get all todos, optionally filtered by status and sorted.
     "total": 5,
     "open": 4,
     "in_progress": 0,
+    "blocked": 0,
     "done": 1,
     "total_llm_calls": 50,
     "open_llm_calls": 30,
@@ -156,7 +159,7 @@ Add a new todo.
 ```
 
 ### Update Todo
-**POST** `/api/todos/update?id=ID&short_desc=TITLE&long_desc=DESCRIPTION&priority=9&status=status&sensitive=true&parent_id=ID&estimated_llm_calls=20&creator_id=ID&conversation_id=ID&agent_id=ID`
+**POST** `/api/todos/update?id=ID&short_desc=TITLE&long_desc=DESCRIPTION&priority=9&status=status&sensitive=true&parent_id=ID&estimated_llm_calls=20&creator_id=ID&conversation_id=ID&agent_id=ID&block_reason=REASON&waiting_for=TODO_ID`
 
 Update an existing todo.
 
@@ -165,13 +168,15 @@ Update an existing todo.
 - `short_desc` (optional): New title
 - `long_desc` (optional): New description
 - `priority` (optional): New priority (1-10)
-- `status` (optional): New status (`open`, `in_progress`, `done`)
+- `status` (optional): New status (`open`, `in_progress`, `done`, `blocked`)
 - `sensitive` (optional): If `true`, moves to `todos.env`
 - `parent_id` (optional): New parent ID (use empty to remove hierarchy)
 - `estimated_llm_calls` (optional): Updated estimate
 - `creator_id` (optional): Updated creator ID
 - `conversation_id` (optional): Updated conversation ID
 - `agent_id` (optional): Updated agent ID
+- `block_reason` (optional): Reason why blocked (only used when status is `blocked`)
+- `waiting_for` (optional): ID of todo this is waiting for (only used when status is `blocked`)
 
 **Response:**
 ```json
@@ -227,6 +232,40 @@ Split a big todo into smaller subtasks.
 **POST** `/api/todos/mark-done?id=ID`
 
 Mark a todo as done.
+
+**Response:**
+```json
+{
+  "success": true,
+  "todo": { ... updated todo ... }
+}
+```
+
+### Mark Todo as Blocked
+**POST** `/api/todos/mark-blocked?id=ID&block_reason=REASON&waiting_for=TODO_ID`
+
+Mark a todo as blocked with an optional reason and todo it's waiting for.
+
+**Parameters:**
+- `id` (required): Todo ID
+- `block_reason` (optional): Reason why the todo is blocked
+- `waiting_for` (optional): ID of the todo this is waiting for
+
+**Response:**
+```json
+{
+  "success": true,
+  "todo": { ... updated todo ... }
+}
+```
+
+### Unblock Todo
+**POST** `/api/todos/unblock?id=ID`
+
+Unblock a todo (sets status back to `open` and clears block_reason/waiting_for).
+
+**Parameters:**
+- `id` (required): Todo ID
 
 **Response:**
 ```json

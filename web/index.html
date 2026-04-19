@@ -765,6 +765,10 @@
                         <div class="value" style="color: var(--working)">${summary.in_progress}</div>
                     </div>
                     <div class="cost-card">
+                        <h3>Blocked</h3>
+                        <div class="value" style="color: var(--danger)">${summary.blocked || 0}</div>
+                    </div>
+                    <div class="cost-card">
                         <h3>Done</h3>
                         <div class="value" style="color: var(--success)">${summary.done}</div>
                     </div>
@@ -799,13 +803,17 @@
                                     ${todo.creator_id ? `<span>👤 ${todo.creator_id}</span>` : ''}
                                     ${todo.conversation_id ? `<span>💬 ${todo.conversation_id}</span>` : ''}
                                     ${todo.agent_id ? `<span>🤖 ${todo.agent_id}</span>` : ''}
+                                    ${todo.block_reason ? `<span style="color: var(--danger);">🚫 ${todo.block_reason}</span>` : ''}
+                                    ${todo.waiting_for ? `<span>⏳ Waiting for: ${todo.waiting_for}</span>` : ''}
                                     <span>Created: ${new Date(todo.created_at).toLocaleString()}</span>
                                 </div>
                             </div>
                             <div style="display: flex; gap: 5px; flex-wrap: wrap;">
                                 ${!isChild ? `<button onclick="splitTodo('${todo.id}')" style="background: var(--shiba-orange); border: none; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;" title="Split into subtasks">⟷</button>` : ''}
-                                <button onclick="markTodoStatus('${todo.id}', 'in_progress')" style="background: var(--working); border: none; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">▶</button>
-                                <button onclick="markTodoStatus('${todo.id}', 'done')" style="background: var(--success); border: none; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">✓</button>
+                                ${todo.status !== 'blocked' ? `<button onclick="markTodoStatus('${todo.id}', 'in_progress')" style="background: var(--working); border: none; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;" title="Mark In Progress">▶</button>` : ''}
+                                ${todo.status !== 'blocked' ? `<button onclick="markTodoBlocked('${todo.id}')" style="background: var(--danger); border: none; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;" title="Mark Blocked">🚫</button>` : ''}
+                                ${todo.status === 'blocked' ? `<button onclick="markTodoUnblock('${todo.id}')" style="background: var(--success); border: none; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;" title="Unblock">↩</button>` : ''}
+                                <button onclick="markTodoStatus('${todo.id}', 'done')" style="background: var(--success); border: none; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;" title="Mark Done">✓</button>
                             </div>
                         </div>
                     </div>
@@ -827,6 +835,7 @@
             switch(status) {
                 case 'done': return 'var(--success)';
                 case 'in_progress': return 'var(--working)';
+                case 'blocked': return 'var(--danger)';
                 default: return 'var(--text-secondary)';
             }
         }
@@ -842,6 +851,39 @@
                 }
             } catch (e) {
                 console.error('Failed to update todo:', e);
+            }
+        }
+        
+        async function markTodoBlocked(todoId) {
+            const blockReason = prompt('Enter block reason (optional):');
+            if (blockReason === null) return; // User cancelled
+            const waitingFor = prompt('Enter ID of todo waiting for (optional):');
+            if (waitingFor === null) return; // User cancelled
+            try {
+                const url = `/api/todos/mark-blocked?id=${todoId}&block_reason=${encodeURIComponent(blockReason || '')}&waiting_for=${encodeURIComponent(waitingFor || '')}`;
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    loadTodos(); // Reload todos
+                }
+            } catch (e) {
+                console.error('Failed to block todo:', e);
+            }
+        }
+        
+        async function markTodoUnblock(todoId) {
+            try {
+                const response = await fetch(`/api/todos/unblock?id=${todoId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    loadTodos(); // Reload todos
+                }
+            } catch (e) {
+                console.error('Failed to unblock todo:', e);
             }
         }
         

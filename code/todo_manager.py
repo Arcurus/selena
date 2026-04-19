@@ -9,13 +9,15 @@ Each todo has:
 - priority (1-10, 10 = highest)
 - short_desc (brief title)
 - long_desc (detailed description)
-- status (open, in_progress, done)
+- status (open, in_progress, done, blocked)
 - sensitive (boolean - if True, stored in todos.env NOT in git)
 - parent_id (optional - for hierarchical todos)
 - estimated_llm_calls (optional - estimated LLM calls for this task)
 - creator_id (optional - who created this todo)
 - conversation_id (optional - which conversation this belongs to)
 - agent_id (optional - which agent owns this todo)
+- block_reason (optional - reason why this todo is blocked)
+- waiting_for (optional - ID of the todo this is waiting for)
 - created_at
 - updated_at
 """
@@ -193,6 +195,8 @@ class TodoManager:
             "creator_id": creator_id,
             "conversation_id": conversation_id,
             "agent_id": agent_id,
+            "block_reason": None,  # Reason why blocked (if status is blocked)
+            "waiting_for": None,   # ID of todo this is waiting for
             "created_at": self._now(),
             "updated_at": self._now()
         }
@@ -319,7 +323,7 @@ class TodoManager:
         
         Args:
             todo_id: ID of todo to update
-            **kwargs: Fields to update (short_desc, long_desc, priority, status, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id)
+            **kwargs: Fields to update (short_desc, long_desc, priority, status, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, block_reason, waiting_for)
         
         Returns:
             Updated todo dict or None if not found
@@ -339,7 +343,7 @@ class TodoManager:
     def _update_todo_in_list(self, todo: dict, todo_list: list, **kwargs) -> dict:
         """Update a todo in a specific list."""
         # Update allowed fields
-        allowed = ["short_desc", "long_desc", "priority", "status", "sensitive", "parent_id", "estimated_llm_calls", "creator_id", "conversation_id", "agent_id"]
+        allowed = ["short_desc", "long_desc", "priority", "status", "sensitive", "parent_id", "estimated_llm_calls", "creator_id", "conversation_id", "agent_id", "block_reason", "waiting_for"]
         for key in allowed:
             if key in kwargs:
                 if key == "priority":
@@ -414,6 +418,32 @@ class TodoManager:
         """Mark a todo as in progress."""
         return self.update_todo(todo_id, status="in_progress")
     
+    def mark_blocked(self, todo_id: str, block_reason: str = "", waiting_for: Optional[str] = None) -> Optional[dict]:
+        """
+        Mark a todo as blocked.
+        
+        Args:
+            todo_id: ID of todo to block
+            block_reason: Reason why it's blocked
+            waiting_for: ID of the todo this is waiting for (optional)
+        
+        Returns:
+            Updated todo dict or None if not found
+        """
+        return self.update_todo(todo_id, status="blocked", block_reason=block_reason, waiting_for=waiting_for)
+    
+    def unblock(self, todo_id: str) -> Optional[dict]:
+        """
+        Unblock a todo (set status back to open and clear block_reason/waiting_for).
+        
+        Args:
+            todo_id: ID of todo to unblock
+        
+        Returns:
+            Updated todo dict or None if not found
+        """
+        return self.update_todo(todo_id, status="open", block_reason=None, waiting_for=None)
+    
     def get_summary(self, sensitive: Optional[bool] = None) -> dict:
         """
         Get a summary of all todos.
@@ -430,6 +460,7 @@ class TodoManager:
         
         open_todos = [t for t in all_todos if t["status"] == "open" and t.get("parent_id") is None]
         in_progress = [t for t in all_todos if t["status"] == "in_progress" and t.get("parent_id") is None]
+        blocked = [t for t in all_todos if t["status"] == "blocked" and t.get("parent_id") is None]
         done = [t for t in all_todos if t["status"] == "done"]
         
         # Calculate total estimated LLM calls
@@ -443,6 +474,7 @@ class TodoManager:
             "total": len([t for t in all_todos if t.get("parent_id") is None]),
             "open": len(open_todos),
             "in_progress": len(in_progress),
+            "blocked": len(blocked),
             "done": len(done),
             "total_llm_calls": total_llm_calls,
             "open_llm_calls": open_llm_calls,
