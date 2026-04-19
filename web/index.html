@@ -1498,6 +1498,9 @@
         }
 
         function renderTodos(todos, summary) {
+            // Get deleted todos from cache
+            const deletedTodos = allTodosCache.filter(t => t.deleted_at);
+            
             // Update filter button counts from summary
             if (summary) {
                 // Build the active filter display
@@ -1539,9 +1542,6 @@
                     </div>
                 `;
             }
-            
-            // Get deleted todos from cache
-            const deletedTodos = allTodosCache.filter(t => t.deleted_at);
             
             // Show deleted section if there are deleted todos AND not viewing deleted filter
             const deletedSection = document.getElementById('deletedSection');
@@ -1823,16 +1823,17 @@
             // Render filter cards (like task filter cards)
             const activeFilter = currentKbFilter || '';
             let filterCardsHtml = `
-                <div class="cost-card ${activeFilter === '' ? 'active' : ''}" onclick="setKbFilter('')" style="cursor: pointer;">
+                <div class="cost-card ${activeFilter === '' ? 'active' : ''}" onclick="setKbFilter('')" style="cursor: pointer; border-color: var(--accent-blue);">
                     <div class="label">All</div>
                     <div class="value" style="font-size: 1.5rem;">${totalCount}</div>
                 </div>
             `;
             ['lesson', 'skill', 'pattern', 'reference'].forEach(cat => {
                 const count = catSummary[cat] || 0;
+                const catColor = categoryColors[cat] || 'var(--accent-blue)';
                 if (count > 0 || currentKbFilter === cat) {
                     filterCardsHtml += `
-                        <div class="cost-card ${activeFilter === cat ? 'active' : ''}" onclick="setKbFilter('${cat}')" style="cursor: pointer;">
+                        <div class="cost-card ${activeFilter === cat ? 'active' : ''}" onclick="setKbFilter('${cat}')" style="cursor: pointer; border-color: ${catColor};">
                             <div class="label">${cat.charAt(0).toUpperCase() + cat.slice(1)}</div>
                             <div class="value" style="font-size: 1.5rem;">${count}</div>
                         </div>
@@ -1841,18 +1842,25 @@
             });
             document.getElementById('kbFilterCards').innerHTML = filterCardsHtml;
 
+            // Apply filters
+            let filtered = entries;
+            if (currentKbFilter) {
+                filtered = filtered.filter(e => e.category === currentKbFilter);
+            }
+            if (kbSearchQuery) {
+                filtered = filtered.filter(e => 
+                    e.title.toLowerCase().includes(kbSearchQuery) ||
+                    (e.content && e.content.toLowerCase().includes(kbSearchQuery)) ||
+                    (e.tags && e.tags.some(t => t.toLowerCase().includes(kbSearchQuery)))
+                );
+            }
+
             // Show entry count (X of Y)
             const filteredCount = filtered.length;
             if (currentKbFilter || kbSearchQuery) {
                 document.getElementById('kbEntryCount').innerHTML = `${filteredCount} of ${totalCount} entries`;
             } else {
                 document.getElementById('kbEntryCount').innerHTML = `${totalCount} entries`;
-            }
-
-            // Apply filters
-            let filtered = entries;
-            if (currentKbFilter) {
-                filtered = filtered.filter(e => e.category === currentKbFilter);
             }
             if (kbSearchQuery) {
                 filtered = filtered.filter(e => 
