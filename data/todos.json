@@ -246,9 +246,9 @@
     "short_desc": "MiniMax TTS setup (speech-2.8-hd) - COMPLETED",
     "long_desc": "Configure MiniMax TTS (speech-2.8-hd) for voice storytelling. COMPLETED: The minimax-oauth token works for language models AND for TTS API. We fixed the token configuration. TTS is now working properly.",
     "priority": 3,
-    "status": "completed",
+    "status": "done",
     "created_at": "2026-04-19T07:09:15.297730",
-    "updated_at": "2026-04-19T13:18:27.840430"
+    "updated_at": "2026-04-19T13:41:21.959238"
   },
   {
     "id": "9ddae970",

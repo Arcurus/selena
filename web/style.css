@@ -20,6 +20,17 @@
 /* Reset */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* Shooting Stars Canvas - Fixed fullscreen overlay */
+#shootingStarsCanvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1;
+    pointer-events: none;
+}
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: var(--bg-dark);
@@ -518,10 +529,26 @@ body {
     padding: 20px;
     border: 1px solid var(--accent-blue);
     transition: all 0.3s;
+    cursor: pointer;
 }
 .cost-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 5px 15px rgba(74, 144, 255, 0.2);
+}
+.cost-card.active {
+    border-color: var(--accent-blue);
+    animation: cardPulse 4s ease-in-out infinite;
+}
+
+@keyframes cardPulse {
+    0%, 100% {
+        background: var(--bg-dark);
+        box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+    }
+    50% {
+        background: rgba(59, 130, 246, 0.15);
+        box-shadow: 0 0 15px 0 rgba(59, 130, 246, 0.3);
+    }
 }
 .cost-card h3 { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 10px; }
 .cost-card .value { 

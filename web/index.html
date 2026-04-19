@@ -118,31 +118,6 @@
                 <div class="tasks-panel">
                     <h2>🎯 Tasks / Loose Ends / Todos</h2>
 
-                    <!-- Filter Controls -->
-                    <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
-                        <button id="filter-all" class="filter-btn" onclick="setTodoFilter('')">
-                            <span>All</span>
-                            <span class="count" id="count-all">0</span>
-                        </button>
-                        <button id="filter-open" class="filter-btn" onclick="setTodoFilter('open')">
-                            <span>Open</span>
-                            <span class="count" id="count-open">0</span>
-                        </button>
-                        <button id="filter-in_progress" class="filter-btn" onclick="setTodoFilter('in_progress')">
-                            <span>In Progress</span>
-                            <span class="count" id="count-in_progress">0</span>
-                        </button>
-                        <button id="filter-blocked" class="filter-btn" onclick="setTodoFilter('blocked')">
-                            <span>Blocked</span>
-                            <span class="count" id="count-blocked">0</span>
-                        </button>
-                        <button id="filter-done" class="filter-btn" onclick="setTodoFilter('done')">
-                            <span>Done</span>
-                            <span class="count" id="count-done">0</span>
-                        </button>
-                        <button onclick="showTab('tasks');" class="save-btn" style="width: auto; padding: 8px 16px;">🔄 Refresh</button>
-                    </div>
-
                     <!-- Add Todo Form -->
                     <div style="background: var(--bg-dark); border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid var(--accent-blue);">
                         <h3 style="color: var(--accent-neon); margin-bottom: 15px;">Add New Task</h3>
@@ -460,9 +435,8 @@
             }
 
             function animateShootingStars() {
-                // Gentle background fade (keeps previous frames slightly visible for trail effect)
-                shootingCtx.fillStyle = 'rgba(0, 4, 15, 0.22)';
-                shootingCtx.fillRect(0, 0, shootingCanvas.width, shootingCanvas.height);
+                // Clear canvas completely to keep starfield visible behind
+                shootingCtx.clearRect(0, 0, shootingCanvas.width, shootingCanvas.height);
 
                 shootingStars.forEach(star => {
                     star.update();
@@ -1055,28 +1029,36 @@
                 document.getElementById('count-all').textContent = summary.total || 0;
                 document.getElementById('count-open').textContent = summary.open || 0;
                 document.getElementById('count-in_progress').textContent = summary.in_progress || 0;
+                document.getElementById('count-completed').textContent = summary.completed || 0;
                 document.getElementById('count-blocked').textContent = summary.blocked || 0;
                 document.getElementById('count-done').textContent = summary.done || 0;
                 
-                // Also update the summary cards
+                // Build the active filter display
+                let activeFilter = currentTodoFilter || '';
+                
+                // Update the summary cards - make them clickable filter buttons
                 document.getElementById('todoSummary').innerHTML = `
-                    <div class="cost-card">
+                    <div class="cost-card ${activeFilter === '' ? 'active' : ''}" onclick="setTodoFilter('')" id="card-all">
                         <h3>Total</h3>
                         <div class="value" style="font-size: 1.5rem;">${summary.total || 0}</div>
                     </div>
-                    <div class="cost-card">
+                    <div class="cost-card ${activeFilter === 'open' ? 'active' : ''}" onclick="setTodoFilter('open')" id="card-open">
                         <h3>Open</h3>
                         <div class="value" style="font-size: 1.5rem; color: var(--warning)">${summary.open || 0}</div>
                     </div>
-                    <div class="cost-card">
+                    <div class="cost-card ${activeFilter === 'in_progress' ? 'active' : ''}" onclick="setTodoFilter('in_progress')" id="card-in_progress">
                         <h3>In Progress</h3>
                         <div class="value" style="font-size: 1.5rem; color: var(--working)">${summary.in_progress || 0}</div>
                     </div>
-                    <div class="cost-card">
+                    <div class="cost-card ${activeFilter === 'completed' ? 'active' : ''}" onclick="setTodoFilter('completed')" id="card-completed">
+                        <h3>Completed</h3>
+                        <div class="value" style="font-size: 1.5rem; color: var(--accent-purple)">${summary.completed || 0}</div>
+                    </div>
+                    <div class="cost-card ${activeFilter === 'blocked' ? 'active' : ''}" onclick="setTodoFilter('blocked')" id="card-blocked">
                         <h3>Blocked</h3>
                         <div class="value" style="font-size: 1.5rem; color: var(--danger)">${summary.blocked || 0}</div>
                     </div>
-                    <div class="cost-card">
+                    <div class="cost-card ${activeFilter === 'done' ? 'active' : ''}" onclick="setTodoFilter('done')" id="card-done">
                         <h3>Done</h3>
                         <div class="value" style="font-size: 1.5rem; color: var(--success)">${summary.done || 0}</div>
                     </div>
@@ -1087,8 +1069,8 @@
                 `;
             }
             
-            // Sort todos: status (in_progress, blocked, open, done), then priority (desc), then updated_at (desc)
-            const statusOrder = { 'in_progress': 0, 'blocked': 1, 'open': 2, 'done': 3 };
+            // Sort todos: status (in_progress, completed, blocked, open, done), then priority (desc), then updated_at (desc)
+            const statusOrder = { 'in_progress': 0, 'completed': 1, 'blocked': 2, 'open': 3, 'done': 4 };
             if (todos && todos.length > 0) {
                 todos.sort((a, b) => {
                     // First: status order

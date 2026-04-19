@@ -460,6 +460,7 @@ class TodoManager:
         
         open_todos = [t for t in all_todos if t["status"] == "open" and t.get("parent_id") is None]
         in_progress = [t for t in all_todos if t["status"] == "in_progress" and t.get("parent_id") is None]
+        completed = [t for t in all_todos if t["status"] == "completed" and t.get("parent_id") is None]
         blocked = [t for t in all_todos if t["status"] == "blocked" and t.get("parent_id") is None]
         done = [t for t in all_todos if t["status"] == "done"]
         
@@ -474,6 +475,7 @@ class TodoManager:
             "total": len([t for t in all_todos if t.get("parent_id") is None]),
             "open": len(open_todos),
             "in_progress": len(in_progress),
+            "completed": len(completed),
             "blocked": len(blocked),
             "done": len(done),
             "total_llm_calls": total_llm_calls,
