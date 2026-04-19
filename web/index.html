@@ -50,6 +50,13 @@
                     <div class="services-panel">
                         <h2>⚙️ Running Services</h2>
                         <div id="serviceList" class="service-list"></div>
+                        
+                        <!-- Task Summary Cards -->
+                        <div style="margin-top: 20px;">
+                            <h3 style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 10px;">📋 Tasks</h3>
+                            <div id="servicesTaskSummary" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;"></div>
+                        </div>
+                        
                         <div style="margin-top: 20px; text-align: center;">
                             <button onclick="refreshServices()" class="save-btn" style="width: auto; padding: 10px 30px;">🔄 Refresh Services</button>
                         </div>
@@ -1503,6 +1510,9 @@
             
             // Update filter button counts from summary
             if (summary) {
+                // Store LLM Calls count globally for Services tab
+                llmCallsCount = summary.open_llm_calls || 0;
+                
                 // Build the active filter display
                 let activeFilter = currentTodoFilter || '';
                 
@@ -1686,6 +1696,39 @@
         let allKbCache = [];
         let currentKbFilter = '';
         let kbSearchQuery = '';
+        let llmCallsCount = 0; // Track LLM calls for Services tab
+
+        function renderServicesTaskSummary() {
+            // Calculate task counts from allTodosCache (always show total counts, not filtered)
+            const totalOpen = allTodosCache.filter(t => !t.deleted_at && t.status === 'open').length;
+            const totalDone = allTodosCache.filter(t => !t.deleted_at && t.status === 'done').length;
+            
+            const container = document.getElementById('servicesTaskSummary');
+            if (!container) return;
+            
+            container.innerHTML = `
+                <div class="cost-card" style="text-align: center; padding: 15px;">
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">LLM Calls</div>
+                    <div class="value" style="font-size: 1.5rem;">${llmCallsCount || 0}</div>
+                </div>
+                <div class="cost-card" onclick="goToTasksWithFilter('open')" style="cursor: pointer; text-align: center; padding: 15px;">
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">Open</div>
+                    <div class="value" style="font-size: 1.5rem; color: var(--warning);">${totalOpen}</div>
+                </div>
+                <div class="cost-card" onclick="goToTasksWithFilter('done')" style="cursor: pointer; text-align: center; padding: 15px;">
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">Done</div>
+                    <div class="value" style="font-size: 1.5rem; color: var(--success);">${totalDone}</div>
+                </div>
+            `;
+        }
+
+        function goToTasksWithFilter(filter) {
+            currentTodoFilter = filter;
+            todoSearchQuery = '';
+            document.getElementById('todoSearch').value = '';
+            showTab('tasks');
+            // The showTab for tasks will call setTodoFilter which calls loadTodos
+        }
 
         async function loadKnowledge(forceRefresh = false) {
             // If we have a filter or search, we need fresh data
@@ -2239,6 +2282,7 @@
             if (tabName === 'knowledge') loadKnowledge();
             if (tabName === 'services') {
                 loadServices();
+                renderServicesTaskSummary();
                 // Poll every 10 seconds
                 servicesPollingInterval = setInterval(loadServices, 10000);
             }
