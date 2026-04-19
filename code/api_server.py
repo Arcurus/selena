@@ -986,6 +986,8 @@ class RequestHandler(BaseHTTPRequestHandler):
                                         projects[-1]['port'] = value
                                     elif key == 'repo':
                                         projects[-1]['repo'] = value
+                                    elif key == 'directory':
+                                        projects[-1]['directory'] = value
                 except Exception as e:
                     pass
             
