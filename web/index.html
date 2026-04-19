@@ -73,10 +73,8 @@
             <!-- Projects Tab -->
             <div class="tab-content" id="tab-projects">
                 <div class="projects-panel">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <h2 style="margin: 0;">📁 Projects</h2>
-                        <button onclick="loadProjects()" class="service-btn" style="padding: 8px 16px;">🔄 Show All</button>
-                    </div>
+                    <h2 style="display: inline;">📁 Projects</h2>
+                    <button onclick="closeFileBrowser(); loadProjects();" class="service-btn" style="padding: 8px 16px; vertical-align: middle;">🔄 Show All</button>
                     <div id="projectsList" class="projects-grid"></div>
                     
                     <!-- File Browser -->
