@@ -775,8 +775,8 @@
                     port: settings.port,
                     pid: null,
                     checkUrl: `http://${settings.domain}:${settings.port}/`,
-                    status: data.authenticated ? 'ok' : 'unknown',
-                    statusText: data.authenticated ? 'Running' : 'Unknown'
+                    status: 'unknown',
+                    statusText: 'Checking...'
                 });
 
                 // Add scheduler status if available
@@ -812,10 +812,16 @@
                     port: '18789',
                     pid: null,
                     checkUrl: `http://${settings.domain}:18789/`,
-                    status: 'ok',
-                    statusText: 'Running'
+                    status: 'unknown',
+                    statusText: 'Checking...'
                 });
 
+                // Store initial state for display
+                lastServicesState = services;
+                
+                // Show services immediately with initial status before pings complete
+                renderServices(services, false);
+                
                 // Ping services to check actual status - run in parallel with reduced timeout
                 const pingPromises = services.map(async (service) => {
                     if (!service.checkUrl) {
@@ -858,7 +864,7 @@
                 });
                 await Promise.all(pingPromises);
 
-                // Store last known state
+                // Update display with ping results
                 lastServicesState = services;
                 isServicesLoading = false;
                 renderServices(services, false);
@@ -1184,15 +1190,17 @@
             }
         }
         
-        function renderFileItem(entry, sort = 'modified', clickable = true) {
+        function renderFileItem(entry, sort = 'modified', clickable = true, basePath = '') {
             // Derive name from path if name is not provided
             const name = entry.name || entry.path.split('/').pop();
             const ext = name.split('.').pop().toLowerCase();
             const icon = getFileIcon(ext);
-            const encodedPath = encodeURIComponent(entry.path);
+            // Prepend basePath if provided (used for recent/biggest files to include project prefix)
+            const fullPath = basePath ? basePath + entry.path : entry.path;
+            const encodedPath = encodeURIComponent(fullPath);
             const modified = entry.modified ? formatDateTime(entry.modified) : '';
             
-            let clickAction = clickable ? `onclick="readFile('${entry.path}')"` : '';
+            let clickAction = clickable ? `onclick="readFile('${fullPath}')"` : '';
             
             return `<div class="file-item" style="cursor: ${clickable ? 'pointer' : 'default'};">
                 <span class="file-icon">${icon}</span>
@@ -1285,7 +1293,7 @@
                     return;
                 }
                 
-                listEl.innerHTML = data.files.map(entry => renderFileItem(entry, 'modified', true)).join('');
+                listEl.innerHTML = data.files.map(entry => renderFileItem(entry, 'modified', true, currentProject + '/')).join('');
             } catch (e) {
                 listEl.innerHTML = `<p style="color: var(--error);">Error: ${e.message}</p>`;
             }
@@ -1327,7 +1335,7 @@
                     return;
                 }
                 
-                listEl.innerHTML = data.files.map(entry => renderFileItem(entry, 'size', true)).join('');
+                listEl.innerHTML = data.files.map(entry => renderFileItem(entry, 'size', true, currentProject + '/')).join('');
             } catch (e) {
                 listEl.innerHTML = `<p style="color: var(--error);">Error: ${e.message}</p>`;
             }
