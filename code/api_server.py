@@ -373,6 +373,42 @@ class RequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         
+        # Serve static files (images, css, js)
+        if path.startswith('/images/') or path.startswith('/static/'):
+            web_dir = os.path.join(SELENA_ROOT, 'web')
+            # Remove leading slash and map to web directory
+            file_path = path.lstrip('/')
+            full_path = os.path.join(web_dir, file_path)
+            if os.path.exists(full_path) and os.path.isfile(full_path):
+                # Determine content type
+                ext = os.path.splitext(full_path)[1].lower()
+                content_types = {
+                    '.png': 'image/png',
+                    '.jpg': 'image/jpeg',
+                    '.jpeg': 'image/jpeg',
+                    '.gif': 'image/gif',
+                    '.css': 'text/css',
+                    '.js': 'application/javascript',
+                    '.html': 'text/html',
+                }
+                content_type = content_types.get(ext, 'application/octet-stream')
+                try:
+                    with open(full_path, 'rb') as f:
+                        content = f.read()
+                    self.send_response(200)
+                    self.send_header('Content-Type', content_type)
+                    self.send_header('Content-Length', len(content))
+                    self.send_header('Cache-Control', 'public, max-age=3600')
+                    self.end_headers()
+                    self.wfile.write(content)
+                    return
+                except Exception as e:
+                    self.send_json({'error': str(e)}, 500)
+                    return
+            else:
+                self.send_json({'error': 'File not found'}, 404)
+                return
+        
         # API endpoints
         if path == '/api/login':
             # Login endpoint
