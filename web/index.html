@@ -796,6 +796,7 @@
                 // Add services from project docs
                 services.push({
                     name: 'Open World (open-world-selena)',
+                    serviceName: 'open-world-selena',
                     description: 'Dynamic evolving world simulation',
                     icon: '🎮',
                     port: '8081',
@@ -807,6 +808,7 @@
 
                 services.push({
                     name: 'OpenClaw Gateway',
+                    serviceName: 'openclaw-gateway',
                     description: 'Main agent framework',
                     icon: '🦶',
                     port: '18789',
@@ -897,8 +899,8 @@
                         </div>
                     </div>
                     <div class="service-actions">
-                        <button class="service-btn restart" onclick="restartService('${s.name}')" title="Restart">🔄</button>
-                        <button class="service-btn stop" onclick="stopService('${s.name}')" title="Stop">⏹️</button>
+                        <button class="service-btn restart" onclick="restartService('${s.serviceName}','${s.name}')" title="Restart">🔄</button>
+                        <button class="service-btn stop" onclick="stopService('${s.serviceName}','${s.name}')" title="Stop">⏹️</button>
                     </div>
                     <span class="status-badge">${s.statusText}</span>
                 </div>
@@ -909,37 +911,37 @@
             loadServices(true); // true = show spinner on manual refresh
         }
 
-        async function restartService(name) {
+        async function restartService(serviceName, displayName) {
             try {
-                const response = await fetch(`/api/services/restart?service=${encodeURIComponent(name)}`, {
+                const response = await fetch(`/api/services/restart?service=${encodeURIComponent(serviceName)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json();
                 if (data.success) {
-                    showToast(data.message || `${name} restarted successfully`, 'success');
+                    showToast(data.message || `${displayName} restarted successfully`, 'success');
                     loadServices();
                 } else {
-                    showToast(`Failed to restart ${name}: ${data.error || 'Unknown error'}`, 'error');
+                    showToast(`Failed to restart ${displayName}: ${data.error || 'Unknown error'}`, 'error');
                 }
             } catch (e) {
-                showToast(`Error restarting ${name}: ${e.message}`, 'error');
+                showToast(`Error restarting ${displayName}: ${e.message}`, 'error');
             }
         }
 
-        async function stopService(name) {
+        async function stopService(serviceName, displayName) {
             try {
-                const response = await fetch(`/api/services/stop?service=${encodeURIComponent(name)}`, {
+                const response = await fetch(`/api/services/stop?service=${encodeURIComponent(serviceName)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json();
                 if (data.success) {
-                    showToast(data.message || `${name} stopped successfully`, 'success');
+                    showToast(data.message || `${displayName} stopped successfully`, 'success');
                     loadServices();
                 } else {
-                    showToast(`Failed to stop ${name}: ${data.error || 'Unknown error'}`, 'error');
+                    showToast(`Failed to stop ${displayName}: ${data.error || 'Unknown error'}`, 'error');
                 }
             } catch (e) {
-                showToast(`Error stopping ${name}: ${e.message}`, 'error');
+                showToast(`Error stopping ${displayName}: ${e.message}`, 'error');
             }
         }
 
