@@ -1274,6 +1274,41 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.send_json({'services': services})
             return
         
+        # Server-side health check endpoint - avoids CORS issues
+        if path.startswith('/api/services/check'):
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            parsed = urlparse(self.path)
+            query = parse_qs(parsed.query) if parsed.query else {}
+            service_name = query.get('service', [''])[0] if query else ''
+            
+            # Determine URL based on service
+            check_urls = {
+                'selena-api': 'http://localhost:8765/',
+                'open-world-selena': 'http://localhost:8081/'
+            }
+            
+            if service_name not in check_urls:
+                self.send_json({'error': f'Unknown service: {service_name}'}, 400)
+                return
+            
+            url = check_urls[service_name]
+            
+            # Do server-side HTTP check
+            import urllib.request
+            try:
+                req = urllib.request.Request(url, method='HEAD')
+                req.add_header('User-Agent', 'Selena-API-Check/1.0')
+                urllib.request.urlopen(req, timeout=3)
+                self.send_json({'service': service_name, 'status': 'ok', 'statusText': 'Running'})
+            except urllib.error.HTTPError as e:
+                # HTTP error but service is responding
+                self.send_json({'service': service_name, 'status': 'ok', 'statusText': 'Running', 'httpCode': e.code})
+            except Exception as e:
+                self.send_json({'service': service_name, 'status': 'offline', 'statusText': 'Offline', 'error': str(e)})
+            return
+        
         if path == '/api/services/restart' or path == '/api/services/stop':
             if not self.authenticate():
                 self.send_json({'error': 'Unauthorized'}, 401)

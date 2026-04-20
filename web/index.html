@@ -152,31 +152,34 @@
                             
                             <div id="fileBrowserBreadcrumb" style="margin-bottom: 15px; color: var(--text-secondary);"></div>
                             <div id="fileList" class="file-list"></div>
-                            <!-- File Content Preview (inline) -->
-                            <div id="fileContent" style="display: none; margin-top: 15px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                    <h4 id="fileContentTitle">File Content</h4>
+                            <!-- File Content Panel (floating at bottom half) -->
+                            <div id="fileContent" style="display: none; position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 90%; height: 50vh; background: var(--bg-card); border-top: 2px solid var(--accent-blue); border-left: 1px solid var(--accent-blue); border-right: 1px solid var(--accent-blue); z-index: 1000; flex-direction: column; border-radius: 12px 12px 0 0;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--accent-blue); background: var(--bg-dark); border-radius: 10px 10px 0 0;">
+                                    <h4 id="fileContentTitle" style="margin: 0;">File Content</h4>
                                     <div style="display: flex; gap: 8px;">
-                                        <button onclick="maximizeFileContent()" class="service-btn" style="padding: 5px 12px;" title="Maximize">⛶ Maximize</button>
-                                        <button onclick="closeFileContent()" class="service-btn" style="padding: 5px 12px;">✕ Close</button>
+                                        <button onclick="maximizeFileContent()" class="service-btn" style="padding: 5px 12px;" title="Expand">⛶</button>
+                                        <button onclick="closeFileContent()" class="service-btn" style="padding: 5px 12px;">✕</button>
                                     </div>
                                 </div>
-                                <div id="fileContentScroll" style="background: var(--bg-dark); border-radius: 8px; overflow: hidden; max-height: 250px; overflow-y: auto;">
-                                    <pre id="fileContentBody" style="margin: 0; padding: 15px; overflow-x: auto; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;"></pre>
+                                <div id="fileContentScroll" style="flex: 1; overflow: hidden; padding: 15px;">
+                                    <pre id="fileContentBody" style="height: 100%; margin: 0; padding: 0; overflow: auto; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;"></pre>
                                 </div>
                             </div>
                             
-                            <!-- File Content Modal (maximized view) -->
-                            <div id="fileContentModal" class="file-content-modal" style="display: none; position: fixed; bottom: 0; left: 0; right: 0; height: 50vh; background: var(--bg-card); border-top: 2px solid var(--accent-blue); z-index: 1000; flex-direction: column;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--accent-blue); background: var(--bg-dark);">
+                            <!-- File Content Modal (maximized view - 90% width) -->
+                            <div id="fileContentModal" class="file-content-modal" style="display: none; position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 90%; height: 50vh; background: var(--bg-card); border-top: 2px solid var(--accent-blue); border-left: 1px solid var(--accent-blue); border-right: 1px solid var(--accent-blue); z-index: 1001; flex-direction: column; border-radius: 12px 12px 0 0;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--accent-blue); background: var(--bg-dark); border-radius: 10px 10px 0 0;">
                                     <h4 id="fileContentModalTitle" style="margin: 0;">File Content</h4>
-                                    <button onclick="minimizeFileContent()" class="service-btn" style="padding: 5px 12px;">⛶ Minimize</button>
+                                    <div style="display: flex; gap: 8px;">
+                                        <button onclick="minimizeFileContent()" class="service-btn" style="padding: 5px 12px;" title="Collapse">⛶</button>
+                                        <button onclick="closeFileContent()" class="service-btn" style="padding: 5px 12px;">✕</button>
+                                    </div>
                                 </div>
                                 <div style="flex: 1; overflow: hidden; padding: 15px;">
                                     <pre id="fileContentModalBody" style="height: 100%; margin: 0; padding: 0; overflow: auto; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;"></pre>
                                 </div>
                             </div>
-                            <div id="fileContentOverlay" class="file-content-overlay" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 50vh; background: rgba(0,0,0,0.5); z-index: 999;" onclick="minimizeFileContent()"></div>
+                            <div id="fileContentOverlay" class="file-content-overlay" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000;" onclick="minimizeFileContent()"></div>
                         </div>
                     </div>
                 </div>
@@ -842,38 +845,30 @@
                 // Show services immediately with initial status before pings complete
                 renderServices(services, false);
                 
-                // Ping services to check actual status - run in parallel with reduced timeout
+                // Ping services to check actual status - use backend API to avoid CORS issues
                 const pingPromises = services.map(async (service) => {
-                    if (!service.checkUrl) {
-                        service.lastChecked = now;
-                        return;
-                    }
                     service.lastChecked = now;
                     
-                    // Try HEAD first with 1s timeout
+                    // Use server-side health check endpoint
                     try {
-                        const controller = new AbortController();
-                        const timeout = setTimeout(() => controller.abort(), 1000);
-                        await fetch(service.checkUrl, {
-                            method: 'HEAD',
-                            signal: controller.signal,
-                            cache: 'no-cache',
-                            credentials: 'include'
+                        const response = await fetch(`/api/services/check?service=${encodeURIComponent(service.serviceName)}`, {
+                            headers: { 'Authorization': `Bearer ${token}` }
                         });
-                        clearTimeout(timeout);
-                        service.status = 'ok';
-                        service.statusText = 'Running';
+                        const data = await response.json();
+                        service.status = data.status;
+                        service.statusText = data.statusText;
                     } catch (e) {
-                        // Try GET as fallback with 1s timeout
+                        // Fallback to direct browser fetch if API fails
                         try {
-                            const controller2 = new AbortController();
-                            const timeout2 = setTimeout(() => controller2.abort(), 1000);
+                            const controller = new AbortController();
+                            const timeout = setTimeout(() => controller.abort(), 3000);
                             await fetch(service.checkUrl, {
-                                method: 'GET',
-                                signal: controller2.signal,
-                                cache: 'no-cache'
+                                method: 'HEAD',
+                                signal: controller.signal,
+                                cache: 'no-cache',
+                                credentials: 'include'
                             });
-                            clearTimeout(timeout2);
+                            clearTimeout(timeout);
                             service.status = 'ok';
                             service.statusText = 'Running';
                         } catch (e2) {
@@ -929,6 +924,43 @@
             loadServices(true); // true = show spinner on manual refresh
         }
 
+        // Check status of a single service and update the UI
+        async function checkServiceStatus(serviceName) {
+            const service = services.find(s => s.serviceName === serviceName);
+            if (!service) return;
+            
+            try {
+                const response = await fetch(`/api/services/check?service=${encodeURIComponent(serviceName)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                
+                service.status = data.status;
+                service.statusText = data.statusText;
+                service.lastChecked = new Date();
+            } catch (e) {
+                // Fallback to browser-based check
+                try {
+                    const controller = new AbortController();
+                    const timeout = setTimeout(() => controller.abort(), 3000);
+                    await fetch(service.checkUrl, {
+                        method: 'HEAD',
+                        signal: controller.signal,
+                        cache: 'no-cache'
+                    });
+                    clearTimeout(timeout);
+                    service.status = 'ok';
+                    service.statusText = 'Running';
+                } catch (e2) {
+                    service.status = 'offline';
+                    service.statusText = 'Offline';
+                }
+            }
+            
+            // Update the UI for just this service
+            renderServices(services, false);
+        }
+
         async function restartService(serviceName, displayName, btn) {
             // Store original button state
             const originalHTML = btn.innerHTML;
@@ -962,11 +994,11 @@
                     btn.innerHTML = '✅';
                     btn.title = 'Restarted!';
                     showToast(data.message || `${displayName} started successfully`, 'success');
-                    // Refresh status to update badges (wait 5 seconds for service to start)
+                    // Check only this service's status after 5 seconds for service to start
                     setTimeout(() => {
                         btn.innerHTML = originalHTML;
                         btn.title = originalTitle;
-                        loadServices();
+                        checkServiceStatus(serviceName);
                     }, 5000);
                 } else {
                     btn.innerHTML = '❌';
@@ -1023,11 +1055,11 @@
                     btn.innerHTML = '✅';
                     btn.title = 'Stopped!';
                     showToast(data.message || `${displayName} stopped successfully`, 'success');
-                    // Refresh status to update badges (wait 5 seconds for service to stop)
+                    // Check only this service's status after 5 seconds for service to stop
                     setTimeout(() => {
                         btn.innerHTML = originalHTML;
                         btn.title = originalTitle;
-                        loadServices();
+                        checkServiceStatus(serviceName);
                     }, 5000);
                 } else {
                     btn.innerHTML = '❌';
@@ -1518,25 +1550,27 @@
         }
         
         function maximizeFileContent() {
-            // Sync content from inline view to modal
+            // Both views are now the same floating panel, just sync content
             const title = document.getElementById('fileContentTitle').textContent;
             const body = document.getElementById('fileContentBody').textContent;
             document.getElementById('fileContentModalTitle').textContent = title;
             document.getElementById('fileContentModalBody').textContent = body;
-            // Show modal and overlay
+            // Hide inline view, show modal
+            document.getElementById('fileContent').style.display = 'none';
             document.getElementById('fileContentModal').style.display = 'flex';
             document.getElementById('fileContentOverlay').style.display = 'block';
         }
         
         function minimizeFileContent() {
-            // Sync content from modal back to inline view (in case it was edited)
+            // Sync content from modal back to inline view
             const title = document.getElementById('fileContentModalTitle').textContent;
             const body = document.getElementById('fileContentModalBody').textContent;
             document.getElementById('fileContentTitle').textContent = title;
             document.getElementById('fileContentBody').textContent = body;
-            // Hide modal and overlay
+            // Hide modal and overlay, show inline view
             document.getElementById('fileContentModal').style.display = 'none';
             document.getElementById('fileContentOverlay').style.display = 'none';
+            document.getElementById('fileContent').style.display = 'flex';
         }
 
         // Toast notification system
