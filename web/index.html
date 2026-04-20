@@ -167,29 +167,6 @@
                             </div>
                             
                             <script>
-                            // Docking behavior - switch to absolute when scrolling near bottom
-                            let fileContentDocked = false;
-                            window.addEventListener('scroll', function() {
-                                const panel = document.getElementById('fileContent');
-                                if (!panel || panel.style.display === 'none') return;
-                                
-                                const scrollTop = window.scrollY || document.documentElement.scrollTop;
-                                const scrollHeight = document.documentElement.scrollHeight;
-                                const clientHeight = window.innerHeight;
-                                const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-                                
-                                // If scrolled within 100px of bottom, switch to absolute positioning
-                                if (distanceFromBottom < 100 && !fileContentDocked) {
-                                    panel.style.position = 'absolute';
-                                    panel.style.bottom = '0';
-                                    fileContentDocked = true;
-                                } else if (distanceFromBottom >= 100 && fileContentDocked) {
-                                    panel.style.position = 'fixed';
-                                    panel.style.bottom = '0';
-                                    fileContentDocked = false;
-                                }
-                            });
-                            
                             // Click outside to close
                             document.addEventListener('click', function(e) {
                                 const panel = document.getElementById('fileContent');
@@ -898,8 +875,19 @@
                             headers: { 'Authorization': `Bearer ${token}` }
                         });
                         const data = await response.json();
-                        service.status = data.status;
-                        service.statusText = data.statusText;
+                        // Handle error responses or missing data
+                        if (response.ok && data.status && data.statusText) {
+                            service.status = data.status;
+                            service.statusText = data.statusText;
+                        } else if (data.error) {
+                            // API returned an error
+                            service.status = 'offline';
+                            service.statusText = 'Error: ' + data.error;
+                        } else {
+                            // Unexpected response format
+                            service.status = 'unknown';
+                            service.statusText = 'Check failed';
+                        }
                     } catch (e) {
                         // Fallback to direct browser fetch if API fails
                         try {
