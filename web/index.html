@@ -152,8 +152,8 @@
                             
                             <div id="fileBrowserBreadcrumb" style="margin-bottom: 15px; color: var(--text-secondary);"></div>
                             <div id="fileList" class="file-list"></div>
-                            <!-- File Content Panel (floating at bottom half) -->
-                            <div id="fileContent" style="display: none; position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 90%; height: 85vh; background: var(--bg-card); border-top: 2px solid var(--accent-blue); border-left: 1px solid var(--accent-blue); border-right: 1px solid var(--accent-blue); z-index: 1000; flex-direction: column; border-radius: 12px 12px 0 0;">
+                            <!-- File Content Panel (minimized - lower half) -->
+                            <div id="fileContent" style="display: none; position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 90%; height: 50vh; background: var(--bg-card); border-top: 2px solid var(--accent-blue); border-left: 1px solid var(--accent-blue); border-right: 1px solid var(--accent-blue); z-index: 1000; flex-direction: column; border-radius: 12px 12px 0 0;">
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--accent-blue); background: var(--bg-dark); border-radius: 10px 10px 0 0;">
                                     <h4 id="fileContentTitle" style="margin: 0; cursor: pointer;" onclick="maximizeFileContent()">File Content</h4>
                                     <div style="display: flex; gap: 8px;">
@@ -833,11 +833,12 @@
                 // Add API server
                 services.push({
                     name: 'Selena API Server',
+                    serviceName: 'selena-api',
                     description: 'Main API server for Selena v2',
                     icon: '🌙',
                     port: settings.port,
                     pid: null,
-                    checkUrl: `http://${settings.domain}:${settings.port}/`,
+                    checkUrl: null, // Don't ping self - use backend API instead
                     status: 'unknown',
                     statusText: 'Checking...'
                 });

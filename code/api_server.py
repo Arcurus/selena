@@ -1291,7 +1291,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             
             # For other services, make HTTP check
             check_urls = {
-                'open-world-selena': 'http://localhost:8081/'
+                'open-world-selena': 'http://localhost:8081/',
+                'openclaw-gateway': 'http://localhost:18789/'
             }
             
             if service_name not in check_urls:
