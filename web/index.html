@@ -712,7 +712,7 @@
             loadServices();
             loadProjects();
             loadCostTracking();
-            loadTodos(); // Pre-load todos for task summary cards
+            loadTodos().then(() => renderServicesTaskSummary()); // Pre-load todos and render task summary
         }
 
         // Services functions
@@ -813,17 +813,32 @@
                             const controller = new AbortController();
                             const timeout = setTimeout(() => controller.abort(), 3000);
                             const response = await fetch(service.checkUrl, {
-                                method: 'GET',
+                                method: 'HEAD',
                                 signal: controller.signal,
-                                cache: 'no-cache'
+                                cache: 'no-cache',
+                                credentials: 'include'
                             });
                             clearTimeout(timeout);
                             // If we get any response (even error status), server is running
                             service.status = 'ok';
                             service.statusText = 'Running';
                         } catch (e) {
-                            service.status = 'error';
-                            service.statusText = 'Down';
+                            // Don't mark as down immediately - try GET as fallback
+                            try {
+                                const controller2 = new AbortController();
+                                const timeout2 = setTimeout(() => controller2.abort(), 3000);
+                                await fetch(service.checkUrl, {
+                                    method: 'GET',
+                                    signal: controller2.signal,
+                                    cache: 'no-cache'
+                                });
+                                clearTimeout(timeout2);
+                                service.status = 'ok';
+                                service.statusText = 'Running';
+                            } catch (e2) {
+                                service.status = 'unknown';
+                                service.statusText = 'Unknown';
+                            }
                         }
                     } else {
                         service.lastChecked = now;
@@ -855,7 +870,7 @@
                         <div class="service-name">${s.name}${isLoading ? ' <span style="color: var(--accent-blue);">⟳</span>' : ''}</div>
                         <div class="service-description">${s.description}</div>
                         <div class="service-meta">
-                            ${s.port ? `<span>📍 Port: ${s.port}</span>` : ''}
+                            ${s.port ? `<button class="service-btn" ${s.checkUrl ? `onclick="window.open('${s.checkUrl}', '_blank')"` : 'disabled'} title="${s.checkUrl ? 'Open in browser' : 'No URL configured'}" style="padding: 4px 10px; font-size: 0.8rem;">📍 ${s.port}</button>` : ''}
                             ${s.pid ? `<span>PID: ${s.pid}</span>` : ''}
                             <span>🕐 ${s.statusText}</span>
                             ${lastCheckedText(s)}
