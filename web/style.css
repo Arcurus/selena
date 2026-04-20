@@ -474,6 +474,22 @@ body {
     animation: cardPulseRed 4s ease-in-out infinite;
 }
 
+/* Loading state for service buttons */
+.service-btn.loading {
+    animation: serviceBtnLoading 0.8s ease-in-out infinite;
+    pointer-events: none;
+    opacity: 0.9;
+}
+
+@keyframes serviceBtnLoading {
+    0%, 100% {
+        transform: scale(1.05);
+    }
+    50% {
+        transform: scale(1.20);
+    }
+}
+
 .status-badge {
     padding: 5px 12px; 
     border-radius: 15px; 

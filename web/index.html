@@ -152,13 +152,31 @@
                             
                             <div id="fileBrowserBreadcrumb" style="margin-bottom: 15px; color: var(--text-secondary);"></div>
                             <div id="fileList" class="file-list"></div>
-                            <div id="fileContent" style="display: none; margin-top: 20px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <!-- File Content Preview (inline) -->
+                            <div id="fileContent" style="display: none; margin-top: 15px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                     <h4 id="fileContentTitle">File Content</h4>
-                                    <button onclick="closeFileContent()" class="service-btn" style="padding: 5px 12px;">← Back</button>
+                                    <div style="display: flex; gap: 8px;">
+                                        <button onclick="maximizeFileContent()" class="service-btn" style="padding: 5px 12px;" title="Maximize">⛶ Maximize</button>
+                                        <button onclick="closeFileContent()" class="service-btn" style="padding: 5px 12px;">✕ Close</button>
+                                    </div>
                                 </div>
-                                <pre id="fileContentBody" style="background: var(--bg-dark); padding: 15px; border-radius: 8px; overflow-x: auto; max-height: 500px; font-size: 0.85rem;"></pre>
+                                <div id="fileContentScroll" style="background: var(--bg-dark); border-radius: 8px; overflow: hidden; max-height: 250px; overflow-y: auto;">
+                                    <pre id="fileContentBody" style="margin: 0; padding: 15px; overflow-x: auto; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;"></pre>
+                                </div>
                             </div>
+                            
+                            <!-- File Content Modal (maximized view) -->
+                            <div id="fileContentModal" class="file-content-modal" style="display: none; position: fixed; bottom: 0; left: 0; right: 0; height: 50vh; background: var(--bg-card); border-top: 2px solid var(--accent-blue); z-index: 1000; flex-direction: column;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--accent-blue); background: var(--bg-dark);">
+                                    <h4 id="fileContentModalTitle" style="margin: 0;">File Content</h4>
+                                    <button onclick="minimizeFileContent()" class="service-btn" style="padding: 5px 12px;">⛶ Minimize</button>
+                                </div>
+                                <div style="flex: 1; overflow: hidden; padding: 15px;">
+                                    <pre id="fileContentModalBody" style="height: 100%; margin: 0; padding: 0; overflow: auto; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;"></pre>
+                                </div>
+                            </div>
+                            <div id="fileContentOverlay" class="file-content-overlay" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 50vh; background: rgba(0,0,0,0.5); z-index: 999;" onclick="minimizeFileContent()"></div>
                         </div>
                     </div>
                 </div>
@@ -899,8 +917,8 @@
                         </div>
                     </div>
                     <div class="service-actions">
-                        <button class="service-btn restart" onclick="restartService('${s.serviceName}','${s.name}')" title="Restart">🔄</button>
-                        <button class="service-btn stop" onclick="stopService('${s.serviceName}','${s.name}')" title="Stop">⏹️</button>
+                        <button class="service-btn restart" onclick="restartService('${s.serviceName}','${s.name}', this)" title="Restart">🔄</button>
+                        <button class="service-btn stop" onclick="stopService('${s.serviceName}','${s.name}', this)" title="Stop">⏹️</button>
                     </div>
                     <span class="status-badge">${s.statusText}</span>
                 </div>
@@ -911,37 +929,125 @@
             loadServices(true); // true = show spinner on manual refresh
         }
 
-        async function restartService(serviceName, displayName) {
+        async function restartService(serviceName, displayName, btn) {
+            // Store original button state
+            const originalHTML = btn.innerHTML;
+            const originalTitle = btn.title;
+            
+            // Immediately show loading state
+            btn.innerHTML = '⏳';
+            btn.title = 'Starting...';
+            btn.classList.add('loading');
+            btn.disabled = true;
+            
+            // Create a timeout promise that rejects after 30 seconds
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('timeout')), 30000);
+            });
+            
             try {
-                const response = await fetch(`/api/services/restart?service=${encodeURIComponent(serviceName)}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                const response = await Promise.race([
+                    fetch(`/api/services/restart?service=${encodeURIComponent(serviceName)}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    }),
+                    timeoutPromise
+                ]);
                 const data = await response.json();
+                
+                // Remove loading state
+                btn.classList.remove('loading');
+                btn.disabled = false;
+                
                 if (data.success) {
-                    showToast(data.message || `${displayName} restarted successfully`, 'success');
-                    loadServices();
+                    btn.innerHTML = '✅';
+                    btn.title = 'Restarted!';
+                    showToast(data.message || `${displayName} started successfully`, 'success');
+                    // Refresh status to update badges
+                    setTimeout(() => {
+                        btn.innerHTML = originalHTML;
+                        btn.title = originalTitle;
+                        loadServices();
+                    }, 1500);
                 } else {
+                    btn.innerHTML = '❌';
+                    btn.title = 'Failed';
                     showToast(`Failed to restart ${displayName}: ${data.error || 'Unknown error'}`, 'error');
+                    setTimeout(() => {
+                        btn.innerHTML = originalHTML;
+                        btn.title = originalTitle;
+                    }, 2000);
                 }
             } catch (e) {
-                showToast(`Error restarting ${displayName}: ${e.message}`, 'error');
+                btn.classList.remove('loading');
+                btn.disabled = false;
+                btn.innerHTML = '❌';
+                btn.title = 'Failed';
+                showToast(`Error restarting ${displayName}: ${e.message === 'timeout' ? 'Request timed out after 30 seconds' : e.message}`, 'error');
+                setTimeout(() => {
+                    btn.innerHTML = originalHTML;
+                    btn.title = originalTitle;
+                }, 2000);
             }
         }
 
-        async function stopService(serviceName, displayName) {
+        async function stopService(serviceName, displayName, btn) {
+            // Store original button state
+            const originalHTML = btn.innerHTML;
+            const originalTitle = btn.title;
+            
+            // Immediately show loading state
+            btn.innerHTML = '⏳';
+            btn.title = 'Stopping...';
+            btn.classList.add('loading');
+            btn.disabled = true;
+            
+            // Create a timeout promise that rejects after 30 seconds
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('timeout')), 30000);
+            });
+            
             try {
-                const response = await fetch(`/api/services/stop?service=${encodeURIComponent(serviceName)}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                const response = await Promise.race([
+                    fetch(`/api/services/stop?service=${encodeURIComponent(serviceName)}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    }),
+                    timeoutPromise
+                ]);
                 const data = await response.json();
+                
+                // Remove loading state
+                btn.classList.remove('loading');
+                btn.disabled = false;
+                
                 if (data.success) {
+                    btn.innerHTML = '✅';
+                    btn.title = 'Stopped!';
                     showToast(data.message || `${displayName} stopped successfully`, 'success');
-                    loadServices();
+                    // Refresh status to update badges
+                    setTimeout(() => {
+                        btn.innerHTML = originalHTML;
+                        btn.title = originalTitle;
+                        loadServices();
+                    }, 1500);
                 } else {
+                    btn.innerHTML = '❌';
+                    btn.title = 'Failed';
                     showToast(`Failed to stop ${displayName}: ${data.error || 'Unknown error'}`, 'error');
+                    setTimeout(() => {
+                        btn.innerHTML = originalHTML;
+                        btn.title = originalTitle;
+                    }, 2000);
                 }
             } catch (e) {
-                showToast(`Error stopping ${displayName}: ${e.message}`, 'error');
+                btn.classList.remove('loading');
+                btn.disabled = false;
+                btn.innerHTML = '❌';
+                btn.title = 'Failed';
+                showToast(`Error stopping ${displayName}: ${e.message === 'timeout' ? 'Request timed out after 30 seconds' : e.message}`, 'error');
+                setTimeout(() => {
+                    btn.innerHTML = originalHTML;
+                    btn.title = originalTitle;
+                }, 2000);
             }
         }
 
@@ -1368,6 +1474,8 @@
             titleEl.textContent = '📄 ' + path.split('/').pop();
             bodyEl.textContent = 'Loading...';
             contentEl.style.display = 'block';
+            // Auto-scroll to file content
+            contentEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
             try {
                 const response = await fetch(`/api/files/read?path=${encodeURIComponent(path)}`, {
@@ -1395,6 +1503,9 @@
                 }
 
                 bodyEl.textContent = data.content;
+                // Also update modal content if it's open
+                document.getElementById('fileContentModalTitle').textContent = '📄 ' + path.split('/').pop();
+                document.getElementById('fileContentModalBody').textContent = data.content;
             } catch (e) {
                 bodyEl.textContent = 'Error: ' + e.message;
             }
@@ -1402,6 +1513,30 @@
 
         function closeFileContent() {
             document.getElementById('fileContent').style.display = 'none';
+            document.getElementById('fileContentModal').style.display = 'none';
+            document.getElementById('fileContentOverlay').style.display = 'none';
+        }
+        
+        function maximizeFileContent() {
+            // Sync content from inline view to modal
+            const title = document.getElementById('fileContentTitle').textContent;
+            const body = document.getElementById('fileContentBody').textContent;
+            document.getElementById('fileContentModalTitle').textContent = title;
+            document.getElementById('fileContentModalBody').textContent = body;
+            // Show modal and overlay
+            document.getElementById('fileContentModal').style.display = 'flex';
+            document.getElementById('fileContentOverlay').style.display = 'block';
+        }
+        
+        function minimizeFileContent() {
+            // Sync content from modal back to inline view (in case it was edited)
+            const title = document.getElementById('fileContentModalTitle').textContent;
+            const body = document.getElementById('fileContentModalBody').textContent;
+            document.getElementById('fileContentTitle').textContent = title;
+            document.getElementById('fileContentBody').textContent = body;
+            // Hide modal and overlay
+            document.getElementById('fileContentModal').style.display = 'none';
+            document.getElementById('fileContentOverlay').style.display = 'none';
         }
 
         // Toast notification system
