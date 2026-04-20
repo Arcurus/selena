@@ -847,8 +847,8 @@
                                 service.status = 'ok';
                                 service.statusText = 'Running';
                             } catch (e2) {
-                                service.status = 'unknown';
-                                service.statusText = 'Unknown';
+                                service.status = 'offline';
+                                service.statusText = 'Offline';
                             }
                         }
                     } else {
@@ -881,7 +881,7 @@
                         <div class="service-name">${s.name}${isLoading ? ' <span style="color: var(--accent-blue);">⟳</span>' : ''}</div>
                         <div class="service-description">${s.description}</div>
                         <div class="service-meta">
-                            ${s.port ? `<button class="service-btn" ${s.checkUrl ? `onclick="window.open('${s.checkUrl}', '_blank')"` : 'disabled'} title="${s.checkUrl ? 'Open in browser' : 'No URL configured'}">Open</button>` : ''}
+                            ${s.port ? `<button class="service-btn" ${s.checkUrl ? `onclick="window.open('${s.checkUrl}', '_blank')"` : 'disabled'} title="${s.checkUrl ? 'Open in browser' : 'No URL configured'}" style="padding: 1px 8px; font-size: 0.75rem; line-height: 1.2;">Open</button>` : ''}
                             ${s.port ? `<span>📍 Port: ${s.port}</span>` : ''}
                             ${s.pid ? `<span>PID: ${s.pid}</span>` : ''}
                             <span>🕐 ${s.statusText}</span>
