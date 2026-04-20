@@ -1009,9 +1009,15 @@
             // Immediately update the service status in the UI to "starting..." / "restarting..."
             const serviceItem = btn.closest('.service-item');
             if (serviceItem) {
-                const statusElements = serviceItem.querySelectorAll('.status-badge, .service-meta span:last-child');
-                statusElements.forEach(el => {
-                    if (el.textContent.includes('running') || el.textContent.includes('stopped') || el.textContent.includes('error')) {
+                // Update status badge (direct child of service-item)
+                const statusBadge = serviceItem.querySelector('.status-badge');
+                if (statusBadge) {
+                    statusBadge.textContent = 'starting...';
+                }
+                // Update status span in service-meta (contains the 🕐 emoji)
+                const metaSpans = serviceItem.querySelectorAll('.service-meta > span');
+                metaSpans.forEach(el => {
+                    if (el.textContent.includes('🕐')) {
                         el.textContent = '🕐 starting...';
                     }
                 });
@@ -1081,9 +1087,15 @@
             // Immediately update the service status in the UI to "stopping..."
             const serviceItem = btn.closest('.service-item');
             if (serviceItem) {
-                const statusElements = serviceItem.querySelectorAll('.status-badge, .service-meta span:last-child');
-                statusElements.forEach(el => {
-                    if (el.textContent.includes('running') || el.textContent.includes('stopped') || el.textContent.includes('error')) {
+                // Update status badge (direct child of service-item)
+                const statusBadge = serviceItem.querySelector('.status-badge');
+                if (statusBadge) {
+                    statusBadge.textContent = 'stopping...';
+                }
+                // Update status span in service-meta (contains the 🕐 emoji)
+                const metaSpans = serviceItem.querySelectorAll('.service-meta > span');
+                metaSpans.forEach(el => {
+                    if (el.textContent.includes('🕐')) {
                         el.textContent = '🕐 stopping...';
                     }
                 });

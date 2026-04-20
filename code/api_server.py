@@ -373,10 +373,10 @@ class RequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         
-        # Serve static files (images, css, js)
-        if path.startswith('/images/') or path.startswith('/static/'):
+        # Serve images from web/images/ directory
+        if path.startswith('/images/'):
             web_dir = os.path.join(SELENA_ROOT, 'web')
-            # Remove leading slash and map to web directory
+            # Remove leading slash and map to web/images/ directory
             file_path = path.lstrip('/')
             full_path = os.path.join(web_dir, file_path)
             if os.path.exists(full_path) and os.path.isfile(full_path):
@@ -387,9 +387,6 @@ class RequestHandler(BaseHTTPRequestHandler):
                     '.jpg': 'image/jpeg',
                     '.jpeg': 'image/jpeg',
                     '.gif': 'image/gif',
-                    '.css': 'text/css',
-                    '.js': 'application/javascript',
-                    '.html': 'text/html',
                 }
                 content_type = content_types.get(ext, 'application/octet-stream')
                 try:
