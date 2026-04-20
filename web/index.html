@@ -962,12 +962,12 @@
                     btn.innerHTML = '✅';
                     btn.title = 'Restarted!';
                     showToast(data.message || `${displayName} started successfully`, 'success');
-                    // Refresh status to update badges
+                    // Refresh status to update badges (wait 5 seconds for service to start)
                     setTimeout(() => {
                         btn.innerHTML = originalHTML;
                         btn.title = originalTitle;
                         loadServices();
-                    }, 1500);
+                    }, 5000);
                 } else {
                     btn.innerHTML = '❌';
                     btn.title = 'Failed';
@@ -1023,12 +1023,12 @@
                     btn.innerHTML = '✅';
                     btn.title = 'Stopped!';
                     showToast(data.message || `${displayName} stopped successfully`, 'success');
-                    // Refresh status to update badges
+                    // Refresh status to update badges (wait 5 seconds for service to stop)
                     setTimeout(() => {
                         btn.innerHTML = originalHTML;
                         btn.title = originalTitle;
                         loadServices();
-                    }, 1500);
+                    }, 5000);
                 } else {
                     btn.innerHTML = '❌';
                     btn.title = 'Failed';
