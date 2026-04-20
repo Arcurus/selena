@@ -153,9 +153,9 @@
                             <div id="fileBrowserBreadcrumb" style="margin-bottom: 15px; color: var(--text-secondary);"></div>
                             <div id="fileList" class="file-list"></div>
                             <!-- File Content Panel (floating at bottom half) -->
-                            <div id="fileContent" style="display: none; position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 90%; height: 50vh; background: var(--bg-card); border-top: 2px solid var(--accent-blue); border-left: 1px solid var(--accent-blue); border-right: 1px solid var(--accent-blue); z-index: 1000; flex-direction: column; border-radius: 12px 12px 0 0;">
+                            <div id="fileContent" style="display: none; position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 90%; height: 85vh; background: var(--bg-card); border-top: 2px solid var(--accent-blue); border-left: 1px solid var(--accent-blue); border-right: 1px solid var(--accent-blue); z-index: 1000; flex-direction: column; border-radius: 12px 12px 0 0;">
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--accent-blue); background: var(--bg-dark); border-radius: 10px 10px 0 0;">
-                                    <h4 id="fileContentTitle" style="margin: 0;">File Content</h4>
+                                    <h4 id="fileContentTitle" style="margin: 0; cursor: pointer;" onclick="maximizeFileContent()">File Content</h4>
                                     <div style="display: flex; gap: 8px;">
                                         <button onclick="maximizeFileContent()" class="service-btn" style="padding: 5px 12px;" title="Expand">⛶</button>
                                         <button onclick="closeFileContent()" class="service-btn" style="padding: 5px 12px;">✕</button>
@@ -166,10 +166,52 @@
                                 </div>
                             </div>
                             
+                            <script>
+                            // Docking behavior - switch to absolute when scrolling near bottom
+                            let fileContentDocked = false;
+                            window.addEventListener('scroll', function() {
+                                const panel = document.getElementById('fileContent');
+                                if (!panel || panel.style.display === 'none') return;
+                                
+                                const scrollTop = window.scrollY || document.documentElement.scrollTop;
+                                const scrollHeight = document.documentElement.scrollHeight;
+                                const clientHeight = window.innerHeight;
+                                const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+                                
+                                // If scrolled within 100px of bottom, switch to absolute positioning
+                                if (distanceFromBottom < 100 && !fileContentDocked) {
+                                    panel.style.position = 'absolute';
+                                    panel.style.bottom = '0';
+                                    fileContentDocked = true;
+                                } else if (distanceFromBottom >= 100 && fileContentDocked) {
+                                    panel.style.position = 'fixed';
+                                    panel.style.bottom = '0';
+                                    fileContentDocked = false;
+                                }
+                            });
+                            
+                            // Click outside to close
+                            document.addEventListener('click', function(e) {
+                                const panel = document.getElementById('fileContent');
+                                const modal = document.getElementById('fileContentModal');
+                                if (!panel || panel.style.display === 'none') return;
+                                if (modal && modal.style.display !== 'none') return;
+                                
+                                // Check if click is inside the panel
+                                if (panel.contains(e.target)) return;
+                                
+                                // Check if click was on a file item (should not close)
+                                if (e.target.closest('.file-item')) return;
+                                
+                                // Close the panel
+                                closeFileContent();
+                            });
+                            </script>
+                            
                             <!-- File Content Modal (maximized view - 90% width) -->
-                            <div id="fileContentModal" class="file-content-modal" style="display: none; position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 90%; height: 50vh; background: var(--bg-card); border-top: 2px solid var(--accent-blue); border-left: 1px solid var(--accent-blue); border-right: 1px solid var(--accent-blue); z-index: 1001; flex-direction: column; border-radius: 12px 12px 0 0;">
+                            <div id="fileContentModal" class="file-content-modal" style="display: none; position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 90%; height: 85vh; background: var(--bg-card); border-top: 2px solid var(--accent-blue); border-left: 1px solid var(--accent-blue); border-right: 1px solid var(--accent-blue); z-index: 1001; flex-direction: column; border-radius: 12px 12px 0 0;">
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--accent-blue); background: var(--bg-dark); border-radius: 10px 10px 0 0;">
-                                    <h4 id="fileContentModalTitle" style="margin: 0;">File Content</h4>
+                                    <h4 id="fileContentModalTitle" style="margin: 0; cursor: pointer;" onclick="minimizeFileContent()">File Content</h4>
                                     <div style="display: flex; gap: 8px;">
                                         <button onclick="minimizeFileContent()" class="service-btn" style="padding: 5px 12px;" title="Collapse">⛶</button>
                                         <button onclick="closeFileContent()" class="service-btn" style="padding: 5px 12px;">✕</button>
@@ -179,7 +221,7 @@
                                     <pre id="fileContentModalBody" style="height: 100%; margin: 0; padding: 0; overflow: auto; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;"></pre>
                                 </div>
                             </div>
-                            <div id="fileContentOverlay" class="file-content-overlay" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000;" onclick="minimizeFileContent()"></div>
+                            <div id="fileContentOverlay" class="file-content-overlay" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000;" onclick="minimizeFileContent()"></div>
                         </div>
                     </div>
                 </div>

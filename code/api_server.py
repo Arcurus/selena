@@ -839,9 +839,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                 # Get all files recursively
                 all_files = get_files_recursive(search_dir)
                 
-                # Filter by search term if provided
+                # Filter by search term if provided (search filename only, like /api/files/list)
                 if search:
-                    all_files = [f for f in all_files if search in f['path'].lower()]
+                    all_files = [f for f in all_files if search in os.path.basename(f['path']).lower()]
                 
                 # Sort by modified time (most recent first)
                 all_files.sort(key=lambda x: x.get('modified') or '', reverse=True)
@@ -884,9 +884,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                 # Get all files recursively
                 all_files = get_files_recursive(search_dir)
                 
-                # Filter by search term if provided
+                # Filter by search term if provided (search filename only, like /api/files/list)
                 if search:
-                    all_files = [f for f in all_files if search in f['path'].lower()]
+                    all_files = [f for f in all_files if search in os.path.basename(f['path']).lower()]
                 
                 # Sort by size (largest first)
                 all_files.sort(key=lambda x: x.get('size', 0), reverse=True)
@@ -1283,9 +1283,14 @@ class RequestHandler(BaseHTTPRequestHandler):
             query = parse_qs(parsed.query) if parsed.query else {}
             service_name = query.get('service', [''])[0] if query else ''
             
-            # Determine URL based on service
+            # For selena-api, return ok if this server is responding (can't self-check via HTTP)
+            if service_name == 'selena-api':
+                # If we're handling this request, the server is running
+                self.send_json({'service': service_name, 'status': 'ok', 'statusText': 'Running'})
+                return
+            
+            # For other services, make HTTP check
             check_urls = {
-                'selena-api': 'http://localhost:8765/',
                 'open-world-selena': 'http://localhost:8081/'
             }
             
@@ -1298,7 +1303,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             # Do server-side HTTP check
             import urllib.request
             try:
-                req = urllib.request.Request(url, method='HEAD')
+                req = urllib.request.Request(url, method='GET')
                 req.add_header('User-Agent', 'Selena-API-Check/1.0')
                 urllib.request.urlopen(req, timeout=3)
                 self.send_json({'service': service_name, 'status': 'ok', 'statusText': 'Running'})
