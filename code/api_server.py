@@ -1350,21 +1350,41 @@ class RequestHandler(BaseHTTPRequestHandler):
                     else:
                         result['error'] = 'No PID file found'
                 elif service_name == 'open-world-selena':
+                    # Try PID file first, then check port
                     pid_file = os.path.join(DATA_DIR, 'open_world.pid')
+                    pid_killed = False
                     if os.path.exists(pid_file):
                         with open(pid_file, 'r') as f:
                             pid = int(f.read().strip())
                         try:
                             os.kill(pid, 9)
-                            result['success'] = True
+                            pid_killed = True
                             result['message'] = f'Stopped open-world-selena (PID {pid})'
                         except ProcessLookupError:
-                            result['success'] = True
-                            result['message'] = f'Process {pid} already gone'
+                            result['message'] = f'PID {pid} already gone, checking port...'
                         except Exception as e:
                             result['error'] = str(e)
-                    else:
-                        result['error'] = 'No PID file found'
+                    
+                    # Also check if port 8081 is still in use and kill that process
+                    try:
+                        import subprocess
+                        # Find process using port 8081
+                        check = subprocess.run(['fuser', '8081/tcp'], capture_output=True, text=True)
+                        if check.stdout.strip():
+                            pid_from_port = int(check.stdout.strip().split()[0])
+                            try:
+                                os.kill(pid_from_port, 9)
+                                result['message'] = f'Stopped open-world-selena (port PID {pid_from_port})'
+                                pid_killed = True
+                            except:
+                                pass
+                    except:
+                        pass
+                    
+                    if pid_killed or 'port' in result.get('message', ''):
+                        result['success'] = True
+                    elif 'error' not in result:
+                        result['error'] = 'No PID file and port 8081 not in use'
                 else:
                     result['error'] = f'Unknown service: {service_name}'
             else:
