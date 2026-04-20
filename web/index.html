@@ -816,45 +816,47 @@
                     statusText: 'Running'
                 });
 
-                // Ping services to check actual status
-                for (let service of services) {
-                    if (service.checkUrl) {
+                // Ping services to check actual status - run in parallel with reduced timeout
+                const pingPromises = services.map(async (service) => {
+                    if (!service.checkUrl) {
                         service.lastChecked = now;
+                        return;
+                    }
+                    service.lastChecked = now;
+                    
+                    // Try HEAD first with 1s timeout
+                    try {
+                        const controller = new AbortController();
+                        const timeout = setTimeout(() => controller.abort(), 1000);
+                        await fetch(service.checkUrl, {
+                            method: 'HEAD',
+                            signal: controller.signal,
+                            cache: 'no-cache',
+                            credentials: 'include'
+                        });
+                        clearTimeout(timeout);
+                        service.status = 'ok';
+                        service.statusText = 'Running';
+                    } catch (e) {
+                        // Try GET as fallback with 1s timeout
                         try {
-                            const controller = new AbortController();
-                            const timeout = setTimeout(() => controller.abort(), 3000);
-                            const response = await fetch(service.checkUrl, {
-                                method: 'HEAD',
-                                signal: controller.signal,
-                                cache: 'no-cache',
-                                credentials: 'include'
+                            const controller2 = new AbortController();
+                            const timeout2 = setTimeout(() => controller2.abort(), 1000);
+                            await fetch(service.checkUrl, {
+                                method: 'GET',
+                                signal: controller2.signal,
+                                cache: 'no-cache'
                             });
-                            clearTimeout(timeout);
-                            // If we get any response (even error status), server is running
+                            clearTimeout(timeout2);
                             service.status = 'ok';
                             service.statusText = 'Running';
-                        } catch (e) {
-                            // Don't mark as down immediately - try GET as fallback
-                            try {
-                                const controller2 = new AbortController();
-                                const timeout2 = setTimeout(() => controller2.abort(), 3000);
-                                await fetch(service.checkUrl, {
-                                    method: 'GET',
-                                    signal: controller2.signal,
-                                    cache: 'no-cache'
-                                });
-                                clearTimeout(timeout2);
-                                service.status = 'ok';
-                                service.statusText = 'Running';
-                            } catch (e2) {
-                                service.status = 'offline';
-                                service.statusText = 'Offline';
-                            }
+                        } catch (e2) {
+                            service.status = 'offline';
+                            service.statusText = 'Offline';
                         }
-                    } else {
-                        service.lastChecked = now;
                     }
-                }
+                });
+                await Promise.all(pingPromises);
 
                 // Store last known state
                 lastServicesState = services;
@@ -902,38 +904,36 @@
         }
 
         async function restartService(name) {
-            if (!confirm(`Restart ${name}?`)) return;
             try {
                 const response = await fetch(`/api/services/restart?service=${encodeURIComponent(name)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json();
                 if (data.success) {
-                    alert(`✓ ${data.message || name + ' restarted successfully'}`);
+                    showToast(data.message || `${name} restarted successfully`, 'success');
                     loadServices();
                 } else {
-                    alert(`✗ Failed to restart ${name}: ${data.error || 'Unknown error'}`);
+                    showToast(`Failed to restart ${name}: ${data.error || 'Unknown error'}`, 'error');
                 }
             } catch (e) {
-                alert(`✗ Error restarting ${name}: ${e.message}`);
+                showToast(`Error restarting ${name}: ${e.message}`, 'error');
             }
         }
 
         async function stopService(name) {
-            if (!confirm(`Stop ${name}? This may cause data loss!`)) return;
             try {
                 const response = await fetch(`/api/services/stop?service=${encodeURIComponent(name)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json();
                 if (data.success) {
-                    alert(`✓ ${data.message || name + ' stopped successfully'}`);
+                    showToast(data.message || `${name} stopped successfully`, 'success');
                     loadServices();
                 } else {
-                    alert(`✗ Failed to stop ${name}: ${data.error || 'Unknown error'}`);
+                    showToast(`Failed to stop ${name}: ${data.error || 'Unknown error'}`, 'error');
                 }
             } catch (e) {
-                alert(`✗ Error stopping ${name}: ${e.message}`);
+                showToast(`Error stopping ${name}: ${e.message}`, 'error');
             }
         }
 

@@ -1279,14 +1279,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.send_json({'error': 'Unauthorized'}, 401)
                 return
             
-            # Parse query string manually since we need service name
-            parsed = urlparse(path)
-            query = parse_qs(parsed.query) if '?' in path else {}
-            
-            # Alternative: parse from full path
-            if 'service' not in query:
-                from urllib.parse import parse_qs as pqs
-                query = pqs(parsed.query) if parsed.query else {}
+            # Parse query string from the full URL (self.path includes query)
+            parsed = urlparse(self.path)
+            query = parse_qs(parsed.query) if parsed.query else {}
             
             service_name = query.get('service', [''])[0] if query else ''
             if not service_name:
