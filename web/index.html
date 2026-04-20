@@ -111,7 +111,7 @@
                                 <div class="login-error" id="fileBrowserAuthError" style="display: none;">Invalid password</div>
                             </div>
                         </div>
-                        <div id="fileBrowserContent" style="display: none;">
+                        <div id="fileBrowserContent" style="display: none; padding-bottom: 55vh;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                                 <h3 id="fileBrowserTitle">📂 Files</h3>
                                 <button onclick="closeFileBrowser()" class="service-btn" style="padding: 8px 16px;">✕ Close</button>
@@ -151,14 +151,14 @@
                             </div>
                             
                             <div id="fileBrowserBreadcrumb" style="margin-bottom: 15px; color: var(--text-secondary);"></div>
-                            <div id="fileList" class="file-list"></div>
+                            <div id="fileList" class="file-list" style="padding-bottom: 20px;"></div>
                             <!-- File Content Panel (minimized - lower half) -->
                             <div id="fileContent" style="display: none; position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 90%; height: 50vh; background: var(--bg-card); border-top: 2px solid var(--accent-blue); border-left: 1px solid var(--accent-blue); border-right: 1px solid var(--accent-blue); z-index: 1000; flex-direction: column; border-radius: 12px 12px 0 0;">
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--accent-blue); background: var(--bg-dark); border-radius: 10px 10px 0 0;">
-                                    <h4 id="fileContentTitle" style="margin: 0; cursor: pointer;" onclick="maximizeFileContent()">File Content</h4>
-                                    <div style="display: flex; gap: 8px;">
-                                        <button onclick="maximizeFileContent()" class="service-btn" style="padding: 5px 12px;" title="Expand">⛶</button>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
                                         <button onclick="closeFileContent()" class="service-btn" style="padding: 5px 12px;">✕</button>
+                                        <h4 id="fileContentTitle" style="margin: 0; cursor: pointer; border: 1px solid var(--accent-blue); padding: 4px 12px; border-radius: 6px; background: var(--bg-secondary);" onclick="maximizeFileContent()">File Content</h4>
+                                        <button onclick="maximizeFileContent()" class="service-btn" style="padding: 5px 12px;" title="Expand">⛶</button>
                                     </div>
                                 </div>
                                 <div id="fileContentScroll" style="flex: 1; overflow: hidden; padding: 15px;">
@@ -188,10 +188,10 @@
                             <!-- File Content Modal (maximized view - 90% width) -->
                             <div id="fileContentModal" class="file-content-modal" style="display: none; position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 90%; height: 85vh; background: var(--bg-card); border-top: 2px solid var(--accent-blue); border-left: 1px solid var(--accent-blue); border-right: 1px solid var(--accent-blue); z-index: 1001; flex-direction: column; border-radius: 12px 12px 0 0;">
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--accent-blue); background: var(--bg-dark); border-radius: 10px 10px 0 0;">
-                                    <h4 id="fileContentModalTitle" style="margin: 0; cursor: pointer;" onclick="minimizeFileContent()">File Content</h4>
-                                    <div style="display: flex; gap: 8px;">
-                                        <button onclick="minimizeFileContent()" class="service-btn" style="padding: 5px 12px;" title="Collapse">⛶</button>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
                                         <button onclick="closeFileContent()" class="service-btn" style="padding: 5px 12px;">✕</button>
+                                        <h4 id="fileContentModalTitle" style="margin: 0; cursor: pointer; border: 1px solid var(--accent-blue); padding: 4px 12px; border-radius: 6px; background: var(--bg-secondary);" onclick="minimizeFileContent()">File Content</h4>
+                                        <button onclick="minimizeFileContent()" class="service-btn" style="padding: 5px 12px;" title="Collapse">⛶</button>
                                     </div>
                                 </div>
                                 <div style="flex: 1; overflow: hidden; padding: 15px;">
@@ -745,6 +745,8 @@
             createStarfield();
             loadDashboard();
             loadCostTracking();
+            // Set up services polling by showing the services tab
+            showTab('services');
         }
 
         function saveSetting(key, value) {
@@ -1004,6 +1006,17 @@
             btn.classList.add('loading');
             btn.disabled = true;
             
+            // Immediately update the service status in the UI to "starting..." / "restarting..."
+            const serviceItem = btn.closest('.service-item');
+            if (serviceItem) {
+                const statusElements = serviceItem.querySelectorAll('.status-badge, .service-meta span:last-child');
+                statusElements.forEach(el => {
+                    if (el.textContent.includes('running') || el.textContent.includes('stopped') || el.textContent.includes('error')) {
+                        el.textContent = '🕐 starting...';
+                    }
+                });
+            }
+            
             // Create a timeout promise that rejects after 30 seconds
             const timeoutPromise = new Promise((_, reject) => {
                 setTimeout(() => reject(new Error('timeout')), 30000);
@@ -1059,11 +1072,22 @@
             const originalHTML = btn.innerHTML;
             const originalTitle = btn.title;
             
-            // Immediately show loading state
+            // Immediately show loading state on button
             btn.innerHTML = '⏳';
             btn.title = 'Stopping...';
             btn.classList.add('loading');
             btn.disabled = true;
+            
+            // Immediately update the service status in the UI to "stopping..."
+            const serviceItem = btn.closest('.service-item');
+            if (serviceItem) {
+                const statusElements = serviceItem.querySelectorAll('.status-badge, .service-meta span:last-child');
+                statusElements.forEach(el => {
+                    if (el.textContent.includes('running') || el.textContent.includes('stopped') || el.textContent.includes('error')) {
+                        el.textContent = '🕐 stopping...';
+                    }
+                });
+            }
             
             // Create a timeout promise that rejects after 30 seconds
             const timeoutPromise = new Promise((_, reject) => {
