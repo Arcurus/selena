@@ -161,8 +161,9 @@
                                         <button onclick="maximizeFileContent()" class="service-btn" style="padding: 5px 12px;" title="Expand">⛶</button>
                                     </div>
                                 </div>
-                                <div id="fileContentScroll" style="flex: 1; overflow: hidden; padding: 15px; background: url('images/cosmic-footer.png') no-repeat center bottom; background-size: 100% auto;">
-                                    <pre id="fileContentBody" style="height: 100%; margin: 0; padding: 0; overflow: auto; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;"></pre>
+                                <div id="fileContentScroll" style="flex: 1; overflow: hidden; padding: 15px; position: relative; display: flex; flex-direction: column;">
+                                    <pre id="fileContentBody" class="cosmic-bg" style="flex: 1; margin: 0; padding: 0; overflow: auto; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;"></pre>
+                                    <img src="/static/agents/selena_overseer.png" alt="Selena" style="width: 150px; height: auto; margin-top: 10px; border-radius: 8px; flex-shrink: 0; align-self: center; opacity: 0.9; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
                                 </div>
                             </div>
                             
@@ -195,7 +196,7 @@
                                     </div>
                                 </div>
                                 <div style="flex: 1; overflow: hidden; padding: 15px;">
-                                    <pre id="fileContentModalBody" style="height: 100%; margin: 0; padding: 0; overflow: auto; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;"></pre>
+                                    <pre id="fileContentModalBody" class="cosmic-bg" style="height: 100%; margin: 0; padding: 0; overflow: auto; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;"></pre>
                                 </div>
                             </div>
                             <div id="fileContentOverlay" class="file-content-overlay" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000;" onclick="minimizeFileContent()"></div>

@@ -1148,3 +1148,22 @@ body {
         box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
     }
 }
+
+/* Cosmic background for file content panels - 50% opacity */
+.cosmic-bg {
+    position: relative;
+}
+
+.cosmic-bg::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url('/images/cosmic-footer.png') no-repeat center bottom / 100% auto;
+    background-attachment: scroll;
+    opacity: 0.5;
+    z-index: -1;
+    pointer-events: none;
+}
