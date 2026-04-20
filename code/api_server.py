@@ -1289,6 +1289,11 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.send_json({'service': service_name, 'status': 'ok', 'statusText': 'Running'})
                 return
             
+            # For agent-system, return ok since selena-api is running (agent system is part of it)
+            if service_name == 'agent-system':
+                self.send_json({'service': service_name, 'status': 'ok', 'statusText': 'Running'})
+                return
+            
             # For other services, make HTTP check
             check_urls = {
                 'open-world-selena': 'http://localhost:8081/',
