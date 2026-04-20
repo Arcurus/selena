@@ -947,75 +947,13 @@ body {
     }
 }
 
-/* Real distant star animation for header */
+/* Twinkling star - canvas-based, injected by star-script.js */
 .header-star {
-    position: relative;
     display: inline-block;
-    width: 24px;
-    height: 24px;
+    width: 48px;
+    height: 48px;
     vertical-align: middle;
-    font-size: 0; /* Hide the emoji, show only CSS star */
-}
-
-.header-star::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 5px;
-    height: 5px;
-    background: white;
-    border-radius: 50%;
-    box-shadow:
-        /* Center glow */
-        0 0 3px 1px rgba(200, 220, 255, 0.8),
-        0 0 8px 2px rgba(135, 180, 248, 0.6),
-        0 0 15px 4px rgba(135, 180, 248, 0.4),
-        /* Cross rays */
-        0 -10px 0 0 rgba(200, 220, 255, 0.9),
-        0 10px 0 0 rgba(200, 220, 255, 0.9),
-        -10px 0 0 0 rgba(200, 220, 255, 0.9),
-        10px 0 0 0 rgba(200, 220, 255, 0.9),
-        /* Diagonal accent rays (smaller) */
-        -7px -7px 0 0 rgba(200, 220, 255, 0.5),
-        7px -7px 0 0 rgba(200, 220, 255, 0.5),
-        -7px 7px 0 0 rgba(200, 220, 255, 0.5),
-        7px 7px 0 0 rgba(200, 220, 255, 0.5);
-    animation: star-pulse 2s ease-in-out infinite;
-}
-
-@keyframes star-pulse {
-    0%, 100% {
-        box-shadow:
-            0 0 3px 1px rgba(135, 180, 248, 0.8),
-            0 0 8px 2px rgba(135, 180, 248, 0.5),
-            0 0 15px 4px rgba(135, 180, 248, 0.3),
-            0 -10px 0 0 rgba(135, 180, 248, 0.8),
-            0 10px 0 0 rgba(135, 180, 248, 0.8),
-            -10px 0 0 0 rgba(135, 180, 248, 0.8),
-            10px 0 0 0 rgba(135, 180, 248, 0.8),
-            -7px -7px 0 0 rgba(135, 180, 248, 0.4),
-            7px -7px 0 0 rgba(135, 180, 248, 0.4),
-            -7px 7px 0 0 rgba(135, 180, 248, 0.4),
-            7px 7px 0 0 rgba(135, 180, 248, 0.4);
-        transform: translate(-50%, -50%) scale(1);
-    }
-    50% {
-        box-shadow:
-            0 0 4px 2px rgba(255, 255, 255, 1),
-            0 0 12px 4px rgba(200, 220, 255, 0.8),
-            0 0 25px 8px rgba(135, 180, 248, 0.6),
-            0 -10px 0 0 rgba(255, 255, 255, 0.95),
-            0 10px 0 0 rgba(255, 255, 255, 0.95),
-            -10px 0 0 0 rgba(255, 255, 255, 0.95),
-            10px 0 0 0 rgba(255, 255, 255, 0.95),
-            -7px -7px 0 0 rgba(200, 220, 255, 0.6),
-            7px -7px 0 0 rgba(200, 220, 255, 0.6),
-            -7px 7px 0 0 rgba(200, 220, 255, 0.6),
-            7px 7px 0 0 rgba(200, 220, 255, 0.6);
-        transform: translate(-50%, -50%) scale(1.1);
-    }
+    /* Empty placeholder - canvas star injected by star-script.js */
 }
 
 /* File Browser Styles */

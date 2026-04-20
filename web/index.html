@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Selena Astra - explore the stars</title>
     <link rel="stylesheet" href="/static/style.css">
+    <!-- Twinkling Star Script - loaded async/non-blocking -->
+    <script src="/static/star-script.js" async></script>
 </head>
 <body>
     <!-- Toast Notifications (top right) -->
@@ -31,7 +33,7 @@
     <!-- Main Dashboard -->
     <div class="dashboard" id="dashboard">
         <div class="header">
-            <h1>🌙 <span class="header-star">✨</span> Selena Astra - explore the stars <span class="header-star">✨</span></h1>
+            <h1>🌙 <span class="header-star"></span> Selena Astra - explore the stars <span class="header-star"></span></h1>
             <button class="logout" onclick="logout()">Logout</button>
         </div>
 
@@ -74,6 +76,10 @@
                         
                         <div class="settings-panel">
                             <h3>🔧 Quick Settings</h3>
+                            <div class="setting-item">
+                                <label>Domain</label>
+                                <input type="text" id="settingDomain" value="" placeholder="selenaastra.com">
+                            </div>
                             <div class="setting-item">
                                 <label>Port</label>
                                 <input type="number" id="settingPort" value="8765">
@@ -381,7 +387,10 @@
         let deletedTodosExpanded = false;
         let allTodosCache = []; // Cache all todos for search suggestions
         let lastDeletedTask = JSON.parse(localStorage.getItem('lastDeletedTask') || 'null'); // For undo delete
-        const settings = { port: localStorage.getItem('selena_port') || '8765' };
+        const settings = {
+            port: localStorage.getItem('selena_port') || '8765',
+            domain: localStorage.getItem('selena_domain') || window.location.hostname
+        };
         
         // Show undo button if there's a last deleted task
         if (lastDeletedTask) {
@@ -690,6 +699,7 @@
         function showDashboard() {
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('dashboard').style.display = 'block';
+            document.getElementById('settingDomain').value = settings.domain;
             document.getElementById('settingPort').value = settings.port;
             document.getElementById('settingPort2').value = settings.port;
             createStarfield();
@@ -703,6 +713,7 @@
         }
 
         function saveAllSettings() {
+            saveSetting('domain', document.getElementById('settingDomain').value);
             saveSetting('port', document.getElementById('settingPort').value);
             document.getElementById('settingPort2').value = document.getElementById('settingPort').value;
             alert('Settings saved! 🌙');
@@ -763,7 +774,7 @@
                     icon: '🌙',
                     port: settings.port,
                     pid: null,
-                    checkUrl: `http://localhost:${settings.port}/`,
+                    checkUrl: `http://${settings.domain}:${settings.port}/`,
                     status: data.authenticated ? 'ok' : 'unknown',
                     statusText: data.authenticated ? 'Running' : 'Unknown'
                 });
@@ -789,7 +800,7 @@
                     icon: '🎮',
                     port: '8081',
                     pid: null,
-                    checkUrl: 'http://localhost:8081/',
+                    checkUrl: `http://${settings.domain}:8081/`,
                     status: 'unknown',
                     statusText: 'Checking...'
                 });
@@ -800,7 +811,7 @@
                     icon: '🦶',
                     port: '18789',
                     pid: null,
-                    checkUrl: 'http://localhost:18789/',
+                    checkUrl: `http://${settings.domain}:18789/`,
                     status: 'ok',
                     statusText: 'Running'
                 });
@@ -870,7 +881,8 @@
                         <div class="service-name">${s.name}${isLoading ? ' <span style="color: var(--accent-blue);">⟳</span>' : ''}</div>
                         <div class="service-description">${s.description}</div>
                         <div class="service-meta">
-                            ${s.port ? `<button class="service-btn" ${s.checkUrl ? `onclick="window.open('${s.checkUrl}', '_blank')"` : 'disabled'} title="${s.checkUrl ? 'Open in browser' : 'No URL configured'}" style="padding: 4px 10px; font-size: 0.8rem;">📍 ${s.port}</button>` : ''}
+                            ${s.port ? `<button class="service-btn" ${s.checkUrl ? `onclick="window.open('${s.checkUrl}', '_blank')"` : 'disabled'} title="${s.checkUrl ? 'Open in browser' : 'No URL configured'}">Open</button>` : ''}
+                            ${s.port ? `<span>📍 Port: ${s.port}</span>` : ''}
                             ${s.pid ? `<span>PID: ${s.pid}</span>` : ''}
                             <span>🕐 ${s.statusText}</span>
                             ${lastCheckedText(s)}
