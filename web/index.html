@@ -712,16 +712,19 @@
             loadServices();
             loadProjects();
             loadCostTracking();
+            loadTodos(); // Pre-load todos for task summary cards
         }
 
         // Services functions
-        async function loadServices() {
+        async function loadServices(showSpinner = true) {
             const list = document.getElementById('serviceList');
 
             // Show loading state but keep last known state visible
             isServicesLoading = true;
-            if (lastServicesState) {
+            if (lastServicesState && showSpinner) {
                 renderServices(lastServicesState, true); // true = show loading overlay
+            } else if (lastServicesState) {
+                renderServices(lastServicesState, false); // No spinner during polling
             } else {
                 list.innerHTML = '<p style="color: var(--text-secondary);">Loading services...</p>';
             }
@@ -868,7 +871,7 @@
         }
 
         function refreshServices() {
-            loadServices();
+            loadServices(true); // true = show spinner on manual refresh
         }
 
         async function restartService(name) {
@@ -2579,15 +2582,11 @@
             if (tabName === 'tasks') setTodoFilter(currentTodoFilter || '');
             if (tabName === 'knowledge') loadKnowledge();
             if (tabName === 'services') {
-                loadServices();
-                // Load todos first if not already loaded, then render task summary
-                if (allTodosCache.length === 0) {
-                    loadTodos().then(() => renderServicesTaskSummary());
-                } else {
-                    renderServicesTaskSummary();
-                }
-                // Poll every 10 seconds
-                servicesPollingInterval = setInterval(loadServices, 10000);
+                loadServices(false); // false = no spinner on initial load (polling handles refreshes)
+                // Render task summary (todos should already be loaded via loadDashboard)
+                renderServicesTaskSummary();
+                // Poll every 10 seconds (no spinner)
+                servicesPollingInterval = setInterval(() => loadServices(false), 10000);
             }
             if (tabName === 'projects') loadProjects();
             if (tabName === 'cost') { renderCostSummary(); renderTokenGraph(); }
