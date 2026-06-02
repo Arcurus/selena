@@ -41,6 +41,18 @@ from self_evolution import evolution_loop
 from todo_manager import todo_manager
 from knowledge_base import knowledge_base as kb
 from workspace_scanner import scanner, scan_workspace, get_last_scan, get_scan_history
+from service_manager import (
+    monitor as service_monitor,
+    load_services as sm_load_services,
+    get_service as sm_get_service,
+    is_monitored as sm_is_monitored,
+    check_and_restart_cycle,
+    update_service as sm_update_service,
+    check_health as sm_check_health,
+    load_state as sm_load_state,
+    load_restart_history as sm_load_restart_history,
+)
+from discord_client import DiscordNotifier, get_default as get_default_notifier, post_to_default
 
 # Helper functions for service management
 import time
@@ -1352,7 +1364,203 @@ class RequestHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({'service': service_name, 'status': 'offline', 'statusText': 'Offline', 'error': str(e)})
             return
-        
+
+        # ----- Watchdog / auto-start config (driven by docs/projects.md) -----
+        if path == '/api/services/config':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            services = sm_load_services()
+            state = sm_load_state()
+            # Enrich with live health
+            for s in services:
+                name = s.get('name')
+                if name in ('selena-project',):
+                    s['live_status'] = 'online'
+                    s['live_detail'] = 'self-check'
+                else:
+                    up, detail = sm_check_health(s)
+                    s['live_status'] = 'online' if up else 'offline'
+                    s['live_detail'] = detail
+                s['watched'] = sm_is_monitored(name)
+                s_state = state.get(name, {})
+                s['last_seen'] = s_state.get('last_seen')
+                s['last_status'] = s_state.get('last_status')
+                s['last_skip_reason'] = s_state.get('last_skip_reason')
+            self.send_json({
+                'services': services,
+                'monitor': service_monitor.status(),
+            })
+            return
+
+        if path == '/api/services/monitor/status':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            services = sm_load_services()
+            state = sm_load_state()
+            entries = []
+            for s in services:
+                name = s.get('name')
+                if not sm_is_monitored(name):
+                    continue
+                if name in ('selena-project',):
+                    up, detail = True, 'self-check'
+                else:
+                    up, detail = sm_check_health(s)
+                    if name == 'selena-discord-notifier':
+                        import sys
+                        _cm = s.get('check_method')
+                        _hu = s.get('health_url')
+                        print(f'DEBUG selena-discord-notifier: up={up} detail={detail!r} method={_cm!r} health_url={_hu!r}', file=sys.stderr)
+                s_state = state.get(name, {})
+                entries.append({
+                    'name': name,
+                    'description': s.get('description', ''),
+                    'port': s.get('port'),
+                    'up': up,
+                    'detail': detail,
+                    'auto_start': s.get('auto_start'),
+                    'enabled': s.get('enabled'),
+                    'check_method': s.get('check_method'),
+                    'start_command': s.get('start_command'),
+                    'grace_period_seconds': s.get('grace_period_seconds', 20),
+                    'max_restarts_per_hour': s.get('max_restarts_per_hour', 5),
+                    'last_seen': s_state.get('last_seen'),
+                    'last_status': s_state.get('last_status'),
+                    'last_skip_reason': s_state.get('last_skip_reason'),
+                })
+            self.send_json({
+                'monitor': service_monitor.status(),
+                'services': entries,
+            })
+            return
+
+        if path == '/api/services/monitor/restarts':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            history = sm_load_restart_history()
+            query = parse_qs(parsed.query) if parsed.query else {}
+            limit = int(query.get('limit', ['50'])[0])
+            self.send_json({
+                'restarts': history[-limit:][::-1],
+                'total': len(history),
+            })
+            return
+
+        if path == '/api/services/monitor/check':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            # Run a single watchdog cycle synchronously
+            actions = check_and_restart_cycle()
+            self.send_json({
+                'success': True,
+                'actions': actions,
+                'monitor': service_monitor.status(),
+            })
+            return
+
+        if path == '/api/services/auto_start':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            query = parse_qs(parsed.query) if parsed.query else {}
+            name = query.get('name', [''])[0]
+            if not name:
+                self.send_json({'success': False, 'error': 'name required'}, 400)
+                return
+            updates = {}
+            if 'enabled' in query:
+                updates['enabled'] = query['enabled'][0].lower() in ('1', 'true', 'yes')
+            if 'auto_start' in query:
+                updates['auto_start'] = query['auto_start'][0].lower() in ('1', 'true', 'yes')
+            if 'start_command' in query:
+                updates['start_command'] = query['start_command'][0]
+            if 'check_method' in query:
+                updates['check_method'] = query['check_method'][0]
+            if 'health_url' in query:
+                updates['health_url'] = query['health_url'][0]
+            if 'grace_period_seconds' in query:
+                updates['grace_period_seconds'] = query['grace_period_seconds'][0]
+            if 'max_restarts_per_hour' in query:
+                updates['max_restarts_per_hour'] = query['max_restarts_per_hour'][0]
+            ok, msg = sm_update_service(name, updates)
+            self.send_json({'success': ok, 'message': msg, 'updated': updates})
+            return
+
+        if path == '/api/services/monitor/announcements':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            # Drain pending announcements (used by the bot to push to #selena-project)
+            items = service_monitor.drain_announcements()
+            self.send_json({'announcements': items, 'count': len(items)})
+            return
+
+        # ----- Discord notifier (direct integration, no LLM) -----
+        if path == '/api/discord/status':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            self.send_json({
+                'notifier': get_default_notifier().status(),
+                'cron_announcer': 'a6d79a91-107f-4343-a479-880c407c8045 (still registered but redundant; can be disabled)',
+            })
+            return
+
+        if path == '/api/discord/test':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            parsed = urlparse(self.path)
+            query = parse_qs(parsed.query) if parsed.query else {}
+            text = query.get('text', [None])[0]
+            if not text:
+                text = '🧪 selena-project direct Discord test (manual)'
+            n = get_default_notifier()
+            if not n.enabled:
+                n.start()
+            if not n.enabled:
+                self.send_json({'success': False, 'error': 'notifier disabled (token missing or DISCORD_ENABLED=false)'}, 400)
+                return
+            channel = query.get('channel', [None])[0]
+            ok = n.send_message(channel, text)
+            self.send_json({'success': ok, 'channel': channel or n.default_channel_id, 'text': text[:200], 'status': n.status()})
+            return
+
+        if path == '/api/discord/restart':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            n = get_default_notifier()
+            n.stop()
+            ok = n.start()
+            self.send_json({'success': ok, 'status': n.status()})
+            return
+
+        # Public health check (no auth) — used by the watchdog via check_method: http
+        if path == '/api/discord/health':
+            n = get_default_notifier()
+            st = n.status()
+            healthy = bool(st.get('enabled'))
+            payload = {
+                'service': 'selena-discord-notifier',
+                'healthy': healthy,
+                'notifier': st,
+            }
+            if healthy:
+                self.send_json(payload, 200)
+            else:
+                # Hint why we're down so the watchdog log is useful
+                payload['hint'] = (
+                    'notifier disabled (token missing/revoked, or DISCORD_ENABLED=false). '
+                    'Check /api/discord/status with auth for details.'
+                )
+                self.send_json(payload, 503)
+            return
+
         if path == '/api/services/restart' or path == '/api/services/stop':
             if not self.authenticate():
                 self.send_json({'error': 'Unauthorized'}, 401)
@@ -1713,11 +1921,23 @@ def main():
     # Auto-start self-evolution loop
     print("🧠 Auto-starting Self-Evolution Loop...")
     evolution_loop.start()
-    
+
+    # Auto-start service watchdog (auto-restart monitored services when offline)
+    print("🛡️  Auto-starting Service Watchdog (30s poll, projects.md config)...")
+    service_monitor.start()
+
+    # Auto-start Discord notifier (direct integration, no LLM, no cron).
+    # If disabled (DISCORD_ENABLED=false) or token missing, this is a no-op.
+    print("💬 Auto-starting Discord Notifier (direct discord.py, no LLM/cron)...")
+    n = get_default_notifier()
+    n.start()  # safe to call even if not enabled; logs and returns False
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\n👋 Server stopped")
+        service_monitor.stop()
+        n.stop()
         server.shutdown()
 
 

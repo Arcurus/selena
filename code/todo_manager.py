@@ -46,32 +46,44 @@ class TodoManager:
     - Hierarchical todos (parent-child relationships via parent_id)
     - Estimated LLM calls tracking
     """
-    
+
     def __init__(self):
         os.makedirs(DATA_DIR, exist_ok=True)
         self.todos = self._load_todos()
         self.sensitive_todos = self._load_sensitive_todos()
-    
+
     def _load_todos(self) -> list:
         """Load non-sensitive todos from file."""
         if os.path.exists(TODO_FILE):
             try:
                 with open(TODO_FILE, 'r') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                # Accept both list (canonical) and dict {"todos": [...]} (some
+                # earlier writers saved the API response shape). Normalize to list.
+                if isinstance(data, dict) and 'todos' in data:
+                    return data['todos']
+                if isinstance(data, list):
+                    return data
+                return []
             except:
                 return []
         return []
-    
+
     def _load_sensitive_todos(self) -> list:
         """Load sensitive todos from file (NOT in git)."""
         if os.path.exists(SENSITIVE_TODO_FILE):
             try:
                 with open(SENSITIVE_TODO_FILE, 'r') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                if isinstance(data, dict) and 'todos' in data:
+                    return data['todos']
+                if isinstance(data, list):
+                    return data
+                return []
             except:
                 return []
         return []
-    
+
     def _backup_todos(self, todos: list, filename: str):
         """Create a timestamped backup before saving."""
         filepath = os.path.join(DATA_DIR, filename)
@@ -134,33 +146,33 @@ class TodoManager:
         self._backup_todos(self.todos, "todos.json")
         with open(TODO_FILE, 'w') as f:
             json.dump(self.todos, f, indent=2)
-    
+
     def _save_sensitive_todos(self):
         """Save sensitive todos to file (creates backup first)."""
         self._backup_todos(self.sensitive_todos, "todos.env")
         with open(SENSITIVE_TODO_FILE, 'w') as f:
             json.dump(self.sensitive_todos, f, indent=2)
-    
+
     def _now(self) -> str:
         """Get current ISO timestamp."""
         return datetime.now().isoformat()
-    
+
     def _get_all_todos(self) -> list:
         """Get all todos (both regular and sensitive)."""
         return self.todos + self.sensitive_todos
-    
+
     def _get_todo_list(self, sensitive: bool) -> list:
         """Get the appropriate todo list based on sensitive flag."""
         return self.sensitive_todos if sensitive else self.todos
-    
+
     def _save_todo_list(self, sensitive: bool):
         """Save the appropriate todo list based on sensitive flag."""
         if sensitive:
             self._save_sensitive_todos()
         else:
             self._save_todos()
-    
-    def add_todo(self, short_desc: str, long_desc: str = "", priority: int = 5, 
+
+    def add_todo(self, short_desc: str, long_desc: str = "", priority: int = 5,
                  sensitive: bool = False, parent_id: Optional[str] = None,
                  estimated_llm_calls: Optional[int] = None,
                  creator_id: Optional[str] = None,
@@ -168,7 +180,7 @@ class TodoManager:
                  agent_id: Optional[str] = None) -> dict:
         """
         Add a new todo.
-        
+
         Args:
             short_desc: Brief title (required)
             long_desc: Detailed description (optional)
@@ -179,7 +191,7 @@ class TodoManager:
             creator_id: Optional ID of who created this todo
             conversation_id: Optional ID of the conversation this belongs to
             agent_id: Optional ID of the agent that owns this todo
-        
+
         Returns:
             The created todo dict
         """
@@ -201,19 +213,19 @@ class TodoManager:
             "created_at": self._now(),
             "updated_at": self._now()
         }
-        
+
         todo_list = self._get_todo_list(sensitive)
         todo_list.append(todo)
         self._save_todo_list(sensitive)
-        
+
         # Also add to in-memory list
         if sensitive:
             self.sensitive_todos.append(todo)
         else:
             self.todos.append(todo)
-        
+
         return todo
-    
+
     def get_todo(self, todo_id: str) -> Optional[dict]:
         """Get a specific todo by ID (searches both regular and sensitive)."""
         for todo in self.todos:
@@ -223,17 +235,17 @@ class TodoManager:
             if todo["id"] == todo_id:
                 return todo
         return None
-    
+
     def get_todo_list(self, sensitive: bool) -> list:
         """Get todos from a specific list (regular or sensitive)."""
         return self._get_todo_list(sensitive)
-    
+
     def get_all_todos(self, status: Optional[str] = None, sort_by: str = "priority",
                       include_children: bool = True, sensitive: Optional[bool] = None,
                       include_deleted: bool = False, search: Optional[str] = None) -> list:
         """
         Get all todos, optionally filtered by status.
-        
+
         Args:
             status: Filter by status (open, in_progress, done). None = all.
             sort_by: Sort by "priority", "created", or "updated" (default: priority)
@@ -241,7 +253,7 @@ class TodoManager:
             sensitive: If None, include all. If True, only sensitive. If False, only non-sensitive.
             include_deleted: If True, include soft-deleted todos (deleted_at is not null)
             search: Filter by short_desc (case-insensitive partial match)
-        
+
         Returns:
             List of todo dicts
         """
@@ -252,20 +264,20 @@ class TodoManager:
             todos = self._get_todo_list(True)
         else:
             todos = self._get_todo_list(False)
-        
+
         # Filter by deleted status
         if not include_deleted:
             todos = [t for t in todos if not t.get("deleted_at")]
-        
+
         # Filter by status
         if status:
             todos = [t for t in todos if t["status"] == status]
-        
+
         # Filter by search query (search in short_desc)
         if search:
             search_lower = search.lower()
             todos = [t for t in todos if search_lower in t.get("short_desc", "").lower()]
-        
+
         # Sort
         if sort_by == "priority":
             todos = sorted(todos, key=lambda t: t["priority"], reverse=True)
@@ -273,7 +285,7 @@ class TodoManager:
             todos = sorted(todos, key=lambda t: t["created_at"], reverse=True)
         elif sort_by == "updated":
             todos = sorted(todos, key=lambda t: t["updated_at"], reverse=True)
-        
+
         # If include_children, restructure to show hierarchy
         if include_children:
             # Separate parent todos from child todos
@@ -284,7 +296,7 @@ class TodoManager:
                     if t["parent_id"] not in children_map:
                         children_map[t["parent_id"]] = []
                     children_map[t["parent_id"]].append(t)
-            
+
             # Add children to parents
             result = []
             for parent in parents:
@@ -292,30 +304,30 @@ class TodoManager:
                 if parent["id"] in children_map:
                     result.extend(children_map[parent["id"]])
             return result
-        
+
         return todos
-    
+
     def get_children(self, parent_id: str) -> list:
         """Get all child todos of a parent todo."""
         all_todos = self._get_all_todos()
         children = [t for t in all_todos if t.get("parent_id") == parent_id]
         return sorted(children, key=lambda t: t["priority"], reverse=True)
-    
+
     def split_todo(self, todo_id: str, subtasks: List[dict]) -> Optional[list]:
         """
         Split a big todo into smaller subtasks.
-        
+
         Args:
             todo_id: ID of the parent todo to split
             subtasks: List of dicts with 'short_desc', 'long_desc', 'priority', 'estimated_llm_calls'
-        
+
         Returns:
             List of created subtask dicts, or None if parent not found
         """
         parent = self.get_todo(todo_id)
         if not parent:
             return None
-        
+
         created = []
         for task in subtasks:
             todo = self.add_todo(
@@ -327,17 +339,17 @@ class TodoManager:
                 estimated_llm_calls=task.get("estimated_llm_calls")
             )
             created.append(todo)
-        
+
         return created
-    
+
     def update_todo(self, todo_id: str, **kwargs) -> Optional[dict]:
         """
         Update a todo.
-        
+
         Args:
             todo_id: ID of todo to update
             **kwargs: Fields to update (short_desc, long_desc, priority, status, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, block_reason, waiting_for)
-        
+
         Returns:
             Updated todo dict or None if not found
         """
@@ -345,14 +357,14 @@ class TodoManager:
         for todo in self.todos:
             if todo["id"] == todo_id:
                 return self._update_todo_in_list(todo, self.todos, **kwargs)
-        
+
         # Find in sensitive todos
         for todo in self.sensitive_todos:
             if todo["id"] == todo_id:
                 return self._update_todo_in_list(todo, self.sensitive_todos, **kwargs)
-        
+
         return None
-    
+
     def _update_todo_in_list(self, todo: dict, todo_list: list, **kwargs) -> dict:
         """Update a todo in a specific list."""
         # Handle restore parameter (sets deleted_at to None)
@@ -364,7 +376,7 @@ class TodoManager:
             else:
                 self._save_sensitive_todos()
             return todo
-        
+
         # Update allowed fields
         allowed = ["short_desc", "long_desc", "priority", "status", "sensitive", "parent_id", "estimated_llm_calls", "creator_id", "conversation_id", "agent_id", "block_reason", "waiting_for", "deleted_at"]
         for key in allowed:
@@ -386,30 +398,30 @@ class TodoManager:
                         return todo
                 else:
                     todo[key] = kwargs[key]
-        
+
         todo["updated_at"] = self._now()
-        
+
         # Save appropriate list
         if todo in self.todos:
             self._save_todos()
         else:
             self._save_sensitive_todos()
-        
+
         return todo
-    
+
     def delete_todo(self, todo_id: str, delete_children: bool = True) -> bool:
         """
         Soft delete a todo by ID (sets deleted_at timestamp). Returns True if deleted, False if not found.
-        
+
         Args:
             todo_id: ID of todo to delete
             delete_children: If True, also soft-delete all child todos
-        
+
         Returns:
             True if found and marked as deleted, False if not found
         """
         now = self._now()
-        
+
         # Try regular todos first
         for todo in self.todos:
             if todo["id"] == todo_id:
@@ -419,7 +431,7 @@ class TodoManager:
                     self._soft_delete_children(todo_id, self.todos, now)
                 self._save_todos()
                 return True
-        
+
         # Try sensitive todos
         for todo in self.sensitive_todos:
             if todo["id"] == todo_id:
@@ -429,9 +441,9 @@ class TodoManager:
                     self._soft_delete_children(todo_id, self.sensitive_todos, now)
                 self._save_sensitive_todos()
                 return True
-        
+
         return False
-    
+
     def _soft_delete_children(self, parent_id: str, todo_list: list, deleted_at: str):
         """Soft delete all children of a parent todo from a specific list."""
         children = [t for t in todo_list if t.get("parent_id") == parent_id]
@@ -440,23 +452,23 @@ class TodoManager:
             self._soft_delete_children(child["id"], todo_list, deleted_at)
             child["deleted_at"] = deleted_at
             child["updated_at"] = deleted_at
-    
+
     def purge_old_deleted(self, days: int = 7) -> int:
         """
         Permanently delete todos that have been soft-deleted more than `days` ago.
-        
+
         Args:
             days: Number of days after which to purge deleted todos (default: 7)
-        
+
         Returns:
             Number of todos purged
         """
         from datetime import timedelta
         cutoff = datetime.now() - timedelta(days=days)
         cutoff_str = cutoff.isoformat()
-        
+
         purged_count = 0
-        
+
         # Purge from regular todos
         todos_to_remove = []
         for todo in self.todos:
@@ -467,7 +479,7 @@ class TodoManager:
             purged_count += 1
         if todos_to_remove:
             self._save_todos()
-        
+
         # Purge from sensitive todos
         sensitive_to_remove = []
         for todo in self.sensitive_todos:
@@ -478,9 +490,9 @@ class TodoManager:
             purged_count += 1
         if sensitive_to_remove:
             self._save_sensitive_todos()
-        
+
         return purged_count
-    
+
     def _delete_children(self, parent_id: str, todo_list: list):
         """Delete all children of a parent todo from a specific list."""
         children = [t for t in todo_list if t.get("parent_id") == parent_id]
@@ -488,45 +500,45 @@ class TodoManager:
             # Recursively delete grandchildren
             self._delete_children(child["id"], todo_list)
             todo_list.remove(child)
-    
+
     def mark_done(self, todo_id: str) -> Optional[dict]:
         """Mark a todo as done."""
         return self.update_todo(todo_id, status="done")
-    
+
     def mark_in_progress(self, todo_id: str) -> Optional[dict]:
         """Mark a todo as in progress."""
         return self.update_todo(todo_id, status="in_progress")
-    
+
     def mark_blocked(self, todo_id: str, block_reason: str = "", waiting_for: Optional[str] = None) -> Optional[dict]:
         """
         Mark a todo as blocked.
-        
+
         Args:
             todo_id: ID of todo to block
             block_reason: Reason why it's blocked
             waiting_for: ID of the todo this is waiting for (optional)
-        
+
         Returns:
             Updated todo dict or None if not found
         """
         return self.update_todo(todo_id, status="blocked", block_reason=block_reason, waiting_for=waiting_for)
-    
+
     def unblock(self, todo_id: str) -> Optional[dict]:
         """
         Unblock a todo (set status back to open and clear block_reason/waiting_for).
-        
+
         Args:
             todo_id: ID of todo to unblock
-        
+
         Returns:
             Updated todo dict or None if not found
         """
         return self.update_todo(todo_id, status="open", block_reason=None, waiting_for=None)
-    
+
     def get_summary(self, sensitive: Optional[bool] = None) -> dict:
         """
         Get a summary of all todos.
-        
+
         Args:
             sensitive: If None, all. If True, only sensitive. If False, only non-sensitive.
         """
@@ -536,20 +548,20 @@ class TodoManager:
             all_todos = self._get_todo_list(True)
         else:
             all_todos = self._get_todo_list(False)
-        
+
         open_todos = [t for t in all_todos if t["status"] == "open" and t.get("parent_id") is None]
         in_progress = [t for t in all_todos if t["status"] == "in_progress" and t.get("parent_id") is None]
         completed = [t for t in all_todos if t["status"] == "completed" and t.get("parent_id") is None]
         blocked = [t for t in all_todos if t["status"] == "blocked" and t.get("parent_id") is None]
         done = [t for t in all_todos if t["status"] == "done"]
-        
+
         # Calculate total estimated LLM calls
         total_llm_calls = sum(t.get("estimated_llm_calls", 0) or 0 for t in all_todos)
         open_llm_calls = sum(t.get("estimated_llm_calls", 0) or 0 for t in open_todos)
-        
+
         # Get top 3 by priority
         top_priority = sorted(open_todos, key=lambda t: t["priority"], reverse=True)[:3]
-        
+
         return {
             "total": len([t for t in all_todos if t.get("parent_id") is None]),
             "open": len(open_todos),
