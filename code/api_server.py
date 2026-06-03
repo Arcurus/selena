@@ -38,6 +38,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 from scheduled_actions import scheduler
 from priority_reflector import reflector, PriorityTask, PriorityReflector
 from self_evolution import evolution_loop
+from llm_call_tracker import get_tracker as _get_llm_tracker
+from cost_tracker import build_daily_report as _ct_build_daily, build_weekly_report as _ct_build_weekly_report, render_markdown as _ct_render, post_to_discord as _ct_post
 from todo_manager import todo_manager
 from knowledge_base import knowledge_base as kb
 from workspace_scanner import scanner, scan_workspace, get_last_scan, get_scan_history
@@ -53,6 +55,15 @@ from service_manager import (
     load_restart_history as sm_load_restart_history,
 )
 from discord_client import DiscordNotifier, get_default as get_default_notifier, post_to_default
+from cron_tracker import (
+    list_jobs as _cron_list_jobs,
+    get_job_summary as _cron_get_summary,
+    enable_job as _cron_enable,
+    disable_job as _cron_disable,
+    set_model as _cron_set_model,
+    set_context as _cron_set_context,
+    get_instructions as _cron_get_instructions,
+)
 
 # Helper functions for service management
 import time
@@ -373,6 +384,14 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_cors_headers()
         self.end_headers()
         self.wfile.write(html.encode())
+
+    def send_text(self, text, status=200, content_type='text/plain; charset=utf-8'):
+        """Send plain-text response"""
+        self.send_response(status)
+        self.send_header('Content-Type', content_type)
+        self.send_cors_headers()
+        self.end_headers()
+        self.wfile.write(text.encode('utf-8') if isinstance(text, str) else text)
     
     def do_OPTIONS(self):
         """Handle CORS preflight"""
@@ -509,7 +528,18 @@ class RequestHandler(BaseHTTPRequestHandler):
             scheduler.execute_scheduled_action()
             self.send_json({'success': True, 'message': 'Action triggered', 'status': scheduler.status()})
             return
-        
+
+        if path == '/api/world/scheduler/config':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            # GET reads the current config; POST lives in do_POST (this
+            # handler only runs for GET requests, so no method check needed).
+            from scheduled_actions import load_scheduler_config
+            cfg = load_scheduler_config()
+            self.send_json({'success': True, 'config': cfg, 'status': scheduler.status()})
+            return
+
         # Priority Reflector endpoints
         if path == '/api/priority/status':
             if not self.authenticate():
@@ -621,13 +651,394 @@ class RequestHandler(BaseHTTPRequestHandler):
                 'reset_info': 'Token plan refreshes every 5 hours'
             })
             return
-        
+
+        # Rich multi-provider LLM usage (per-provider quota + local 5h window
+        # + per-project allocation).  Backed by llm_call_tracker.py which
+        # queries provider APIs (MiniMax token plan /v1/token_plan/remains)
+        # and falls back to local sliding-window counts for providers whose
+        # credentials OpenClaw manages internally (xAI, OpenRouter).
+        if path == '/api/llm-usage':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            t = _get_llm_tracker()
+            qs = parse_qs(urlparse(self.path).query)
+            if qs.get('sync', ['0'])[0] in ('1', 'true', 'yes'):
+                t.sync_quotas(force=True)
+            self.send_json(t.status())
+            return
+
+        if path == '/api/llm-usage/sync':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            t = _get_llm_tracker()
+            self.send_json(t.sync_quotas(force=True))
+            return
+
+        # Time-series buckets for the web-UI line chart.  Hourly buckets,
+        # per-provider counts + total.  Window: 1h..168h (1 week).
+        if path == '/api/llm-usage/timeseries':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            try:
+                hours = int(qs.get('hours', ['24'])[0])
+            except (TypeError, ValueError):
+                hours = 24
+            t = _get_llm_tracker()
+            self.send_json(t.get_timeseries(hours))
+            return
+
+        if path.startswith('/api/llm-usage/budget'):
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            project = qs.get('project', ['open-world-selena'])[0]
+            additional = int(qs.get('additional', ['1'])[0])
+            t = _get_llm_tracker()
+            self.send_json(t.check_budget(project, additional))
+            return
+
+        # Pre-action gate (per Arcurus 2026-06-03: "postpone autonomous
+        # or resource intensive tasks until the next refresh").
+        if path.startswith('/api/llm-usage/check') \
+                or path.startswith('/api/llm-usage/gate'):
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            project = qs.get('project', [None])[0] or None
+            additional = int(qs.get('additional', ['1'])[0])
+            t = _get_llm_tracker()
+            self.send_json(t.should_proceed(project=project,
+                                            additional_calls=additional))
+            return
+
+        if path.startswith('/api/llm-usage/wait'):
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            project = qs.get('project', [None])[0] or None
+            additional = int(qs.get('additional', ['1'])[0])
+            max_wait = int(qs.get('max-wait-s', ['1800'])[0])
+            t = _get_llm_tracker()
+            self.send_json(t.wait_until_budget(project=project,
+                                                additional_calls=additional,
+                                                max_wait_s=max_wait))
+            return
+
+        # Budget alert state (read-only + manual override)
+        if path == '/api/llm-usage/alert-state':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            t = _get_llm_tracker()
+            self.send_json(t.alert_state())
+            return
+
+        if path == '/api/llm-usage/alert-test':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            t = _get_llm_tracker()
+            rec = t.evaluate_alerts(force=True)
+            self.send_json({'fired': rec is not None, 'record': rec})
+            return
+
+        if path == '/api/llm-usage/alert-reset':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            t = _get_llm_tracker()
+            t.reset_alerts()
+            self.send_json({'success': True})
+            return
+
+        if path == '/api/llm-usage/record':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            provider = qs.get('provider', [''])[0]
+            model = qs.get('model', [''])[0]
+            project = qs.get('project', [''])[0]
+            ti = qs.get('tokens_in', [None])[0]
+            to = qs.get('tokens_out', [None])[0]
+            if not provider or not model:
+                self.send_json({'error': 'provider and model required'}, 400)
+                return
+            t = _get_llm_tracker()
+            t.record(provider, model, project=project,
+                     tokens_in=int(ti) if ti else None,
+                     tokens_out=int(to) if to else None)
+            self.send_json({'success': True})
+            return
+
+        # Manual pause/resume of a provider's polling (e.g. when you know
+        # the credits are out and don't want the tracker to hammer the API).
+        if path == '/api/llm-usage/pause':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            provider = qs.get('provider', [''])[0]
+            seconds = int(qs.get('seconds', ['1800'])[0])
+            reason = qs.get('reason', ['manual'])[0]
+            if not provider:
+                self.send_json({'error': 'provider required'}, 400)
+                return
+            t = _get_llm_tracker()
+            t.pause_provider(provider, seconds, reason)
+            self.send_json({'success': True, 'provider': provider,
+                            'paused_for_s': seconds, 'reason': reason})
+            return
+
+        if path == '/api/llm-usage/resume':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            provider = qs.get('provider', [''])[0]
+            if not provider:
+                self.send_json({'error': 'provider required'}, 400)
+                return
+            t = _get_llm_tracker()
+            t.resume_provider(provider)
+            self.send_json({'success': True, 'provider': provider})
+            return
+
         if path == '/api/llm-calls/increment':
             if not self.authenticate():
                 self.send_json({'error': 'Unauthorized'}, 401)
                 return
             count = track_llm_call()
             self.send_json({'success': True, 'count': count})
+            return
+
+        # ===== Cost-tracker endpoints (per Arcurus 2026-06-03) =====
+        # JSON: { header, sections, data } for the daily or weekly report.
+        if path == '/api/cost-tracker':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            weekly = qs.get('weekly', ['0'])[0] in ('1', 'true', 'yes')
+            date = qs.get('date', [None])[0]
+            report = _ct_build_weekly_report() if weekly else _ct_build_daily(date)
+            self.send_json(report)
+            return
+
+        # Markdown render — useful for the web UI to display the same text
+        # that gets posted to #cost-tracker.
+        if path == '/api/cost-tracker/markdown':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            weekly = qs.get('weekly', ['0'])[0] in ('1', 'true', 'yes')
+            date = qs.get('date', [None])[0]
+            report = _ct_build_weekly_report() if weekly else _ct_build_daily(date)
+            text = _ct_render(report)
+            self.send_text(text)
+            return
+
+        # Manually trigger a post to #cost-tracker (or override channel).
+        if path == '/api/cost-tracker/post':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            channel = qs.get('channel', [None])[0]
+            date = qs.get('date', [None])[0]
+            weekly = qs.get('weekly', ['0'])[0] in ('1', 'true', 'yes')
+            result = _ct_post(channel_id=channel, date=date, weekly=weekly)
+            self.send_json(result)
+            return
+
+        # ===== Discord notifier endpoints (per Arcurus 2026-06-03) =====
+        # The cron announce mode is broken (Unsupported channel error on
+        # the slow-heartbeat / moderation jobs).  All cron jobs SHOULD
+        # use these endpoints (or the post-to-discord.sh CLI) to send
+        # announcements, instead of relying on OpenClaw's delivery
+        # pipeline.  Every send is logged to data/discord_send_log.jsonl
+        # with project / agent / task tags for downstream stats.
+
+        if path == '/api/discord/status':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            n = get_default_notifier()
+            if not n.enabled:
+                n.start()
+            self.send_json(n.status())
+            return
+
+        if path == '/api/discord/send':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            channel_id = qs.get('channel', [''])[0] or None
+            project = qs.get('project', [''])[0]
+            agent = qs.get('agent', [''])[0]
+            task = qs.get('task', [''])[0]
+            # text is the raw body (POST) or 'text' query param (GET)
+            text = ''
+            if self.command == 'POST':
+                cl = int(self.headers.get('Content-Length', 0) or 0)
+                if cl:
+                    text = self.rfile.read(cl).decode('utf-8', errors='replace')
+            if not text:
+                text = qs.get('text', [''])[0]
+            if not text:
+                self.send_json({'success': False, 'error': 'empty text'}, 400)
+                return
+            n = get_default_notifier()
+            if not n.enabled:
+                n.start()
+            if not n.enabled:
+                self.send_json({'success': False, 'error': 'notifier disabled (no token)'}, 503)
+                return
+            ok = n.send_message(channel_id, text,
+                                project=project, agent=agent, task=task)
+            self.send_json({'success': ok, 'channel_id': channel_id or n.default_channel_id,
+                            'project': project, 'agent': agent, 'task': task,
+                            'length': len(text)})
+            return
+
+        if path == '/api/discord/stats':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            from discord_client import send_log_stats
+            self.send_json(send_log_stats())
+            return
+
+        if path == '/api/discord/recent':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            try:
+                limit = int(qs.get('limit', ['20'])[0])
+            except ValueError:
+                limit = 20
+            limit = max(1, min(limit, 1000))
+            from discord_client import read_send_log
+            entries = read_send_log(limit=limit)
+            self.send_json({'count': len(entries), 'entries': entries})
+            return
+
+        # ===== Cron job tracker endpoints (per Arcurus 2026-06-03) =====
+        # All require auth.  Mutating endpoints log_api on every change.
+        # The supported operations mirror the cron_tracker.py CLI.
+
+        if path == '/api/cron/list':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            jobs = _cron_list_jobs()
+            self.send_json({'count': len(jobs), 'jobs': jobs})
+            return
+
+        if path == '/api/cron/status':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            ref = qs.get('ref', [''])[0]
+            if not ref:
+                self.send_json({'error': 'ref required'}, 400)
+                return
+            s = _cron_get_summary(ref)
+            if s is None:
+                self.send_json({'error': f"no unique job matching '{ref}'"}, 404)
+                return
+            self.send_json(s)
+            return
+
+        if path == '/api/cron/enable':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            ref = qs.get('ref', [''])[0]
+            if not ref:
+                self.send_json({'error': 'ref required'}, 400)
+                return
+            ok = _cron_enable(ref)
+            log_api('CRON_ENABLE', f'{ref} (success={ok})')
+            self.send_json({'success': ok, 'ref': ref})
+            return
+
+        if path == '/api/cron/disable':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            ref = qs.get('ref', [''])[0]
+            reason = qs.get('reason', [''])[0]
+            if not ref:
+                self.send_json({'error': 'ref required'}, 400)
+                return
+            ok = _cron_disable(ref, reason=reason)
+            log_api('CRON_DISABLE', f'{ref} reason={reason!r} (success={ok})')
+            self.send_json({'success': ok, 'ref': ref, 'reason': reason})
+            return
+
+        if path == '/api/cron/model':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            ref = qs.get('ref', [''])[0]
+            model = qs.get('model', [''])[0]
+            if not ref or not model:
+                self.send_json({'error': 'ref and model required'}, 400)
+                return
+            ok = _cron_set_model(ref, model)
+            log_api('CRON_SET_MODEL', f'{ref} -> {model} (success={ok})')
+            self.send_json({'success': ok, 'ref': ref, 'model': model})
+            return
+
+        if path == '/api/cron/context':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            ref = qs.get('ref', [''])[0]
+            try:
+                max_tokens = int(qs.get('max_tokens', [''])[0])
+            except ValueError:
+                self.send_json({'error': 'max_tokens must be an integer'}, 400)
+                return
+            if not ref or max_tokens <= 0:
+                self.send_json({'error': 'ref and positive max_tokens required'}, 400)
+                return
+            ok = _cron_set_context(ref, max_tokens)
+            log_api('CRON_SET_CONTEXT', f'{ref} -> {max_tokens} (success={ok})')
+            self.send_json({'success': ok, 'ref': ref, 'max_tokens': max_tokens})
+            return
+
+        if path == '/api/cron/instructions':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            ref = qs.get('ref', [''])[0]
+            if not ref:
+                self.send_json({'error': 'ref required'}, 400)
+                return
+            text = _cron_get_instructions(ref)
+            if text is None:
+                self.send_json({'error': f"no unique job matching '{ref}'"}, 404)
+                return
+            self.send_json({'ref': ref, 'instructions': text,
+                            'length': len(text)})
             return
         
         # Workspace Scanner endpoints
@@ -994,7 +1405,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             if not self.authenticate():
                 self.send_json({'error': 'Unauthorized'}, 401)
                 return
-            # Parse query params
+            # Parse query params (GET) or JSON body (POST)
             query = parse_qs(parsed.query)
             short_desc = query.get('short_desc', [''])[0]
             long_desc = query.get('long_desc', [''])[0]
@@ -1005,10 +1416,43 @@ class RequestHandler(BaseHTTPRequestHandler):
             creator_id = query.get('creator_id', [None])[0] if 'creator_id=' in parsed.query else None
             conversation_id = query.get('conversation_id', [None])[0] if 'conversation_id=' in parsed.query else None
             agent_id = query.get('agent_id', [None])[0] if 'agent_id=' in parsed.query else None
+            project = query.get('project', [None])[0] if 'project=' in parsed.query else None
+            agent_owner = query.get('agent_owner', [None])[0] if 'agent_owner=' in parsed.query else None
+            # For POST requests with JSON body, prefer body fields over query params
+            if self.command == 'POST':
+                cl = int(self.headers.get('Content-Length', 0) or 0)
+                if cl:
+                    try:
+                        body = json.loads(self.rfile.read(cl).decode('utf-8', errors='replace'))
+                        if body.get('short_desc') is not None: short_desc = body['short_desc']
+                        if body.get('long_desc') is not None: long_desc = body['long_desc']
+                        if body.get('creator_id') is not None: creator_id = body['creator_id']
+                        if body.get('conversation_id') is not None: conversation_id = body['conversation_id']
+                        if body.get('agent_id') is not None: agent_id = body['agent_id']
+                        if body.get('project') is not None: project = body['project']
+                        if body.get('agent_owner') is not None: agent_owner = body['agent_owner']
+                        if body.get('parent_id') is not None: parent_id = body['parent_id']
+                        if 'priority' in body:
+                            try: priority = int(body['priority'])
+                            except (TypeError, ValueError): pass
+                        if 'sensitive' in body:
+                            sensitive = bool(body['sensitive'])
+                    except Exception as e:
+                        log_error(f'POST /api/todos/add bad json: {e}', 'add')
             if not short_desc:
                 self.send_json({'success': False, 'error': 'short_desc required'}, 400)
                 return
-            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id)
+            # Defensive dedup (added 2026-06-03): if short_desc + creator_id
+            # match an existing open todo, skip creating a new one and return
+            # the existing record.  Protects against client-side double-submits
+            # and the todo_manager double-append bug regressing.
+            if creator_id and short_desc:
+                existing = todo_manager.find_open_by_signature(short_desc, creator_id)
+                if existing:
+                    log_api('TODO_DUP_SKIP', f'skipped duplicate add for {creator_id}: {short_desc[:60]}')
+                    self.send_json({'success': True, 'todo': existing, 'deduped': True})
+                    return
+            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner)
             self.send_json({'success': True, 'todo': todo})
             return
         
@@ -1408,11 +1852,6 @@ class RequestHandler(BaseHTTPRequestHandler):
                     up, detail = True, 'self-check'
                 else:
                     up, detail = sm_check_health(s)
-                    if name == 'selena-discord-notifier':
-                        import sys
-                        _cm = s.get('check_method')
-                        _hu = s.get('health_url')
-                        print(f'DEBUG selena-discord-notifier: up={up} detail={detail!r} method={_cm!r} health_url={_hu!r}', file=sys.stderr)
                 s_state = state.get(name, {})
                 entries.append({
                     'name': name,
@@ -1840,15 +2279,50 @@ class RequestHandler(BaseHTTPRequestHandler):
             creator_id = data.get('creator_id')
             conversation_id = data.get('conversation_id')
             agent_id = data.get('agent_id')
-            
+            project = data.get('project')
+            agent_owner = data.get('agent_owner')
+
             if not short_desc:
                 self.send_json({'success': False, 'error': 'short_desc required'}, 400)
                 return
-            
-            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id)
+
+            # Defensive dedup (added 2026-06-03 — mirror of the GET handler):
+            # if short_desc + creator_id match an existing open todo, return
+            # the existing record instead of creating a second one.
+            if creator_id and short_desc:
+                existing = todo_manager.find_open_by_signature(short_desc, creator_id)
+                if existing:
+                    log_api('TODO_DUP_SKIP', f'POST skipped duplicate add for {creator_id}: {short_desc[:60]}')
+                    self.send_json({'success': True, 'todo': existing, 'deduped': True})
+                    return
+
+            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner)
             self.send_json({'success': True, 'todo': todo})
             return
-        
+
+        if path == '/api/world/scheduler/config':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                body = self.rfile.read(content_length) if content_length else b'{}'
+                payload = json.loads(body.decode('utf-8') or '{}')
+            except json.JSONDecodeError as e:
+                self.send_json({'success': False, 'error': f'Invalid JSON: {e}'}, 400)
+                return
+            from scheduled_actions import save_scheduler_config
+            cfg = save_scheduler_config(payload, updated_by='api')
+            # If a cycle is mid-sleep, the new interval is picked up on
+            # the next loop iteration (max 5s of latency).
+            self.send_json({
+                'success': True,
+                'message': 'Scheduler config updated',
+                'config': cfg,
+                'status': scheduler.status(),
+            })
+            return
+
         # 404 for unsupported POST endpoints
         self.send_json({'error': 'Not found'}, 404)
 
