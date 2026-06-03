@@ -70,6 +70,14 @@ SCHEDULER_CONFIG_DEFAULTS = {
     "notes": "Defaults: 30 LLM calls/h, under 5% of 4500/5h budget.",
 }
 
+# Per-entity "last acted at" map, persisted to disk so a restart of the
+# selena-project API doesn't reset everyone's idle time.  Selection is
+# (power + 1) * time_since_last_action, so a long-idle entity with even
+# modest power is far more likely to be picked than a just-acted one.
+ENTITY_LAST_ACTION_PATH = os.path.join(
+    os.path.dirname(__file__), '..', 'data', 'ow_entity_last_action.json'
+)
+
 
 def load_scheduler_config() -> dict:
     """Load scheduler config from disk; create it with defaults if missing.
@@ -125,6 +133,107 @@ def save_scheduler_config(cfg: dict, updated_by: str = "selena") -> dict:
 # still import these names. The runtime scheduler reads from the config.
 SCHEDULE_INTERVAL_SECONDS = SCHEDULER_CONFIG_DEFAULTS["interval_seconds"]
 ACTIONS_PER_CYCLE = SCHEDULER_CONFIG_DEFAULTS["actions_per_cycle"]
+
+
+# ----------------------------------------------------------------------------
+# Per-entity last-action timestamps (used by the selection formula)
+# ----------------------------------------------------------------------------
+
+def _load_entity_last_action() -> dict:
+    """Load per-entity last-action timestamps. Epoch seconds (float)."""
+    try:
+        if os.path.exists(ENTITY_LAST_ACTION_PATH):
+            with open(ENTITY_LAST_ACTION_PATH, "r") as f:
+                return json.load(f) or {}
+    except Exception as e:
+        print(f"[scheduler] last-action read failed: {e}")
+    return {}
+
+
+def _save_entity_last_action(data: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(ENTITY_LAST_ACTION_PATH), exist_ok=True)
+        tmp = ENTITY_LAST_ACTION_PATH + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(data, f, indent=2, sort_keys=True)
+        os.replace(tmp, ENTITY_LAST_ACTION_PATH)
+    except Exception as e:
+        print(f"[scheduler] last-action write failed: {e}")
+
+
+def mark_entity_acted(entity_id: str, when_epoch: Optional[float] = None) -> None:
+    """Record that an entity just acted. Persists to disk."""
+    data = _load_entity_last_action()
+    data[entity_id] = float(when_epoch if when_epoch is not None else time.time())
+    _save_entity_last_action(data)
+
+
+def entity_idle_seconds(entity_id: str, now_epoch: Optional[float] = None) -> float:
+    """How long since this entity last acted. Returns a large value if unknown
+    so first picks favour entities we've never tracked (treated as 'ancient')."""
+    now = float(now_epoch if now_epoch is not None else time.time())
+    data = _load_entity_last_action()
+    last = data.get(entity_id)
+    if last is None:
+        # Treat never-acted as a very long idle so the first cycle spreads
+        # attention across all unseen entities.  7 days feels right.
+        return 7 * 24 * 3600.0
+    return max(0.0, now - float(last))
+
+
+def entity_power(ent: dict) -> int:
+    """Return the selection-time 'power' for an entity dict from the OW server.
+
+    Selection uses the explicit `properties_int.power` field, not the
+    server's `total_power` (which sums `power + strength + army_size +
+    wealth + influence` plus every positive `properties_float`, including
+    internal counters like `total_years` for the World Clock).  The server
+    total is for tiering, not selection — using it here would let one
+    entity dominate forever because of unrelated float counters.
+
+    Returns 0 if `power` is unset.
+    """
+    try:
+        return int(ent.get("properties_int", {}).get("power", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def pick_entities_weighted(entities: list, k: int, now_epoch: Optional[float] = None) -> list:
+    """Pick `k` entities (without replacement) using weights
+        w_i = (power_i + 1) * idle_seconds_i
+
+    Returns a list of entity dicts, length min(k, len(entities)).
+    Falls back to uniform random if all weights are zero (shouldn't happen
+    with the +1, but defensive).
+    """
+    if not entities or k <= 0:
+        return []
+    now = float(now_epoch if now_epoch is not None else time.time())
+    weights = [(entity_power(e) + 1) * entity_idle_seconds(e["id"], now)
+               for e in entities]
+    total = sum(weights)
+    if total <= 0:
+        return random.sample(entities, min(k, len(entities)))
+    # Weighted sample WITHOUT replacement, using successive CDF draws.
+    chosen: list = []
+    pool = list(zip(entities, weights))
+    for _ in range(min(k, len(pool))):
+        wsum = sum(w for _, w in pool)
+        if wsum <= 0:
+            # No more weight; fall back to uniform pick from what's left.
+            idx = random.randrange(len(pool))
+        else:
+            target = random.random() * wsum
+            cum = 0.0
+            idx = 0
+            for i, (_, w) in enumerate(pool):
+                cum += w
+                if cum >= target:
+                    idx = i
+                    break
+        chosen.append(pool.pop(idx)[0])
+    return chosen
 
 
 class WorldScheduler:
@@ -243,32 +352,39 @@ class WorldScheduler:
             return {"success": False, "error": str(e)}
 
     def execute_scheduled_action(self):
-        """Execute scheduled world actions - pick multiple random entities and trigger actions."""
+        """Execute scheduled world actions - pick entities by
+        (power+1) * idle_seconds, then trigger LLM-driven actions."""
         cfg = load_scheduler_config()
         if not cfg.get("enabled", True):
             self.log_msg("=== Scheduler cycle skipped: disabled in config ===")
             return
         actions_per_cycle = int(cfg.get("actions_per_cycle", 1))
         self.log_msg(f"=== Running scheduled world action cycle ({actions_per_cycle} actions) ===")
-        
+
         # Get all entities
         entities = self.get_entities()
         if not entities:
             self.log_msg("No entities found in world!")
             return
-        
-        # Run multiple actions per cycle
-        for i in range(actions_per_cycle):
+
+        # Pick entities by (power+1)*idle_seconds weight, without replacement.
+        picks = pick_entities_weighted(entities, actions_per_cycle)
+        if not picks:
+            self.log_msg("No entities to pick (empty pool)")
+            return
+
+        for i, entity in enumerate(picks):
             if not self.running:
                 break
-            
-            # Pick a random entity
-            entity = random.choice(entities)
             entity_id = entity["id"]
             entity_name = entity["name"]
             entity_type = entity.get("entity_type", "unknown")
-            
-            self.log_msg(f"  [{i+1}/{actions_per_cycle}] Entity: {entity_name} ({entity_type})")
+            power = entity_power(entity)
+            idle_s = entity_idle_seconds(entity_id)
+            self.log_msg(
+                f"  [{i+1}/{len(picks)}] Entity: {entity_name} ({entity_type}) "
+                f"power={power} idle={int(idle_s)}s weight={(power+1)*int(idle_s)}"
+            )
             
             # Step 1: Get action context
             context_result = self.get_action_context(entity_id)
@@ -310,11 +426,17 @@ class WorldScheduler:
                 effects = process_result.get("effects_applied", {})
                 
                 self.log_msg(f"    ✓ {action}: {outcome}... ({time_ms}ms)")
-                
+
                 self.last_action_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 self.last_entity = entity_name
                 self.last_outcome = outcome
                 self.action_count += 1
+                # Record the action time so the next weighted pick favours
+                # entities that haven't acted recently.
+                try:
+                    mark_entity_acted(entity_id)
+                except Exception as e:
+                    print(f"[scheduler] mark_entity_acted failed: {e}")
             else:
                 self.log_msg(f"    ✗ Process failed: {process_result.get('error', 'Unknown error')}")
                 self.error_count += 1
@@ -402,18 +524,26 @@ class WorldScheduler:
         actions = int(cfg.get("actions_per_cycle", 1))
         # Derive the projected LLM-call rate (calls/h) for budget awareness.
         projected_calls_per_hour = round(actions * 3600.0 / interval, 2)
+        # Pull a fresh last-action snapshot for observability.
+        last_action_map = _load_entity_last_action()
+        now = time.time()
+        last_action_ages = {
+            eid: int(now - ts) for eid, ts in last_action_map.items()
+        }
         return {
             "running": self.running,
             "enabled": cfg.get("enabled", True),
             "interval_seconds": interval,
             "actions_per_cycle": actions,
             "projected_calls_per_hour": projected_calls_per_hour,
+            "selection_method": "(power+1) * seconds_idle, weighted sample without replacement",
             "config": cfg,
             "last_action_time": self.last_action_time,
             "last_entity": self.last_entity,
             "last_outcome": self.last_outcome,
             "action_count": self.action_count,
             "error_count": self.error_count,
+            "entity_idle_seconds": last_action_ages,
             "world_name": world_info.get("name", "Unknown"),
             "entity_count": world_info.get("entity_count", 0),
             "world_action_count": world_info.get("action_count", 0),
