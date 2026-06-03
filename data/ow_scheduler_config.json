@@ -1,0 +1,8 @@
+{
+  "enabled": true,
+  "interval_seconds": 120,
+  "actions_per_cycle": 1,
+  "notes": "Defaults: 30 LLM calls/h, under 5% of 4500/5h budget.",
+  "updated_at": "2026-06-03 19:55:48",
+  "updated_by": "api"
+}

@@ -49,12 +49,82 @@ from typing import Optional
 
 # Configuration
 OPEN_WORLD_URL = "http://localhost:8081"
-SCHEDULE_INTERVAL_SECONDS = 30  # Run every 30 seconds (within 4000 calls/5hr budget)
-ACTIONS_PER_CYCLE = 3  # Run 3 actions per cycle
 MAX_TOKENS_PER_CALL = 500  # Limit per action
 
 # Auth cookie - set after password verification
 AUTH_COOKIE = "openworld_auth=1"
+
+# Scheduler behaviour is now read live from a JSON config so we can tune
+# it (interval, actions per cycle, on/off) without restarting the API
+# server.  Default values are picked to stay well under the OW server's
+# 5% MiniMax slice (45 LLM calls / hour):
+#   1 action every 120s  =>  30 calls/hour
+# leaving ~15 calls/h of headroom for ad-hoc LLM calls in the OW web UI.
+SCHEDULER_CONFIG_PATH = os.path.join(
+    os.path.dirname(__file__), '..', 'data', 'ow_scheduler_config.json'
+)
+SCHEDULER_CONFIG_DEFAULTS = {
+    "enabled": True,
+    "interval_seconds": 120,   # 2 minutes between cycles
+    "actions_per_cycle": 1,    # 1 entity per cycle
+    "notes": "Defaults: 30 LLM calls/h, under 5% of 4500/5h budget.",
+}
+
+
+def load_scheduler_config() -> dict:
+    """Load scheduler config from disk; create it with defaults if missing.
+
+    Reads live every call so runtime changes via the API take effect on
+    the next cycle without restarting the process.
+    """
+    try:
+        if os.path.exists(SCHEDULER_CONFIG_PATH):
+            with open(SCHEDULER_CONFIG_PATH, "r") as f:
+                disk = json.load(f)
+            # Merge with defaults so missing keys fall back safely.
+            merged = {**SCHEDULER_CONFIG_DEFAULTS, **disk}
+            # Coerce types defensively (file may have been hand-edited).
+            merged["enabled"] = bool(merged.get("enabled", True))
+            merged["interval_seconds"] = max(5, int(merged.get("interval_seconds", 120)))
+            merged["actions_per_cycle"] = max(0, int(merged.get("actions_per_cycle", 1)))
+            return merged
+    except Exception as e:
+        print(f"[scheduler] config read failed ({e}); using defaults")
+    # First run / read failure: write defaults so the file exists.
+    try:
+        os.makedirs(os.path.dirname(SCHEDULER_CONFIG_PATH), exist_ok=True)
+        with open(SCHEDULER_CONFIG_PATH, "w") as f:
+            json.dump(SCHEDULER_CONFIG_DEFAULTS, f, indent=2)
+    except Exception:
+        pass
+    return dict(SCHEDULER_CONFIG_DEFAULTS)
+
+
+def save_scheduler_config(cfg: dict, updated_by: str = "selena") -> dict:
+    """Persist scheduler config to disk. Returns the merged config.
+
+    Validates the inputs, clamps to safe ranges, and stamps updated_at /
+    updated_by so we can audit changes.
+    """
+    merged = {**SCHEDULER_CONFIG_DEFAULTS, **(cfg or {})}
+    merged["enabled"] = bool(merged.get("enabled", True))
+    merged["interval_seconds"] = max(5, min(3600, int(merged.get("interval_seconds", 120))))
+    merged["actions_per_cycle"] = max(0, min(20, int(merged.get("actions_per_cycle", 1))))
+    merged["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    merged["updated_by"] = updated_by
+    try:
+        os.makedirs(os.path.dirname(SCHEDULER_CONFIG_PATH), exist_ok=True)
+        with open(SCHEDULER_CONFIG_PATH, "w") as f:
+            json.dump(merged, f, indent=2)
+    except Exception as e:
+        print(f"[scheduler] config write failed: {e}")
+    return merged
+
+
+# Backwards-compat constants — used only by tests / legacy callers that
+# still import these names. The runtime scheduler reads from the config.
+SCHEDULE_INTERVAL_SECONDS = SCHEDULER_CONFIG_DEFAULTS["interval_seconds"]
+ACTIONS_PER_CYCLE = SCHEDULER_CONFIG_DEFAULTS["actions_per_cycle"]
 
 
 class WorldScheduler:
@@ -67,6 +137,7 @@ class WorldScheduler:
         self.action_count = 0
         self.error_count = 0
         self.log = []
+        self.last_config_signature = None  # detect live config changes
 
     def log_msg(self, msg: str):
         """Log a message with timestamp."""
@@ -173,7 +244,12 @@ class WorldScheduler:
 
     def execute_scheduled_action(self):
         """Execute scheduled world actions - pick multiple random entities and trigger actions."""
-        self.log_msg(f"=== Running scheduled world action cycle ({ACTIONS_PER_CYCLE} actions) ===")
+        cfg = load_scheduler_config()
+        if not cfg.get("enabled", True):
+            self.log_msg("=== Scheduler cycle skipped: disabled in config ===")
+            return
+        actions_per_cycle = int(cfg.get("actions_per_cycle", 1))
+        self.log_msg(f"=== Running scheduled world action cycle ({actions_per_cycle} actions) ===")
         
         # Get all entities
         entities = self.get_entities()
@@ -182,7 +258,7 @@ class WorldScheduler:
             return
         
         # Run multiple actions per cycle
-        for i in range(ACTIONS_PER_CYCLE):
+        for i in range(actions_per_cycle):
             if not self.running:
                 break
             
@@ -192,7 +268,7 @@ class WorldScheduler:
             entity_name = entity["name"]
             entity_type = entity.get("entity_type", "unknown")
             
-            self.log_msg(f"  [{i+1}/{ACTIONS_PER_CYCLE}] Entity: {entity_name} ({entity_type})")
+            self.log_msg(f"  [{i+1}/{actions_per_cycle}] Entity: {entity_name} ({entity_type})")
             
             # Step 1: Get action context
             context_result = self.get_action_context(entity_id)
@@ -244,23 +320,54 @@ class WorldScheduler:
                 self.error_count += 1
 
     def scheduler_loop(self):
-        """Main scheduler loop - runs actions on schedule."""
-        self.log_msg(f"World Scheduler started! Interval: {SCHEDULE_INTERVAL_SECONDS}s, {ACTIONS_PER_CYCLE} actions/cycle")
+        """Main scheduler loop - runs actions on schedule.
+
+        Reads the scheduler config live on every iteration, so changes
+        made via the API (interval / actions_per_cycle / enabled) take
+        effect on the next cycle without a restart.
+        """
+        cfg = load_scheduler_config()
+        self.log_msg(
+            f"World Scheduler started! Interval: {cfg['interval_seconds']}s, "
+            f"{cfg['actions_per_cycle']} actions/cycle, enabled={cfg['enabled']}"
+        )
         self.log_msg(f"Open World URL: {OPEN_WORLD_URL}")
-        
-        # Run once immediately on start
+        self.last_config_signature = (
+            cfg['enabled'], cfg['interval_seconds'], cfg['actions_per_cycle']
+        )
+
+        # Run once immediately on start (respects the enabled flag)
         self.execute_scheduled_action()
-        
+
         while self.running:
             try:
-                # Wait for next interval
-                time.sleep(SCHEDULE_INTERVAL_SECONDS)
+                cfg = load_scheduler_config()
+                signature = (
+                    cfg['enabled'], cfg['interval_seconds'], cfg['actions_per_cycle']
+                )
+                if signature != self.last_config_signature:
+                    self.log_msg(
+                        f"[scheduler] config changed: interval={cfg['interval_seconds']}s, "
+                        f"actions/cycle={cfg['actions_per_cycle']}, enabled={cfg['enabled']}"
+                    )
+                    self.last_config_signature = signature
+                if not cfg['enabled']:
+                    # When disabled, wake up every 30s just to check the flag.
+                    time.sleep(30)
+                    continue
+                # Wait for next interval (or until we wake to check config).
+                slept = 0
+                interval = cfg['interval_seconds']
+                while slept < interval and self.running:
+                    step = min(5, interval - slept)
+                    time.sleep(step)
+                    slept += step
                 if self.running:
                     self.execute_scheduled_action()
             except Exception as e:
                 self.log_msg(f"Scheduler error (will continue): {e}")
                 # Continue running even if an action fails
-                continue
+                time.sleep(10)
 
     def start(self):
         """Start the scheduler in a background thread."""
@@ -290,11 +397,18 @@ class WorldScheduler:
     def status(self) -> dict:
         """Get scheduler status."""
         world_info = self.get_world_info()
-        
+        cfg = load_scheduler_config()
+        interval = max(1, int(cfg.get("interval_seconds", 120)))
+        actions = int(cfg.get("actions_per_cycle", 1))
+        # Derive the projected LLM-call rate (calls/h) for budget awareness.
+        projected_calls_per_hour = round(actions * 3600.0 / interval, 2)
         return {
             "running": self.running,
-            "interval_seconds": SCHEDULE_INTERVAL_SECONDS,
-            "actions_per_cycle": ACTIONS_PER_CYCLE,
+            "enabled": cfg.get("enabled", True),
+            "interval_seconds": interval,
+            "actions_per_cycle": actions,
+            "projected_calls_per_hour": projected_calls_per_hour,
+            "config": cfg,
             "last_action_time": self.last_action_time,
             "last_entity": self.last_entity,
             "last_outcome": self.last_outcome,
