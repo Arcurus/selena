@@ -859,6 +859,56 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.send_json(result)
             return
 
+        # ===== World backup endpoints (per Arcurus 2026-06-03) =====
+        # Daily snapshot of open-world-selena/world_data/save.owbl into
+        # .../backups/save-daily-YYYYMMDD.owbl, 30-day rotation, and
+        # a Discord warning if the new backup suddenly loses > 50% of
+        # the previous size (catches silent wipe / corruption).
+
+        if path == '/api/world/backup/status':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            from world_backup import list_daily_backups
+            backups = list_daily_backups()
+            total = sum(b["size_bytes"] for b in backups)
+            self.send_json({
+                'success': True,
+                'count': len(backups),
+                'newest': backups[0]["date_iso"] if backups else None,
+                'oldest': backups[-1]["date_iso"] if backups else None,
+                'total_bytes': total,
+                'retention_days': 30,
+                'warn_ratio': 0.5,
+            })
+            return
+
+        if path == '/api/world/backup/list':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            from world_backup import list_daily_backups
+            self.send_json({
+                'success': True,
+                'count': len(list_daily_backups()),
+                'backups': list_daily_backups(),
+            })
+            return
+
+        if path == '/api/world/backup/run':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            from world_backup import take_daily_backup
+            qs = parse_qs(urlparse(self.path).query)
+            warn_channel = qs.get('channel', [None])[0]
+            dry_run = qs.get('dry_run', ['0'])[0] in ('1', 'true', 'yes')
+            if dry_run:
+                os.environ['WORLD_BACKUP_DRY_RUN'] = '1'
+            result = take_daily_backup(warn_channel_id=warn_channel)
+            self.send_json({'success': result.get('ok', False), 'result': result})
+            return
+
         # ===== Discord notifier endpoints (per Arcurus 2026-06-03) =====
         # The cron announce mode is broken (Unsupported channel error on
         # the slow-heartbeat / moderation jobs).  All cron jobs SHOULD
@@ -1418,6 +1468,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             agent_id = query.get('agent_id', [None])[0] if 'agent_id=' in parsed.query else None
             project = query.get('project', [None])[0] if 'project=' in parsed.query else None
             agent_owner = query.get('agent_owner', [None])[0] if 'agent_owner=' in parsed.query else None
+            what_happened = query.get('what_happened', [None])[0] if 'what_happened=' in parsed.query else None
             # For POST requests with JSON body, prefer body fields over query params
             if self.command == 'POST':
                 cl = int(self.headers.get('Content-Length', 0) or 0)
@@ -1431,6 +1482,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                         if body.get('agent_id') is not None: agent_id = body['agent_id']
                         if body.get('project') is not None: project = body['project']
                         if body.get('agent_owner') is not None: agent_owner = body['agent_owner']
+                        if body.get('what_happened') is not None: what_happened = body['what_happened']
                         if body.get('parent_id') is not None: parent_id = body['parent_id']
                         if 'priority' in body:
                             try: priority = int(body['priority'])
@@ -1452,7 +1504,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     log_api('TODO_DUP_SKIP', f'skipped duplicate add for {creator_id}: {short_desc[:60]}')
                     self.send_json({'success': True, 'todo': existing, 'deduped': True})
                     return
-            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner)
+            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner, what_happened)
             self.send_json({'success': True, 'todo': todo})
             return
         
@@ -1478,6 +1530,9 @@ class RequestHandler(BaseHTTPRequestHandler):
             if 'creator_id' in query: updates['creator_id'] = query['creator_id'][0] if query['creator_id'][0] else None
             if 'conversation_id' in query: updates['conversation_id'] = query['conversation_id'][0] if query['conversation_id'][0] else None
             if 'agent_id' in query: updates['agent_id'] = query['agent_id'][0] if query['agent_id'][0] else None
+            if 'project' in query: updates['project'] = query['project'][0] if query['project'][0] else None
+            if 'agent_owner' in query: updates['agent_owner'] = query['agent_owner'][0] if query['agent_owner'][0] else None
+            if 'what_happened' in query: updates['what_happened'] = query['what_happened'][0] if query['what_happened'][0] else None
             if 'block_reason' in query: updates['block_reason'] = query['block_reason'][0] if query['block_reason'][0] else None
             if 'waiting_for' in query: updates['waiting_for'] = query['waiting_for'][0] if query['waiting_for'][0] else None
             if 'restore' in query: updates['restore'] = query['restore'][0].lower() == 'true'
@@ -1548,7 +1603,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             if not todo_id:
                 self.send_json({'success': False, 'error': 'id required'}, 400)
                 return
-            todo = todo_manager.mark_done(todo_id)
+            what_happened = query.get('what_happened', [None])[0] if 'what_happened=' in parsed.query else None
+            todo = todo_manager.mark_done(todo_id, what_happened=what_happened)
             if todo:
                 self.send_json({'success': True, 'todo': todo})
             else:
@@ -1783,18 +1839,38 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.send_json({'service': service_name, 'status': 'ok', 'statusText': 'Running'})
                 return
             
+            # Special case: in-process sub-services that can't self-HTTP (single-threaded http.server).
+            # Check the notifier state directly so the services panel shows real status.
+            if service_name == 'selena-discord-notifier':
+                try:
+                    n = get_default_notifier()
+                    st = n.status()
+                    enabled = bool(st.get('enabled'))
+                    if enabled:
+                        posts = st.get('post_count', 0)
+                        err = st.get('last_error')
+                        if err:
+                            self.send_json({'service': service_name, 'status': 'ok', 'statusText': f'Running (posts={posts}, last_error={err[:40]})'})
+                        else:
+                            self.send_json({'service': service_name, 'status': 'ok', 'statusText': f'Running (posts={posts})'})
+                    else:
+                        self.send_json({'service': service_name, 'status': 'offline', 'statusText': 'Notifier disabled'})
+                except Exception as e:
+                    self.send_json({'service': service_name, 'status': 'offline', 'statusText': 'Notifier check failed', 'error': str(e)})
+                return
+
             # For other services, make HTTP check
             check_urls = {
                 'open-world-selena': 'http://localhost:8081/',
-                'openclaw-gateway': 'http://localhost:18789/'
+                'openclaw-gateway': 'http://localhost:18789/',
             }
-            
+
             if service_name not in check_urls:
                 self.send_json({'error': f'Unknown service: {service_name}'}, 400)
                 return
-            
+
             url = check_urls[service_name]
-            
+
             # Do server-side HTTP check
             import urllib.request
             try:
@@ -2281,6 +2357,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             agent_id = data.get('agent_id')
             project = data.get('project')
             agent_owner = data.get('agent_owner')
+            what_happened = data.get('what_happened')
 
             if not short_desc:
                 self.send_json({'success': False, 'error': 'short_desc required'}, 400)
@@ -2296,7 +2373,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     self.send_json({'success': True, 'todo': existing, 'deduped': True})
                     return
 
-            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner)
+            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner, what_happened)
             self.send_json({'success': True, 'todo': todo})
             return
 
@@ -2354,6 +2431,9 @@ class RequestHandler(BaseHTTPRequestHandler):
             if 'creator_id' in query: updates['creator_id'] = query['creator_id'][0] if query['creator_id'][0] else None
             if 'conversation_id' in query: updates['conversation_id'] = query['conversation_id'][0] if query['conversation_id'][0] else None
             if 'agent_id' in query: updates['agent_id'] = query['agent_id'][0] if query['agent_id'][0] else None
+            if 'project' in query: updates['project'] = query['project'][0] if query['project'][0] else None
+            if 'agent_owner' in query: updates['agent_owner'] = query['agent_owner'][0] if query['agent_owner'][0] else None
+            if 'what_happened' in query: updates['what_happened'] = query['what_happened'][0] if query['what_happened'][0] else None
             if 'block_reason' in query: updates['block_reason'] = query['block_reason'][0] if query['block_reason'][0] else None
             if 'waiting_for' in query: updates['waiting_for'] = query['waiting_for'][0] if query['waiting_for'][0] else None
             if 'restore' in query: updates['restore'] = query['restore'][0].lower() == 'true'
