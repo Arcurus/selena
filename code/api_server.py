@@ -1535,6 +1535,12 @@ class RequestHandler(BaseHTTPRequestHandler):
             if 'what_happened' in query: updates['what_happened'] = query['what_happened'][0] if query['what_happened'][0] else None
             if 'block_reason' in query: updates['block_reason'] = query['block_reason'][0] if query['block_reason'][0] else None
             if 'waiting_for' in query: updates['waiting_for'] = query['waiting_for'][0] if query['waiting_for'][0] else None
+            # completed_at: explicit value wins over the auto-rule. Empty string
+            # is treated as "not set" so the auto-rule (set/clear on status
+            # transitions) handles it. See TodoManager._apply_completed_at_rule.
+            if 'completed_at=' in parsed.query:
+                _ca = query.get('completed_at', [''])[0]
+                updates['completed_at'] = _ca if _ca else None
             if 'restore' in query: updates['restore'] = query['restore'][0].lower() == 'true'
             todo = todo_manager.update_todo(todo_id, **updates)
             if todo:
@@ -2436,6 +2442,12 @@ class RequestHandler(BaseHTTPRequestHandler):
             if 'what_happened' in query: updates['what_happened'] = query['what_happened'][0] if query['what_happened'][0] else None
             if 'block_reason' in query: updates['block_reason'] = query['block_reason'][0] if query['block_reason'][0] else None
             if 'waiting_for' in query: updates['waiting_for'] = query['waiting_for'][0] if query['waiting_for'][0] else None
+            # completed_at: explicit value wins over the auto-rule. Empty string
+            # is treated as "not set" so the auto-rule (set/clear on status
+            # transitions) handles it. See TodoManager._apply_completed_at_rule.
+            if 'completed_at=' in parsed.query:
+                _ca = query.get('completed_at', [''])[0]
+                updates['completed_at'] = _ca if _ca else None
             if 'restore' in query: updates['restore'] = query['restore'][0].lower() == 'true'
             todo = todo_manager.update_todo(todo_id, **updates)
             if todo:

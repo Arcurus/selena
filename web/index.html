@@ -280,6 +280,8 @@
                                 <option value="date_asc">Date created (oldest first)</option>
                                 <option value="updated_desc">Last updated (newest first)</option>
                                 <option value="updated_asc">Last updated (oldest first)</option>
+                                <option value="completed_desc">Completed (newest first)</option>
+                                <option value="completed_asc">Completed (oldest first)</option>
                             </select>
                         </div>
                         <div style="display: flex; align-items: center; gap: 6px;">
@@ -578,43 +580,67 @@
                          beautiful horizontal-flow card chain. Wraps to vertical on narrow screens. -->
                     <div style="display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; margin: 6px 0 22px 0;">
                         <!-- Step 1: Discord scanner -->
-                        <div style="flex: 1 1 180px; min-width: 160px; padding: 12px 14px; background: linear-gradient(135deg, rgba(80,140,255,0.12), rgba(80,140,255,0.04)); border: 1px solid rgba(80,140,255,0.35); border-radius: 8px;">
-                            <div style="font-size: 22px; line-height: 1; margin-bottom: 6px;">🔍</div>
-                            <div style="font-weight: 600; margin-bottom: 4px;">discord scanner</div>
-                            <div style="font-size: 12px; opacity: 0.75; line-height: 1.4;">Watches new-member messages. Triggers the cron when a fresh account posts.</div>
+                        <div style="flex: 1 1 180px; min-width: 160px; padding: 12px 14px; background: linear-gradient(135deg, rgba(80,140,255,0.12), rgba(80,140,255,0.04)); border: 1px solid rgba(80,140,255,0.35); border-radius: 8px; display: flex; flex-direction: column;">
+                            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                                <div style="font-size: 22px; line-height: 1;">🔍</div>
+                                <div style="font-weight: 600; flex: 1; min-width: 0;">discord scanner</div>
+                                <div id="modRunScanLastRun" style="font-size: 11px; opacity: 0.7; font-family: monospace; white-space: nowrap;" title="When the scanner last ran. Refreshes every 10s and after you click the button.">last scan: <span id="modRunScanLastRunTime">—</span></div>
+                            </div>
+                            <div style="font-size: 12px; opacity: 0.75; line-height: 1.4; flex: 1; margin-bottom: 10px;">Watches new-member messages. Triggers the cron when a fresh account posts.</div>
+                            <div style="margin-top: auto;">
+                                <button onclick="modRunScan()" id="modRunScanBtn" style="margin: 0; padding: 6px 12px; background: rgba(80,140,255,0.25); border: 1px solid rgba(80,140,255,0.5); color: inherit; border-radius: 4px; cursor: pointer; font-size: 12px; font-family: inherit; width: 100%;" title="Run the new-user scanner synchronously. If a new user is found, the moderation cron is woken automatically.">🔍 Run scanner</button>
+                            </div>
                         </div>
                         <div style="display: flex; align-items: center; opacity: 0.5; font-size: 20px; padding: 0 4px;">→</div>
                         <!-- Step 2: LLM moderation -->
-                        <div style="flex: 1 1 180px; min-width: 160px; padding: 12px 14px; background: linear-gradient(135deg, rgba(180,120,255,0.12), rgba(180,120,255,0.04)); border: 1px solid rgba(180,120,255,0.35); border-radius: 8px;">
-                            <div style="font-size: 22px; line-height: 1; margin-bottom: 6px;">🤖</div>
-                            <div style="font-weight: 600; margin-bottom: 4px;">LLM moderation <span style="opacity: 0.5; font-weight: normal; font-size: 11px;">(cron)</span></div>
-                            <div style="font-size: 12px; opacity: 0.75; line-height: 1.4;">Reads the bundle, judges messages, sets <code style="font-size: 11px;">insta_ban</code> on obvious cases.</div>
+                        <div style="flex: 1 1 180px; min-width: 160px; padding: 12px 14px; background: linear-gradient(135deg, rgba(180,120,255,0.12), rgba(180,120,255,0.04)); border: 1px solid rgba(180,120,255,0.35); border-radius: 8px; display: flex; flex-direction: column;">
+                            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                                <div style="font-size: 22px; line-height: 1;">🤖</div>
+                                <div style="font-weight: 600; flex: 1; min-width: 0;">LLM moderation <span style="opacity: 0.5; font-weight: normal; font-size: 11px;">(cron)</span></div>
+                                <div id="modRunCronLastRun" style="font-size: 11px; opacity: 0.7; font-family: monospace; white-space: nowrap;" title="When the moderation cron was last woken. Refreshes every 10s and after you click the button.">last wake: <span id="modRunCronLastRunTime">—</span></div>
+                            </div>
+                            <div style="font-size: 12px; opacity: 0.75; line-height: 1.4; flex: 1; margin-bottom: 10px;">Reads the bundle, judges messages, sets <code style="font-size: 11px;">insta_ban</code> on obvious cases.</div>
+                            <div style="margin-top: auto;">
+                                <button onclick="modForceCron()" id="modForceCronBtn" style="margin: 0; padding: 6px 12px; background: rgba(180,120,255,0.25); border: 1px solid rgba(180,120,255,0.5); color: inherit; border-radius: 4px; cursor: pointer; font-size: 12px; font-family: inherit; width: 100%;" title="Bypass the debounce and immediately wake the moderation cron job. Use when you want a scan on-demand without waiting for the next 30-min cycle.">▶️ Run moderation cron</button>
+                            </div>
                         </div>
                         <div style="display: flex; align-items: center; opacity: 0.5; font-size: 20px; padding: 0 4px;">→</div>
                         <!-- Step 3: Staged -->
-                        <div style="flex: 1 1 220px; min-width: 180px; padding: 12px 14px; background: linear-gradient(135deg, rgba(255,180,80,0.12), rgba(255,180,80,0.04)); border: 1px solid rgba(255,180,80,0.35); border-radius: 8px;">
-                            <div style="font-size: 22px; line-height: 1; margin-bottom: 6px;">📋</div>
-                            <div style="font-weight: 600; margin-bottom: 4px;">staged</div>
-                            <div style="font-size: 12px; opacity: 0.75; line-height: 1.4;">
+                        <div style="flex: 1 1 220px; min-width: 180px; padding: 12px 14px; background: linear-gradient(135deg, rgba(255,180,80,0.12), rgba(255,180,80,0.04)); border: 1px solid rgba(255,180,80,0.35); border-radius: 8px; display: flex; flex-direction: column;">
+                            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                                <div style="font-size: 22px; line-height: 1;">📋</div>
+                                <div style="font-weight: 600; flex: 1; min-width: 0;">staged</div>
+                                <div id="modStagedPendingCount" style="font-size: 11px; opacity: 0.7; font-family: monospace; white-space: nowrap;" title="Total pending actions (normal + urgent). Refreshes every 10s."><span id="modStagedPendingCountNum">—</span> pending</div>
+                            </div>
+                            <div style="font-size: 12px; opacity: 0.75; line-height: 1.4; flex: 1; margin-bottom: 10px;">
                                 <code style="font-size: 11px;">pending_actions.json</code> <span style="opacity: 0.6;">(normal)</span><br>
                                 or <code style="font-size: 11px;">pending_actions_urgent.json</code> <span style="opacity: 0.6;">(insta-ban)</span>
+                            </div>
+                            <div style="margin-top: auto;">
+                                <button onclick="modGoToSubTab('mod-pending')" style="margin: 0; padding: 6px 12px; background: rgba(255,180,80,0.2); border: 1px solid rgba(255,180,80,0.5); color: inherit; border-radius: 4px; cursor: pointer; font-size: 12px; font-family: inherit; width: 100%; text-align: left;" title="Open the Pending Actions sub-tab to see the pending + urgent queues.">📋 Go to Pending Actions →</button>
                             </div>
                         </div>
                         <div style="display: flex; align-items: center; opacity: 0.5; font-size: 20px; padding: 0 4px;">→</div>
                         <!-- Step 4: Execute -->
-                        <div style="flex: 1 1 180px; min-width: 160px; padding: 12px 14px; background: linear-gradient(135deg, rgba(80,220,140,0.12), rgba(80,220,140,0.04)); border: 1px solid rgba(80,220,140,0.35); border-radius: 8px;">
-                            <div style="font-size: 22px; line-height: 1; margin-bottom: 6px;">⚡</div>
-                            <div style="font-weight: 600; margin-bottom: 4px;">execute</div>
-                            <div style="font-size: 12px; opacity: 0.75; line-height: 1.4;">Ignores elders / protected users. 3 hard gates for insta-ban: not protected, not elder, account &lt; 30d.</div>
+                        <div style="flex: 1 1 180px; min-width: 160px; padding: 12px 14px; background: linear-gradient(135deg, rgba(80,220,140,0.12), rgba(80,220,140,0.04)); border: 1px solid rgba(80,220,140,0.35); border-radius: 8px; display: flex; flex-direction: column;">
+                            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                                <div style="font-size: 22px; line-height: 1;">⚡</div>
+                                <div style="font-weight: 600; flex: 1; min-width: 0;">execute</div>
+                                <div id="modExecuteDoneCount" style="font-size: 11px; opacity: 0.7; font-family: monospace; white-space: nowrap;" title="Total moderation actions ever taken (bans + timeouts, all time). Refreshes every 10s."><span id="modExecuteDoneCountNum">—</span> done</div>
+                            </div>
+                            <div style="font-size: 12px; opacity: 0.75; line-height: 1.4; flex: 1; margin-bottom: 10px;">Ignores elders / protected users. 3 hard gates for insta-ban: not protected, not elder, account &lt; 30d.</div>
+                            <div style="margin-top: auto;">
+                                <button onclick="modGoToSubTab('mod-banned')" style="margin: 0; padding: 6px 12px; background: rgba(80,220,140,0.2); border: 1px solid rgba(80,220,140,0.5); color: inherit; border-radius: 4px; cursor: pointer; font-size: 12px; font-family: inherit; width: 100%; text-align: left;" title="Open the Banned/Timeout sub-tab to see the action history.">🚫 Go to Banned/Timeout →</button>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Sub-tab nav -->
+                    <!-- Sub-tab nav (2026-06-04 per Arcurus: removed Pending Actions + Banned/Timeout;
+                         both are now reachable via the pipeline-diagram buttons. Kept the
+                         5 tabs that don't have a pipeline-box analog.) -->
                     <div class="subtabs" style="display: flex; gap: 6px; margin: 18px 0 24px 0; flex-wrap: wrap; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">
                         <button class="subtab active" data-subtab="mod-last" onclick="showModSubTab('mod-last')">📊 Last Run</button>
-                        <button class="subtab" data-subtab="mod-run" onclick="showModSubTab('mod-run')">▶️ Run Now</button>
                         <button class="subtab" data-subtab="mod-settings" onclick="showModSubTab('mod-settings')">⚙️ Settings</button>
-                        <button class="subtab" data-subtab="mod-banned" onclick="showModSubTab('mod-banned')">🚫 Banned / Timeout</button>
                         <button class="subtab" data-subtab="mod-users" onclick="showModSubTab('mod-users')">👥 Users</button>
                         <button class="subtab" data-subtab="mod-policies" onclick="showModSubTab('mod-policies')">📜 Policies</button>
                         <button class="subtab" data-subtab="mod-log" onclick="showModSubTab('mod-log')">📋 Log</button>
@@ -627,28 +653,12 @@
                         </h3>
                         <div id="modLastRunContent">Loading...</div>
                     </div>
-                    <div class="subtab-content" id="mod-run" style="display: none;">
-                        <h3>▶️ Run Now</h3>
+                    <div class="subtab-content" id="mod-pending" style="display: none;">
+                        <p style="opacity: 0.7; font-size: 13px; margin-bottom: 18px;">Pending + urgent queues. Use the action buttons in the pipeline diagram above to run the scanner or trigger the cron; this page shows the result.</p>
 
-                        <!-- Action 1: Run scanner — description directly above, button below -->
-                        <div style="margin-top: 14px; padding: 14px 16px; background: rgba(80,140,255,0.06); border-left: 3px solid rgba(80,140,255,0.6); border-radius: 0 6px 6px 0;">
-                            <div style="font-size: 14px; line-height: 1.5; margin-bottom: 10px; opacity: 0.9;">
-                                <strong>🔍 Run scanner</strong> — runs the new-user scanner synchronously. If a new user is found and the debounce is OK, the moderation cron is woken automatically.
-                            </div>
-                            <button class="save-btn" onclick="modRunScan()" id="modRunScanBtn" style="width: auto; padding: 10px 24px;">🔍 Run scanner</button>
-                        </div>
+                        <div id="modRunResult"></div>
 
-                        <!-- Action 2: Force moderation cron — description directly above, button below -->
-                        <div style="margin-top: 14px; padding: 14px 16px; background: rgba(255,165,0,0.06); border-left: 3px solid rgba(255,165,0,0.6); border-radius: 0 6px 6px 0;">
-                            <div style="font-size: 14px; line-height: 1.5; margin-bottom: 10px; opacity: 0.9;">
-                                <strong>⚡ Force moderation cron</strong> — bypasses the debounce and immediately wakes the moderation cron job. Use this when you want a scan on-demand without waiting for the next 30-min cycle.
-                            </div>
-                            <button class="save-btn" onclick="modForceCron()" id="modForceCronBtn" style="width: auto; padding: 10px 24px; background: rgba(255,165,0,0.3);">⚡ Force moderation cron</button>
-                        </div>
-
-                        <div id="modRunResult" style="margin-top: 18px;"></div>
-
-                        <h4 style="margin-top: 32px; margin-bottom: 6px;">🚨 Urgent Lane (auto-execute) <span id="modUrgentCount" style="opacity: 0.6; font-size: 0.85em; font-weight: normal;"></span></h4>
+                        <h4 style="margin-top: 18px; margin-bottom: 6px;">🚨 Urgent Lane (auto-execute) <span id="modUrgentCount" style="opacity: 0.6; font-size: 0.85em; font-weight: normal;"></span></h4>
                         <p style="opacity: 0.7; font-size: 12px; margin-bottom: 10px;">
                             Brand-new accounts (≤7d) that immediately spammed / flamed and got a <code>ban_user</code> verdict. <strong>Auto-executed by the cron</strong> (no human Apply needed) per <code>ban_authority_v2</code>. This list is the <em>audit trail</em> — you see what was auto-executed and (in dry-run previews) what would have been auto-executed. ✕ Clear removes the entry from the log; it does <strong>not</strong> un-execute.
                         </p>
@@ -2543,16 +2553,18 @@
                 countsEl.textContent = bits.join(' · ');
             }
         }
-        // Translate UI sort key to the API's `sort_by` values (priority/created/updated).
+        // Translate UI sort key to the API's `sort_by` values (priority/created/updated/completed).
         // 'date_desc'/'date_asc' map to created_at (the user picks Date = created date).
         function sortKeyToApiSort(key) {
             switch (key) {
-                case 'priority':      return 'priority';
-                case 'date_desc':     return 'created';
-                case 'date_asc':      return 'created_asc';
-                case 'updated_desc':  return 'updated';
-                case 'updated_asc':   return 'updated_asc';
-                default:              return null;
+                case 'priority':       return 'priority';
+                case 'date_desc':      return 'created';
+                case 'date_asc':       return 'created_asc';
+                case 'updated_desc':   return 'updated';
+                case 'updated_asc':    return 'updated_asc';
+                case 'completed_desc': return 'completed';
+                case 'completed_asc':  return 'completed_asc';
+                default:               return null;
             }
         }
 
@@ -2611,7 +2623,7 @@
             }
             
             // Sort by priority (same as main view)
-            const statusOrder = { 'in_progress': 0, 'completed': 1, 'blocked': 2, 'open': 3, 'done': 4 };
+            const statusOrder = { 'in_progress': 0, 'blocked': 1, 'completed': 2, 'open': 3, 'done': 4 };
             matches.sort((a, b) => {
                 const statusDiff = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99);
                 if (statusDiff !== 0) return statusDiff;
@@ -2897,13 +2909,13 @@
                         <h3>In Progress</h3>
                         <div class="value" style="font-size: 1.5rem; color: var(--working)">${summary.in_progress || 0}</div>
                     </div>
-                    <div class="cost-card ${activeFilter === 'completed' ? 'active' : ''}" onclick="setTodoFilter('completed')" id="card-completed">
-                        <h3>Completed</h3>
-                        <div class="value" style="font-size: 1.5rem; color: var(--accent-purple)">${summary.completed || 0}</div>
-                    </div>
                     <div class="cost-card ${activeFilter === 'blocked' ? 'active' : ''}" onclick="setTodoFilter('blocked')" id="card-blocked">
                         <h3>Blocked</h3>
                         <div class="value" style="font-size: 1.5rem; color: var(--danger)">${summary.blocked || 0}</div>
+                    </div>
+                    <div class="cost-card ${activeFilter === 'completed' ? 'active' : ''}" onclick="setTodoFilter('completed')" id="card-completed">
+                        <h3>Completed</h3>
+                        <div class="value" style="font-size: 1.5rem; color: var(--accent-purple)">${summary.completed || 0}</div>
                     </div>
                     <div class="cost-card ${activeFilter === 'done' ? 'active' : ''}" onclick="setTodoFilter('done')" id="card-done">
                         <h3>Done</h3>
@@ -2979,10 +2991,22 @@
                     todos.sort((a, b) => upOf(b) - upOf(a));
                 } else if (sortByKey === 'updated_asc') {
                     todos.sort((a, b) => upOf(a) - upOf(b));
+                } else if (sortByKey === 'completed_desc' || sortByKey === 'completed_asc') {
+                    // Mirror the API's completed sort: todos with completed_at=null
+                    // sink to the bottom, then by date. (2026-06-05 per Arcurus.)
+                    const caOf = t => t.completed_at ? new Date(t.completed_at).getTime() : null;
+                    const dir = sortByKey === 'completed_desc' ? -1 : 1;
+                    todos.sort((a, b) => {
+                        const ax = caOf(a), bx = caOf(b);
+                        if (ax === null && bx === null) return 0;
+                        if (ax === null) return 1;  // nulls always last
+                        if (bx === null) return -1;
+                        return (ax - bx) * dir;
+                    });
                 } else {
                     // Default: by status (done goes last, then by its own rule),
                     // then by priority for non-done, then by date for done.
-                    const statusOrder = { 'in_progress': 0, 'completed': 1, 'blocked': 2, 'open': 3, 'done': 4 };
+                    const statusOrder = { 'in_progress': 0, 'blocked': 1, 'completed': 2, 'open': 3, 'done': 4 };
                     todos.sort((a, b) => {
                         const sDiff = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99);
                         if (sDiff !== 0) return sDiff;
@@ -3023,7 +3047,7 @@
                                 ${todo.long_desc ? `<p style="color: var(--text-secondary); font-size: 0.85rem;">${todo.long_desc}</p>` : ''}
                                 ${todo.what_happened ? `<div style="margin-top: 6px; padding: 6px 10px; background: rgba(110, 231, 183, 0.08); border-left: 3px solid var(--success); border-radius: 4px; font-size: 0.8rem; color: var(--text-primary);"><b style="color: var(--success);">✓ what happened:</b> ${escapeHtml(todo.what_happened)}</div>` : ''}
                                 <div style="margin-top: 8px; font-size: 0.75rem; color: var(--text-secondary);">
-                                    ID: ${todo.id} | Created: ${new Date(todo.created_at).toLocaleString()}${todo.creator_id ? ` | Creator: ${escapeHtml(todo.creator_id)}` : ''}
+                                    ID: ${todo.id} | Created: ${new Date(todo.created_at).toLocaleString()}${todo.creator_id ? ` | Creator: ${escapeHtml(todo.creator_id)}` : ''}${todo.completed_at ? ` | <span style="color: var(--success);">✓ Completed: ${new Date(todo.completed_at).toLocaleString()}</span>` : ''}
                                 </div>
                             </div>
                             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -3711,6 +3735,7 @@
                 modLoadPolicies();
                 modPendingRefresh();
                 modUrgentRefresh();
+                modUpdateLastRunDisplays();
                 startModPolling();
             } else {
                 stopModPolling();
@@ -3813,11 +3838,17 @@
         function startModPolling() {
             if (modPollingInterval) return;
             // Poll Last Run every 10s when the moderation tab is active.
-            // Same cadence as the Services tab.
+            // Same cadence as the Services tab. Also refresh the pipeline
+            // "last run" indicators (under the Run scanner / Run moderation
+            // cron buttons) so they stay in sync with the Last Run tab.
             modPollingInterval = setInterval(() => {
                 if (document.getElementById('mod-last') && document.getElementById('mod-last').classList.contains('active')) {
                     modLoadLastRun();
                 }
+                // Pipeline last-run indicators can update regardless of
+                // which sub-tab is active (they sit on the moderation
+                // tab intro, not inside any sub-tab).
+                modUpdateLastRunDisplays();
             }, 10000);
         }
         function stopModPolling() {
@@ -3834,6 +3865,27 @@
             const content = document.getElementById(name);
             if (btn) btn.classList.add('active');
             if (content) { content.style.display = 'block'; content.classList.add('active'); }
+        }
+
+        // modGoToSubTab: same as showModSubTab, but also smooth-scrolls the
+        // sub-tab content into view. Used by the pipeline-diagram "Go to ..."
+        // buttons so the user lands on the data without having to manually
+        // scroll past the pipeline diagram.
+        function modGoToSubTab(name) {
+            showModSubTab(name);
+            const content = document.getElementById(name);
+            if (content && typeof content.scrollIntoView === 'function') {
+                // Small delay so the display: block applies first.
+                setTimeout(() => content.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+            }
+            // Trigger the matching modLoad* if the tab has one (so data
+            // loads fresh when navigating from a pipeline button).
+            if (name === 'mod-pending') {
+                modPendingRefresh();
+                modUrgentRefresh();
+            } else if (name === 'mod-banned') {
+                modLoadBanned();
+            }
         }
 
         // ---------------------------------------------------------------------
@@ -4126,6 +4178,8 @@
                 result.innerHTML = `<div style="color: #ff8888;">Network error: ${e.message}</div>`;
             } finally {
                 btn.disabled = false; btn.textContent = '🔍 Run scanner';
+                // Refresh the "last scan" display under the button
+                modUpdateLastRunDisplays();
             }
         }
 
@@ -4145,7 +4199,54 @@
             } catch (e) {
                 result.innerHTML = `<div style="color: #ff8888;">Network error: ${e.message}</div>`;
             } finally {
-                btn.disabled = false; btn.textContent = '⚡ Force moderation cron';
+                btn.disabled = false; btn.textContent = '▶️ Run moderation cron';
+                // Refresh the "last wake" display under the button
+                modUpdateLastRunDisplays();
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // Pipeline "last run" indicators (added 2026-06-04 per Arcurus)
+        // Shows the most recent scanner / cron run times under the action
+        // buttons in the pipeline diagram. Refreshed on page load, after
+        // the corresponding button is clicked, and every 10s when the
+        // moderation tab is active (alongside modLoadLastRun's auto-poll).
+        // ---------------------------------------------------------------------
+        function modFormatRelativeTime(isoStr) {
+            if (!isoStr) return 'never';
+            const d = new Date(isoStr);
+            if (isNaN(d.getTime())) return 'never';
+            const diffMs = Date.now() - d.getTime();
+            if (diffMs < 0) return 'just now';
+            const sec = Math.floor(diffMs / 1000);
+            if (sec < 60) return 'just now';
+            const min = Math.floor(sec / 60);
+            if (min < 60) return `${min} min ago`;
+            const hr = Math.floor(min / 60);
+            if (hr < 24) return `${hr}h ago`;
+            const day = Math.floor(hr / 24);
+            return `${day}d ago`;
+        }
+        async function modUpdateLastRunDisplays() {
+            try {
+                const r = await fetch('api/discord-lookup/status', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!r.ok) return;
+                const d = await r.json();
+                if (d.error) return;
+                const scanEl = document.getElementById('modRunScanLastRunTime');
+                const cronEl = document.getElementById('modRunCronLastRunTime');
+                if (scanEl) {
+                    scanEl.textContent = modFormatRelativeTime(d.last_scan_at);
+                    scanEl.title = d.last_scan_at ? new Date(d.last_scan_at).toLocaleString() : 'scanner has not run yet';
+                }
+                if (cronEl) {
+                    cronEl.textContent = modFormatRelativeTime(d.last_wake_at);
+                    cronEl.title = d.last_wake_at ? new Date(d.last_wake_at).toLocaleString() : 'moderation cron has not been woken yet';
+                }
+            } catch (e) {
+                // Silently fail — these displays are non-critical
             }
         }
 
@@ -4545,7 +4646,7 @@
             }
         }
         // ---------------------------------------------------------------------
-        // Pending actions (Run Now sub-tab)
+        // Pending actions (Pending Actions sub-tab)
         // ---------------------------------------------------------------------
         async function modPendingRefresh() {
             const list = document.getElementById('modPendingList');
@@ -4763,7 +4864,7 @@
         }
 
         // ---------------------------------------------------------------------
-        // Urgent lane (Run Now sub-tab) — auto-executed actions
+        // Urgent lane (Pending Actions sub-tab) — auto-executed actions
         // ---------------------------------------------------------------------
         async function modUrgentRefresh() {
             const list = document.getElementById('modUrgentList');

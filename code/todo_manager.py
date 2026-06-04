@@ -9,7 +9,7 @@ Each todo has:
 - priority (1-10, 10 = highest)
 - short_desc (brief title)
 - long_desc (detailed description)
-- status (open, in_progress, done, blocked)
+- status (open, in_progress, completed, blocked, done)
 - sensitive (boolean - if True, stored in todos.env NOT in git)
 - parent_id (optional - for hierarchical todos)
 - estimated_llm_calls (optional - estimated LLM calls for this task)
@@ -18,6 +18,7 @@ Each todo has:
 - agent_id (optional - which agent owns this todo)
 - block_reason (optional - reason why this todo is blocked)
 - waiting_for (optional - ID of the todo this is waiting for)
+- completed_at (ISO timestamp set automatically by status transitions; see _apply_completed_at_rule)
 - created_at
 - updated_at
 """
@@ -27,6 +28,11 @@ import os
 import uuid
 from datetime import datetime
 from typing import Optional, List
+
+# Sentinel for distinguishing "field not passed" from "field passed as None".
+# Used by _update_todo_in_list so an explicit completed_at=None from the
+# caller still wins over the auto-rule.
+_SENTINEL_UNSET = object()
 
 # Configuration
 AGENT_ROOT = os.path.expanduser("~/openclaw/workspace/selena-project")
@@ -172,12 +178,40 @@ class TodoManager:
         else:
             self._save_todos()
 
+    def find_open_by_signature(self, short_desc: str, creator_id: str) -> Optional[dict]:
+        """Return an existing OPEN todo with matching (short_desc, creator_id),
+        or None.  Added 2026-06-03 as a defensive dedup for the API: if the
+        same caller asks to add the same short_desc twice in a row, return
+        the existing record instead of creating a second one.  Guards against
+        client-side double-submits AND a future regression of the
+        double-append bug fixed in commit afddbfa.
+
+        Match rule: exact short_desc + exact creator_id + status in
+        ('open', 'in_progress') + not soft-deleted.
+        """
+        target = (short_desc or "").strip()
+        cid = (creator_id or "").strip()
+        if not target or not cid:
+            return None
+        for todo in self._get_all_todos():
+            if todo.get("deleted_at"):
+                continue
+            if todo.get("status") not in ("open", "in_progress"):
+                continue
+            if (todo.get("short_desc") or "").strip() == target \
+                    and (todo.get("creator_id") or "").strip() == cid:
+                return todo
+        return None
+
     def add_todo(self, short_desc: str, long_desc: str = "", priority: int = 5,
                  sensitive: bool = False, parent_id: Optional[str] = None,
                  estimated_llm_calls: Optional[int] = None,
                  creator_id: Optional[str] = None,
                  conversation_id: Optional[str] = None,
-                 agent_id: Optional[str] = None) -> dict:
+                 agent_id: Optional[str] = None,
+                 project: Optional[str] = None,
+                 agent_owner: Optional[str] = None,
+                 what_happened: Optional[str] = None) -> dict:
         """
         Add a new todo.
 
@@ -191,6 +225,17 @@ class TodoManager:
             creator_id: Optional ID of who created this todo
             conversation_id: Optional ID of the conversation this belongs to
             agent_id: Optional ID of the agent that owns this todo
+            project: Optional project tag (e.g. "selena-project", "selena-project-lunar",
+                "open-world-selena", "openlife", "unassigned"). Used by project-worker
+                crons to filter their work. (2026-06-03 per Arcurus.)
+            agent_owner: Optional name of the agent/worker currently working on or
+                finishing this todo. Same convention as the worker cron names
+                (e.g. "selena-project-worker", "selena-project-lunar-worker",
+                "selena-slow-heartbeat", "arcurus" for human signoff).
+            what_happened: Optional free-text summary of what was done. **Required**
+                when an agent/worker marks the todo as `completed` or `done` —
+                captures the actual outcome so reviewers don't have to read the
+                full session transcript. (2026-06-03 per Arcurus.)
 
         Returns:
             The created todo dict
@@ -207,22 +252,26 @@ class TodoManager:
             "creator_id": creator_id,
             "conversation_id": conversation_id,
             "agent_id": agent_id,
+            "project": project,            # NEW (2026-06-03)
+            "agent_owner": agent_owner,    # NEW (2026-06-03)
+            "what_happened": what_happened,  # NEW (2026-06-03) — see add/update_todo docstring
             "block_reason": None,  # Reason why blocked (if status is blocked)
             "waiting_for": None,   # ID of todo this is waiting for
+            "completed_at": None,  # Auto-set on completed/done transitions (see _apply_completed_at_rule)
             "deleted_at": None,    # Soft delete timestamp (None = not deleted)
             "created_at": self._now(),
             "updated_at": self._now()
         }
 
         todo_list = self._get_todo_list(sensitive)
+        # todo_list IS self.todos (or self.sensitive_todos) — same list reference.
+        # Appending to it already mutates the in-memory list, so we don't need a
+        # second append after the save. (2026-06-03: previous double-append
+        # caused every add_todo to insert 2 records in memory, which then got
+        # flushed to disk on the next save — e.g. on mark-done — producing
+        # duplicate IDs in data/todos.json.)
         todo_list.append(todo)
         self._save_todo_list(sensitive)
-
-        # Also add to in-memory list
-        if sensitive:
-            self.sensitive_todos.append(todo)
-        else:
-            self.todos.append(todo)
 
         return todo
 
@@ -242,7 +291,9 @@ class TodoManager:
 
     def get_all_todos(self, status: Optional[str] = None, sort_by: str = "priority",
                       include_children: bool = True, sensitive: Optional[bool] = None,
-                      include_deleted: bool = False, search: Optional[str] = None) -> list:
+                      include_deleted: bool = False, search: Optional[str] = None,
+                      agent_owner: Optional[str] = None,
+                      project: Optional[str] = None) -> list:
         """
         Get all todos, optionally filtered by status.
 
@@ -253,6 +304,8 @@ class TodoManager:
             sensitive: If None, include all. If True, only sensitive. If False, only non-sensitive.
             include_deleted: If True, include soft-deleted todos (deleted_at is not null)
             search: Filter by short_desc (case-insensitive partial match)
+            agent_owner: Filter by assigned agent (agent_owner field). None = all.
+            project: Filter by project tag. None = all.
 
         Returns:
             List of todo dicts
@@ -273,6 +326,14 @@ class TodoManager:
         if status:
             todos = [t for t in todos if t["status"] == status]
 
+        # Filter by assigned agent (agent_owner)
+        if agent_owner:
+            todos = [t for t in todos if t.get("agent_owner") == agent_owner]
+
+        # Filter by project tag
+        if project:
+            todos = [t for t in todos if t.get("project") == project]
+
         # Filter by search query (search in short_desc)
         if search:
             search_lower = search.lower()
@@ -283,8 +344,21 @@ class TodoManager:
             todos = sorted(todos, key=lambda t: t["priority"], reverse=True)
         elif sort_by == "created":
             todos = sorted(todos, key=lambda t: t["created_at"], reverse=True)
+        elif sort_by == "created_asc":
+            todos = sorted(todos, key=lambda t: t["created_at"], reverse=False)
         elif sort_by == "updated":
             todos = sorted(todos, key=lambda t: t["updated_at"], reverse=True)
+        elif sort_by == "updated_asc":
+            todos = sorted(todos, key=lambda t: t["updated_at"], reverse=False)
+        elif sort_by in ("completed", "completed_asc"):
+            # Sort by completed_at in the requested direction; push todos with
+            # completed_at=None to the end in BOTH directions (so the user
+            # always sees finished work above unfinished work). (2026-06-05 per Arcurus.)
+            reverse = sort_by == "completed"
+            with_ca = [t for t in todos if t.get("completed_at")]
+            without_ca = [t for t in todos if not t.get("completed_at")]
+            with_ca.sort(key=lambda t: t["completed_at"], reverse=reverse)
+            todos = with_ca + without_ca
 
         # If include_children, restructure to show hierarchy
         if include_children:
@@ -348,7 +422,7 @@ class TodoManager:
 
         Args:
             todo_id: ID of todo to update
-            **kwargs: Fields to update (short_desc, long_desc, priority, status, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, block_reason, waiting_for)
+            **kwargs: Fields to update. Valid fields: short_desc, long_desc, priority, status, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner, what_happened, block_reason, waiting_for
 
         Returns:
             Updated todo dict or None if not found
@@ -365,6 +439,40 @@ class TodoManager:
 
         return None
 
+    def _apply_completed_at_rule(self, todo: dict, new_status, explicit_completed_at, now: str):
+        """
+        Apply the auto-rule for `completed_at` based on status transitions.
+
+        Rules (per Arcurus 2026-06-05):
+        - status -> "completed": set completed_at = now
+        - status -> "done": set completed_at = now only if currently null (preserve first
+          completion time when a reviewer promotes a "completed" todo to "done")
+        - status -> anything else (open, in_progress, blocked): set completed_at = null
+        - If the caller passes `completed_at` explicitly, that value always wins
+          (escape hatch for backfills / overrides).
+
+        If `new_status` is None, no status change was requested in this update,
+        so the auto-rule does not run.
+        `explicit_completed_at` is the sentinel _SENTINEL_UNSET when the caller
+        did not pass the field at all.
+        """
+        if new_status is None:
+            return
+
+        # Caller-supplied value (including None) wins over the auto-rule.
+        if explicit_completed_at is not _SENTINEL_UNSET:
+            return
+
+        if new_status == "completed":
+            todo["completed_at"] = now
+        elif new_status == "done":
+            if todo.get("completed_at") is None:
+                todo["completed_at"] = now
+            # else: keep existing completed_at (e.g. previously set when status=completed)
+        else:
+            # open / in_progress / blocked / unknown — clear it
+            todo["completed_at"] = None
+
     def _update_todo_in_list(self, todo: dict, todo_list: list, **kwargs) -> dict:
         """Update a todo in a specific list."""
         # Handle restore parameter (sets deleted_at to None)
@@ -377,8 +485,27 @@ class TodoManager:
                 self._save_sensitive_todos()
             return todo
 
+        # Pop completed_at up front so the auto-rule below can detect whether
+        # the caller supplied an explicit value (including None) — in which
+        # case it always wins. A bare empty string from the query parser is
+        # treated the same as "not passed" so callers can leave the field off
+        # cleanly.
+        if "completed_at" in kwargs and kwargs["completed_at"] != "":
+            explicit_completed_at = kwargs.pop("completed_at")
+        else:
+            kwargs.pop("completed_at", None)
+            explicit_completed_at = _SENTINEL_UNSET
+
+        new_status = kwargs.get("status")  # may be None (no status change)
+        now = self._now()
+
+        # Run the auto-rule on the pre-update todo so it sees the existing
+        # completed_at (not anything we are about to overwrite). No-op when
+        # the caller supplied an explicit value.
+        self._apply_completed_at_rule(todo, new_status, explicit_completed_at, now)
+
         # Update allowed fields
-        allowed = ["short_desc", "long_desc", "priority", "status", "sensitive", "parent_id", "estimated_llm_calls", "creator_id", "conversation_id", "agent_id", "block_reason", "waiting_for", "deleted_at"]
+        allowed = ["short_desc", "long_desc", "priority", "status", "sensitive", "parent_id", "estimated_llm_calls", "creator_id", "conversation_id", "agent_id", "project", "agent_owner", "what_happened", "block_reason", "waiting_for", "deleted_at"]
         for key in allowed:
             if key in kwargs:
                 if key == "priority":
@@ -398,6 +525,10 @@ class TodoManager:
                         return todo
                 else:
                     todo[key] = kwargs[key]
+
+        # Apply the explicit completed_at last so it always wins over the auto-rule.
+        if explicit_completed_at is not _SENTINEL_UNSET:
+            todo["completed_at"] = explicit_completed_at
 
         todo["updated_at"] = self._now()
 
@@ -501,12 +632,16 @@ class TodoManager:
             self._delete_children(child["id"], todo_list)
             todo_list.remove(child)
 
-    def mark_done(self, todo_id: str) -> Optional[dict]:
-        """Mark a todo as done."""
+    def mark_done(self, todo_id: str, what_happened: Optional[str] = None) -> Optional[dict]:
+        """Mark a todo as done. If what_happened is provided, also store it."""
+        if what_happened is not None:
+            return self.update_todo(todo_id, status="done", what_happened=what_happened)
         return self.update_todo(todo_id, status="done")
 
-    def mark_in_progress(self, todo_id: str) -> Optional[dict]:
-        """Mark a todo as in progress."""
+    def mark_in_progress(self, todo_id: str, what_happened: Optional[str] = None) -> Optional[dict]:
+        """Mark a todo as in progress. If what_happened is provided, also store it (rare)."""
+        if what_happened is not None:
+            return self.update_todo(todo_id, status="in_progress", what_happened=what_happened)
         return self.update_todo(todo_id, status="in_progress")
 
     def mark_blocked(self, todo_id: str, block_reason: str = "", waiting_for: Optional[str] = None) -> Optional[dict]:
@@ -573,6 +708,53 @@ class TodoManager:
             "open_llm_calls": open_llm_calls,
             "top_priority": top_priority
         }
+
+    def get_filter_options(self, sensitive: Optional[bool] = None,
+                          include_deleted: bool = False) -> dict:
+        """
+        Return distinct values for filterable fields (agent_owner, project)
+        with counts, so the web UI can populate filter dropdowns.
+
+        Args:
+            sensitive: If None, all. If True, only sensitive. If False, only non-sensitive.
+            include_deleted: If True, include soft-deleted todos when computing options.
+
+        Returns:
+            {
+              "agent_owners": [{"value": "selena-project-worker", "count": 42}, ...],
+              "projects":    [{"value": "selena-project", "count": 17}, ...]
+            }
+        """
+        if sensitive is None:
+            all_todos = self._get_all_todos()
+        elif sensitive:
+            all_todos = self._get_todo_list(True)
+        else:
+            all_todos = self._get_todo_list(False)
+
+        if not include_deleted:
+            all_todos = [t for t in all_todos if not t.get("deleted_at")]
+
+        agent_counts: dict = {}
+        project_counts: dict = {}
+        for t in all_todos:
+            owner = t.get("agent_owner")
+            if owner:
+                agent_counts[owner] = agent_counts.get(owner, 0) + 1
+            proj = t.get("project")
+            if proj:
+                project_counts[proj] = project_counts.get(proj, 0) + 1
+
+        # Sort by count desc, then by name asc (stable, predictable order)
+        agent_owners = [
+            {"value": k, "count": v}
+            for k, v in sorted(agent_counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        ]
+        projects = [
+            {"value": k, "count": v}
+            for k, v in sorted(project_counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        ]
+        return {"agent_owners": agent_owners, "projects": projects}
 
 
 # Global instance
