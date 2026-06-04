@@ -1,0 +1,146 @@
+# =============================================================================
+# Caddyfile.selenaastra — selena v2 public reverse-proxy config
+# =============================================================================
+#
+# DEPLOYED TO:   /etc/caddy/Caddyfile
+# INSTALLED BY:  selena-project/scripts/caddy_install_openlife_recipe.sh
+# BASED ON:      openlife one-liner recipe (Arcurus 2026-06-03 21:44 CEST)
+# ROUTING MODEL: TWO reverse-proxied webhooks + ONE static document root
+#
+# PUBLIC HOSTS
+# -------------
+#   selenaastra.com       primary
+#   www.selenaastra.com   alias (301 -> primary by Caddy default)
+#
+# ROUTE TABLE
+# -----------
+#   /open-world/*   -->  http://localhost:8081/   (open-world-selena, Rust)
+#   /selena-astra/* -->  http://localhost:8765/   (selena-project API)
+#   /               -->  file_server at /var/www/selena-astra/
+#
+# STRICT BOUNDARY (Arcurus 2026-06-03 21:32 "stay in your lane")
+# ----------------------------------------------------------------
+#   The OpenClaw gateway (port 18789) is INTENTIONALLY NOT proxied here.
+#   It stays on localhost. Caddy has no business touching it. Do NOT add
+#   a route for it. Do NOT expose it on a public hostname.
+#
+# TLS
+# ---
+#   Caddy auto-issues and auto-renews Let's Encrypt certs for both
+#   hostnames. No certbot, no cron, no manual renewal. Port 80 is used
+#   for the ACME http-01 challenge and redirects to 443.
+#
+# SECURITY POSTURE (Arcurus 2026-06-03 21:51 "make sure only public files
+#                                       are exposed")
+# -----------------------------------------------------------------------
+#   - Document root is /var/www/selena-astra/ — a SEPARATE directory
+#     created by deploy, NOT a project root, NOT the selena-project
+#     checkout. The deploy step copies the public landing-page files
+#     (web/index.html, web/style.css, web/star-script.js, web/images/*,
+#     web/agents/* if present) into it. NOTHING ELSE.
+#   - Caddy's file_server blocks path traversal (`..`) by default.
+#   - Caddy's file_server does NOT enable directory listings
+#     (`browse` is off by default and not set here).
+#   - `hide` directive explicitly blocks dotfiles, VCS dirs, swap
+#     files, and IDE metadata — defense in depth, even if those
+#     files ever leaked into the document root.
+#   - Security headers (HSTS, X-Content-Type-Options, X-Frame-Options,
+#     Referrer-Policy, Server-suppression) are applied site-wide to
+#     BOTH the file_server responses AND the reverse-proxied ones.
+#
+# WHY uri strip_prefix
+# --------------------
+#   When Caddy reverse-proxies /open-world/api/world to the open-world
+#   API, the open-world service expects to receive the path
+#   /api/world, not /open-world/api/world. `uri strip_prefix /open-world`
+#   rewrites the request line so the upstream gets the clean path.
+#   The X-Forwarded-* and Host headers preserve the original hostname
+#   so the upstream can build correct redirect URLs.
+#
+# LOGGING
+# -------
+#   Per-vhost access log at /var/log/caddy/selenaastra.access.log with
+#   100 MB rotation and 5 retained files. JSON-ish combined log format
+#   (Caddy's default). Use `caddy logs` or `tail -f` to inspect.
+#
+# TESTING
+# -------
+#   To validate locally BEFORE deploy:
+#       caddy validate --config Caddyfile.selenaastra --adapter ''  # syntax
+#       caddy run    --config Caddyfile.selenaastra                # dry-run
+#   To dry-run against a real hostname (will fail TLS without a routable
+#   host) comment out the host line and bind to :8443 with `admin :2019`.
+# =============================================================================
+
+selenaastra.com, www.selenaastra.com {
+
+    # Gzip + Zstandard response compression for text-ish responses.
+    encode gzip zstd
+
+    # -------------------------------------------------------------------------
+    # /open-world/*  -->  open-world-selena (Rust) on :8081
+    # -------------------------------------------------------------------------
+    handle /open-world/* {
+        uri strip_prefix /open-world
+        reverse_proxy localhost:8081 {
+            # Preserve original host so upstream can build correct URLs.
+            header_up Host {host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # -------------------------------------------------------------------------
+    # /selena-astra/*  -->  selena-project API on :8765
+    # -------------------------------------------------------------------------
+    handle /selena-astra/* {
+        uri strip_prefix /selena-astra
+        reverse_proxy localhost:8765 {
+            header_up Host {host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # -------------------------------------------------------------------------
+    # /  -->  static outward-facing website at /var/www/selena-astra/
+    # -------------------------------------------------------------------------
+    # NOTE: /var/www/selena-astra/ is a SEPARATE directory created at deploy
+    # time. The deploy step copies public landing-page files into it. Caddy
+    # never serves from a project checkout.
+    handle {
+        root * /var/www/selena-astra
+        file_server {
+            # Defense-in-depth: even if sensitive files ended up in the
+            # document root, Caddy will refuse to serve them. `hide` is a
+            # subdirective of `file_server` in Caddy 2. The patterns match
+            # the rules in the openlife recipe. All patterns on a single
+            # line to avoid Caddyfile multi-line parser quirks.
+            hide /.env .env* .git .git/* node_modules node_modules/* .DS_Store .vscode .idea *.swp *.bak
+        }
+    }
+
+    # -------------------------------------------------------------------------
+    # Security headers — applied to BOTH file_server and reverse_proxied
+    # -------------------------------------------------------------------------
+    header {
+        # HSTS preload: register at https://hstspreload.org once stable.
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy no-referrer-when-downgrade
+        -Server
+    }
+
+    # -------------------------------------------------------------------------
+    # Access log — JSON-ish, 100 MB rotation, 5 files retained
+    # -------------------------------------------------------------------------
+    log {
+        output file /var/log/caddy/selenaastra.access.log {
+            roll_size 100mb
+            roll_keep 5
+        }
+    }
+}
