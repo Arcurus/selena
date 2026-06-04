@@ -55,7 +55,13 @@
     <div class="dashboard" id="dashboard">
         <div class="header">
             <h1>🌙 <span class="header-star"></span> Selena Astra - explore the stars <span class="header-star"></span></h1>
-            <div style="display:flex; align-items:center;">
+            <div style="display:flex; align-items:center; gap: 12px;">
+                <!-- MiniMax 5h usage widget (top right, per Arcurus 2026-06-04) -->
+                <div id="minimaxTopWidget" title="MiniMax Token Plan — 5h window (general model)" style="display:flex; align-items:center; gap: 6px; padding: 6px 10px; border-radius: 6px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); font-size: 12px; font-family: 'SF Mono', Monaco, monospace;">
+                    <span style="opacity:0.7;">🛰️ MiniMax 5h</span>
+                    <span id="minimaxTopUsed" style="font-weight: 500;">--</span>
+                    <span id="minimaxTopAge" style="opacity:0.5; font-size: 10px;">·</span>
+                </div>
                 <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Switch to bright theme" aria-label="Toggle theme">
                     <span id="theme-toggle-icon">☀️</span>
                 </button>
@@ -260,6 +266,41 @@
                             <div style="font-size: 1.5rem;">↩️</div>
                             <div style="color: var(--accent-red); font-size: 0.85rem; font-weight: 500;">Undo</div>
                         </div>
+                    </div>
+
+                    <!-- Sort + filter row (added 2026-06-04 per Arcurus) -->
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 15px; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <label for="todoSortBy" style="color: var(--text-secondary); font-size: 0.8rem; white-space: nowrap;">Sort by</label>
+                            <select id="todoSortBy" onchange="handleTodoSortChange(this.value)"
+                                    style="padding: 6px 10px; background: var(--bg-card); border: 1px solid var(--accent-blue); border-radius: 8px; color: var(--text-primary); font-size: 0.85rem;">
+                                <option value="">Default (priority)</option>
+                                <option value="priority">Priority (high → low)</option>
+                                <option value="date_desc">Date created (newest first)</option>
+                                <option value="date_asc">Date created (oldest first)</option>
+                                <option value="updated_desc">Last updated (newest first)</option>
+                                <option value="updated_asc">Last updated (oldest first)</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <label for="todoAgentFilter" style="color: var(--text-secondary); font-size: 0.8rem; white-space: nowrap;">🤖 Agent</label>
+                            <select id="todoAgentFilter" onchange="handleTodoAgentFilterChange(this.value)"
+                                    style="padding: 6px 10px; background: var(--bg-card); border: 1px solid var(--accent-blue); border-radius: 8px; color: var(--text-primary); font-size: 0.85rem; max-width: 220px;">
+                                <option value="">All agents</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <label for="todoProjectFilter" style="color: var(--text-secondary); font-size: 0.8rem; white-space: nowrap;">📁 Project</label>
+                            <select id="todoProjectFilter" onchange="handleTodoProjectFilterChange(this.value)"
+                                    style="padding: 6px 10px; background: var(--bg-card); border: 1px solid var(--accent-blue); border-radius: 8px; color: var(--text-primary); font-size: 0.85rem; max-width: 220px;">
+                                <option value="">All projects</option>
+                            </select>
+                        </div>
+                        <button onclick="clearTodoFilters()" id="btn-clear-todo-filters"
+                                class="service-btn" style="display: none; padding: 6px 12px; font-size: 0.8rem;">
+                            ✕ Clear filters
+                        </button>
+                        <div id="todoFilterCounts" style="color: var(--text-secondary); font-size: 0.8rem; margin-left: auto;"></div>
                     </div>
                     
                     <!-- Add Todo Form -->
@@ -532,7 +573,41 @@
             <div class="tab-content" id="tab-moderation">
                 <div class="services-panel">
                     <h2>🛡️ Moderation</h2>
-                    <p style="opacity: 0.8; margin-bottom: 18px;">New-user scanner + moderation cron trigger. Sub-tabs: Last Run, Run Now, Settings, Banned/Timeout, Users, Policies, Log.</p>
+
+                    <!-- Moderation pipeline (2026-06-04 per Arcurus) — the process flow shown as a
+                         beautiful horizontal-flow card chain. Wraps to vertical on narrow screens. -->
+                    <div style="display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; margin: 6px 0 22px 0;">
+                        <!-- Step 1: Discord scanner -->
+                        <div style="flex: 1 1 180px; min-width: 160px; padding: 12px 14px; background: linear-gradient(135deg, rgba(80,140,255,0.12), rgba(80,140,255,0.04)); border: 1px solid rgba(80,140,255,0.35); border-radius: 8px;">
+                            <div style="font-size: 22px; line-height: 1; margin-bottom: 6px;">🔍</div>
+                            <div style="font-weight: 600; margin-bottom: 4px;">discord scanner</div>
+                            <div style="font-size: 12px; opacity: 0.75; line-height: 1.4;">Watches new-member messages. Triggers the cron when a fresh account posts.</div>
+                        </div>
+                        <div style="display: flex; align-items: center; opacity: 0.5; font-size: 20px; padding: 0 4px;">→</div>
+                        <!-- Step 2: LLM moderation -->
+                        <div style="flex: 1 1 180px; min-width: 160px; padding: 12px 14px; background: linear-gradient(135deg, rgba(180,120,255,0.12), rgba(180,120,255,0.04)); border: 1px solid rgba(180,120,255,0.35); border-radius: 8px;">
+                            <div style="font-size: 22px; line-height: 1; margin-bottom: 6px;">🤖</div>
+                            <div style="font-weight: 600; margin-bottom: 4px;">LLM moderation <span style="opacity: 0.5; font-weight: normal; font-size: 11px;">(cron)</span></div>
+                            <div style="font-size: 12px; opacity: 0.75; line-height: 1.4;">Reads the bundle, judges messages, sets <code style="font-size: 11px;">insta_ban</code> on obvious cases.</div>
+                        </div>
+                        <div style="display: flex; align-items: center; opacity: 0.5; font-size: 20px; padding: 0 4px;">→</div>
+                        <!-- Step 3: Staged -->
+                        <div style="flex: 1 1 220px; min-width: 180px; padding: 12px 14px; background: linear-gradient(135deg, rgba(255,180,80,0.12), rgba(255,180,80,0.04)); border: 1px solid rgba(255,180,80,0.35); border-radius: 8px;">
+                            <div style="font-size: 22px; line-height: 1; margin-bottom: 6px;">📋</div>
+                            <div style="font-weight: 600; margin-bottom: 4px;">staged</div>
+                            <div style="font-size: 12px; opacity: 0.75; line-height: 1.4;">
+                                <code style="font-size: 11px;">pending_actions.json</code> <span style="opacity: 0.6;">(normal)</span><br>
+                                or <code style="font-size: 11px;">pending_actions_urgent.json</code> <span style="opacity: 0.6;">(insta-ban)</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; opacity: 0.5; font-size: 20px; padding: 0 4px;">→</div>
+                        <!-- Step 4: Execute -->
+                        <div style="flex: 1 1 180px; min-width: 160px; padding: 12px 14px; background: linear-gradient(135deg, rgba(80,220,140,0.12), rgba(80,220,140,0.04)); border: 1px solid rgba(80,220,140,0.35); border-radius: 8px;">
+                            <div style="font-size: 22px; line-height: 1; margin-bottom: 6px;">⚡</div>
+                            <div style="font-weight: 600; margin-bottom: 4px;">execute</div>
+                            <div style="font-size: 12px; opacity: 0.75; line-height: 1.4;">Ignores elders / protected users. 3 hard gates for insta-ban: not protected, not elder, account &lt; 30d.</div>
+                        </div>
+                    </div>
 
                     <!-- Sub-tab nav -->
                     <div class="subtabs" style="display: flex; gap: 6px; margin: 18px 0 24px 0; flex-wrap: wrap; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">
@@ -547,40 +622,105 @@
 
                     <!-- Sub-tab content -->
                     <div class="subtab-content active" id="mod-last">
-                        <h3>📊 Last Run</h3>
+                        <h3 style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">📊 Last Run
+                            <span id="modLastRunUpdated" style="font-size: 12px; font-weight: normal; opacity: 0.75; font-family: monospace;" title="Last Run auto-refreshes every 10 seconds. This timestamp shows when the last successful refresh happened.">auto updated: <span id="modLastRunUpdatedTime">—</span></span>
+                        </h3>
                         <div id="modLastRunContent">Loading...</div>
                     </div>
                     <div class="subtab-content" id="mod-run" style="display: none;">
                         <h3>▶️ Run Now</h3>
-                        <p style="opacity: 0.8; margin-bottom: 14px;">Runs the new-user scanner synchronously. If a new user is found and the debounce is OK, the moderation cron is woken automatically.</p>
-                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+
+                        <!-- Action 1: Run scanner — description directly above, button below -->
+                        <div style="margin-top: 14px; padding: 14px 16px; background: rgba(80,140,255,0.06); border-left: 3px solid rgba(80,140,255,0.6); border-radius: 0 6px 6px 0;">
+                            <div style="font-size: 14px; line-height: 1.5; margin-bottom: 10px; opacity: 0.9;">
+                                <strong>🔍 Run scanner</strong> — runs the new-user scanner synchronously. If a new user is found and the debounce is OK, the moderation cron is woken automatically.
+                            </div>
                             <button class="save-btn" onclick="modRunScan()" id="modRunScanBtn" style="width: auto; padding: 10px 24px;">🔍 Run scanner</button>
+                        </div>
+
+                        <!-- Action 2: Force moderation cron — description directly above, button below -->
+                        <div style="margin-top: 14px; padding: 14px 16px; background: rgba(255,165,0,0.06); border-left: 3px solid rgba(255,165,0,0.6); border-radius: 0 6px 6px 0;">
+                            <div style="font-size: 14px; line-height: 1.5; margin-bottom: 10px; opacity: 0.9;">
+                                <strong>⚡ Force moderation cron</strong> — bypasses the debounce and immediately wakes the moderation cron job. Use this when you want a scan on-demand without waiting for the next 30-min cycle.
+                            </div>
                             <button class="save-btn" onclick="modForceCron()" id="modForceCronBtn" style="width: auto; padding: 10px 24px; background: rgba(255,165,0,0.3);">⚡ Force moderation cron</button>
                         </div>
+
                         <div id="modRunResult" style="margin-top: 18px;"></div>
+
+                        <h4 style="margin-top: 32px; margin-bottom: 6px;">🚨 Urgent Lane (auto-execute) <span id="modUrgentCount" style="opacity: 0.6; font-size: 0.85em; font-weight: normal;"></span></h4>
+                        <p style="opacity: 0.7; font-size: 12px; margin-bottom: 10px;">
+                            Brand-new accounts (≤7d) that immediately spammed / flamed and got a <code>ban_user</code> verdict. <strong>Auto-executed by the cron</strong> (no human Apply needed) per <code>ban_authority_v2</code>. This list is the <em>audit trail</em> — you see what was auto-executed and (in dry-run previews) what would have been auto-executed. ✕ Clear removes the entry from the log; it does <strong>not</strong> un-execute.
+                        </p>
+                        <div style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center;">
+                            <button class="save-btn" onclick="modUrgentRefresh()" style="width: auto; padding: 8px 16px;">↻ Refresh</button>
+                            <span id="modUrgentStatus" style="opacity: 0.6; font-size: 12px;"></span>
+                        </div>
+                        <div id="modUrgentList" style="max-height: 400px; overflow-y: auto;">
+                            <p style="opacity: 0.6;">Loading urgent lane...</p>
+                        </div>
+
+                        <h4 style="margin-top: 32px; margin-bottom: 6px;">📋 Pending Actions (normal) <span id="modPendingCount" style="opacity: 0.6; font-size: 0.85em; font-weight: normal;"></span></h4>
+                        <p style="opacity: 0.7; font-size: 12px; margin-bottom: 10px;">Moderation actions the scanner / a human staged but haven't been executed yet. Apply to execute (LIVE), Delete to discard, or edit the reason inline. Sources: <code>manual</code> (human-added), <code>manual-test</code> (UI test, not real), <code>dry-run-cron</code> (scanner dry-run).</p>
+                        <div id="modPendingToolbar" style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center;">
+                            <button class="save-btn" onclick="modPendingApplyAll()" id="modPendingApplyAllBtn" style="width: auto; padding: 8px 16px; background: rgba(255,80,80,0.2); border-color: rgba(255,80,80,0.5);">⚡ Apply all</button>
+                            <button class="save-btn" onclick="modPendingRefresh()" style="width: auto; padding: 8px 16px;">↻ Refresh</button>
+                            <span id="modPendingStatus" style="opacity: 0.6; font-size: 12px;"></span>
+                        </div>
+                        <div id="modPendingList" style="max-height: 500px; overflow-y: auto;">
+                            <p style="opacity: 0.6;">Loading pending actions...</p>
+                        </div>
+
+                        <h4 style="margin-top: 32px; margin-bottom: 6px;">➕ Add pending action (manual)</h4>
+                        <p style="opacity: 0.7; font-size: 12px; margin-bottom: 10px;">Stage a new moderation action without executing it. Useful for reviewing / drafting before committing. <strong>Add only stages the action — it does NOT execute.</strong></p>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; max-width: 800px;">
+                            <input type="text" id="modNewPendingUserId" placeholder="User ID (e.g. 1102426821405982722)" style="padding: 6px 8px; background: rgba(0,0,0,0.3); color: inherit; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;">
+                            <input type="text" id="modNewPendingUsername" placeholder="Username (optional)" style="padding: 6px 8px; background: rgba(0,0,0,0.3); color: inherit; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;">
+                            <select id="modNewPendingAction" style="padding: 6px 8px; background: rgba(0,0,0,0.3); color: inherit; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;">
+                                <option value="timeout_user">timeout_user</option>
+                                <option value="ban_user">ban_user</option>
+                            </select>
+                            <input type="text" id="modNewPendingDuration" placeholder="Duration (1h, 24h, 7d)" style="padding: 6px 8px; background: rgba(0,0,0,0.3); color: inherit; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;">
+                            <input type="text" id="modNewPendingSource" placeholder="Source label (default: manual)" style="padding: 6px 8px; background: rgba(0,0,0,0.3); color: inherit; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;">
+                            <input type="text" id="modNewPendingReason" placeholder="Reason / policy cite (required)" style="padding: 6px 8px; background: rgba(0,0,0,0.3); color: inherit; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; grid-column: 1 / -1;">
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <button class="save-btn" onclick="modPendingAdd()" id="modPendingAddBtn" style="width: auto; padding: 8px 16px;">+ Stage action</button>
+                            <span id="modPendingAddStatus" style="opacity: 0.6; font-size: 12px; margin-left: 10px;"></span>
+                        </div>
                     </div>
                     <div class="subtab-content" id="mod-settings" style="display: none;">
-                        <h3>⚙️ Settings</h3>
+                        <h3 style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">⚙️ Settings
+                            <button class="save-btn" onclick="modLoadSettings()" style="width: auto; padding: 4px 12px; font-size: 12px;" title="Reload the settings from the server. No auto-update.">🔄 Refresh</button>
+                        </h3>
                         <p style="opacity: 0.8; margin-bottom: 14px;">Configure the scanner. Click "Save" to apply changes.</p>
                         <div id="modSettingsContent">Loading...</div>
                     </div>
                     <div class="subtab-content" id="mod-banned" style="display: none;">
-                        <h3>🚫 Banned / Timeout</h3>
+                        <h3 style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">🚫 Banned / Timeout
+                            <button class="save-btn" onclick="modLoadBanned()" style="width: auto; padding: 4px 12px; font-size: 12px;" title="Reload the ban/timeout log. No auto-update.">🔄 Refresh</button>
+                        </h3>
                         <p style="opacity: 0.8; margin-bottom: 14px;">All ban and timeout actions from the moderation actions archive.</p>
                         <div id="modBannedContent">Loading...</div>
                     </div>
                     <div class="subtab-content" id="mod-users" style="display: none;">
-                        <h3>👥 Users</h3>
+                        <h3 style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">👥 Users
+                            <button class="save-btn" onclick="modLoadUsers()" style="width: auto; padding: 4px 12px; font-size: 12px;" title="Reload the user cache. No auto-update.">🔄 Refresh</button>
+                        </h3>
                         <p style="opacity: 0.8; margin-bottom: 14px;">All users seen by the scanner, with member info and message counts.</p>
                         <div id="modUsersContent">Loading...</div>
                     </div>
                     <div class="subtab-content" id="mod-policies" style="display: none;">
-                        <h3>📜 Policies</h3>
+                        <h3 style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">📜 Policies
+                            <button class="save-btn" onclick="modLoadPolicies()" style="width: auto; padding: 4px 12px; font-size: 12px;" title="Reload the policies + architecture doc. No auto-update.">🔄 Refresh</button>
+                        </h3>
                         <p style="opacity: 0.8; margin-bottom: 14px;">Read-only display of the moderation policies. Edit <code>selena-project/data/moderation_policies.md</code> and the cron prompt to change behavior.</p>
                         <div id="modPoliciesContent">Loading...</div>
                     </div>
                     <div class="subtab-content" id="mod-log" style="display: none;">
-                        <h3>📋 Log</h3>
+                        <h3 style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">📋 Log
+                            <button class="save-btn" onclick="modLoadLog()" style="width: auto; padding: 4px 12px; font-size: 12px;" title="Reload the trigger log. No auto-update.">🔄 Refresh</button>
+                        </h3>
                         <p style="opacity: 0.8; margin-bottom: 14px;">Append-only trigger log from <code>selena-project/data/moderation_triggers.jsonl</code>.</p>
                         <div id="modLogContent">Loading...</div>
                     </div>
@@ -613,6 +753,13 @@
         let deletedTodosExpanded = false;
         let allTodosCache = []; // Cache all todos for search suggestions
         let lastDeletedTask = JSON.parse(localStorage.getItem('lastDeletedTask') || 'null'); // For undo delete
+        // Sort + filter (added 2026-06-04 per Arcurus)
+        // currentTodoSort: '' (use default per status) | 'priority' | 'date_desc' | 'date_asc' | 'updated_desc' | 'updated_asc'
+        // currentAgentFilter / currentProjectFilter: '' (all) or exact match
+        let currentTodoSort = '';
+        let currentAgentFilter = '';
+        let currentProjectFilter = '';
+        let todoFilterOptions = { agent_owners: [], projects: [] }; // loaded once on init
         const settings = {
             port: localStorage.getItem('selena_port') || '8765',
             domain: localStorage.getItem('selena_domain') || window.location.hostname
@@ -1013,6 +1160,7 @@
             loadServices();
             loadProjects();
             loadCostTracking();
+            loadTodoFilterOptions(); // populate agent/project dropdowns
             loadTodos().then(() => renderServicesTaskSummary()); // Pre-load todos and render task summary
         }
 
@@ -2281,7 +2429,7 @@
                     return;
                 }
                 allTodosCache = allData.todos || [];
-                
+
                 // Fetch filtered todos (excluding deleted by default)
                 let url = 'api/todos?';
                 if (currentTodoFilter === 'deleted') {
@@ -2290,6 +2438,15 @@
                     url += `status=${currentTodoFilter}&`;
                 }
                 if (todoSearchQuery) url += `search=${encodeURIComponent(todoSearchQuery)}&`;
+                if (currentAgentFilter) url += `agent_owner=${encodeURIComponent(currentAgentFilter)}&`;
+                if (currentProjectFilter) url += `project=${encodeURIComponent(currentProjectFilter)}&`;
+                // Sort: send to API only if explicitly set. Otherwise the
+                // client-side default (priority for non-done, date desc for
+                // done) is applied in renderTodos().
+                if (currentTodoSort) {
+                    const apiSort = sortKeyToApiSort(currentTodoSort);
+                    if (apiSort) url += `sort_by=${apiSort}&`;
+                }
 
                 const response = await fetch(url, {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -2328,12 +2485,109 @@
             document.getElementById('btn-new-task').classList.remove('active');
             document.getElementById('todoSummary').style.display = 'grid';
             document.getElementById('todoList').style.display = 'block';
+            // Switching status resets the user-selected sort override so
+            // the per-status default (priority / date) takes over.
+            currentTodoSort = '';
+            const sortEl = document.getElementById('todoSortBy');
+            if (sortEl) sortEl.value = '';
+            updateTodoFilterCounts();
             loadTodos();
         }
-        
+
         function handleTodoSearch(query) {
             todoSearchQuery = query.trim();
             loadTodos();
+        }
+
+        // Sort + filter handlers (added 2026-06-04 per Arcurus)
+        function handleTodoSortChange(value) {
+            currentTodoSort = value || '';
+            updateTodoFilterCounts();
+            loadTodos();
+        }
+        function handleTodoAgentFilterChange(value) {
+            currentAgentFilter = value || '';
+            updateTodoFilterCounts();
+            loadTodos();
+        }
+        function handleTodoProjectFilterChange(value) {
+            currentProjectFilter = value || '';
+            updateTodoFilterCounts();
+            loadTodos();
+        }
+        function clearTodoFilters() {
+            currentTodoSort = '';
+            currentAgentFilter = '';
+            currentProjectFilter = '';
+            const sortEl = document.getElementById('todoSortBy');
+            const agentEl = document.getElementById('todoAgentFilter');
+            const projEl  = document.getElementById('todoProjectFilter');
+            if (sortEl)  sortEl.value  = '';
+            if (agentEl) agentEl.value = '';
+            if (projEl)  projEl.value  = '';
+            updateTodoFilterCounts();
+            loadTodos();
+        }
+        function updateTodoFilterCounts() {
+            const clearBtn = document.getElementById('btn-clear-todo-filters');
+            const countsEl = document.getElementById('todoFilterCounts');
+            const any = currentAgentFilter || currentProjectFilter || currentTodoSort;
+            if (clearBtn) clearBtn.style.display = any ? 'inline-block' : 'none';
+            // countsEl stays in sync from renderTodos via setTodoFilterCount() — here we just show "(filters active)" hint
+            if (countsEl) {
+                if (!any) { countsEl.textContent = ''; return; }
+                const bits = [];
+                if (currentAgentFilter)   bits.push(`agent: ${currentAgentFilter}`);
+                if (currentProjectFilter) bits.push(`project: ${currentProjectFilter}`);
+                if (currentTodoSort)      bits.push(`sort: ${currentTodoSort}`);
+                countsEl.textContent = bits.join(' · ');
+            }
+        }
+        // Translate UI sort key to the API's `sort_by` values (priority/created/updated).
+        // 'date_desc'/'date_asc' map to created_at (the user picks Date = created date).
+        function sortKeyToApiSort(key) {
+            switch (key) {
+                case 'priority':      return 'priority';
+                case 'date_desc':     return 'created';
+                case 'date_asc':      return 'created_asc';
+                case 'updated_desc':  return 'updated';
+                case 'updated_asc':   return 'updated_asc';
+                default:              return null;
+            }
+        }
+
+        // Loads distinct agent_owners + projects once on init. Cheap; cached in `todoFilterOptions`.
+        async function loadTodoFilterOptions() {
+            try {
+                const response = await fetch('api/todos/filter-options', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!response.ok) return; // Silent fail — dropdowns just show "All" only.
+                const data = await response.json();
+                todoFilterOptions = {
+                    agent_owners: data.agent_owners || [],
+                    projects: data.projects || []
+                };
+                const agentEl = document.getElementById('todoAgentFilter');
+                const projEl  = document.getElementById('todoProjectFilter');
+                if (agentEl) {
+                    agentEl.innerHTML = '<option value="">All agents</option>' +
+                        todoFilterOptions.agent_owners.map(o =>
+                            `<option value="${escapeHtml(o.value)}">${escapeHtml(o.value)} (${o.count})</option>`
+                        ).join('');
+                    if (currentAgentFilter) agentEl.value = currentAgentFilter;
+                }
+                if (projEl) {
+                    projEl.innerHTML = '<option value="">All projects</option>' +
+                        todoFilterOptions.projects.map(o =>
+                            `<option value="${escapeHtml(o.value)}">${escapeHtml(o.value)} (${o.count})</option>`
+                        ).join('');
+                    if (currentProjectFilter) projEl.value = currentProjectFilter;
+                }
+                updateTodoFilterCounts();
+            } catch (e) {
+                console.warn('Failed to load todo filter options:', e);
+            }
         }
         
         function handleTitleInput(query) {
@@ -2699,21 +2953,49 @@
                 deletedSection.style.display = 'none';
             }
             
-            // Sort todos: status (in_progress, completed, blocked, open, done), then priority (desc), then updated_at (desc)
-            const statusOrder = { 'in_progress': 0, 'completed': 1, 'blocked': 2, 'open': 3, 'done': 4 };
+            // Sort todos. (Updated 2026-06-04 per Arcurus.)
+            //
+            // If user explicitly picked a sort from the dropdown (`currentTodoSort`),
+            // use it for everything. Otherwise apply the per-status default:
+            //   - status === 'done'         → created_at DESC (newest first)
+            //   - all other statuses        → priority DESC, then updated_at DESC
+            //
+            // When viewing the "All" filter, every task in the list is sorted
+            // by priority, except done items which still get date-DESC so the
+            // newest finished work stays at the top of the done tail.
             if (todos && todos.length > 0) {
-                todos.sort((a, b) => {
-                    // First: status order
-                    const statusDiff = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99);
-                    if (statusDiff !== 0) return statusDiff;
-                    // Second: priority (higher first)
-                    const priorityDiff = (b.priority || 0) - (a.priority || 0);
-                    if (priorityDiff !== 0) return priorityDiff;
-                    // Third: updated_at (most recent first)
-                    const dateA = new Date(a.updated_at || 0).getTime();
-                    const dateB = new Date(b.updated_at || 0).getTime();
-                    return dateB - dateA;
-                });
+                const prioOf = t => t.priority || 0;
+                const tsOf   = t => new Date(t.created_at || 0).getTime();
+                const upOf   = t => new Date(t.updated_at || 0).getTime();
+
+                const sortByKey = currentTodoSort;
+                if (sortByKey === 'priority') {
+                    todos.sort((a, b) => prioOf(b) - prioOf(a) || upOf(b) - upOf(a));
+                } else if (sortByKey === 'date_desc') {
+                    todos.sort((a, b) => tsOf(b) - tsOf(a));
+                } else if (sortByKey === 'date_asc') {
+                    todos.sort((a, b) => tsOf(a) - tsOf(b));
+                } else if (sortByKey === 'updated_desc') {
+                    todos.sort((a, b) => upOf(b) - upOf(a));
+                } else if (sortByKey === 'updated_asc') {
+                    todos.sort((a, b) => upOf(a) - upOf(b));
+                } else {
+                    // Default: by status (done goes last, then by its own rule),
+                    // then by priority for non-done, then by date for done.
+                    const statusOrder = { 'in_progress': 0, 'completed': 1, 'blocked': 2, 'open': 3, 'done': 4 };
+                    todos.sort((a, b) => {
+                        const sDiff = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99);
+                        if (sDiff !== 0) return sDiff;
+                        // Within the same status bucket: priority for non-done,
+                        // created_at DESC for done.
+                        if (a.status === 'done' && b.status === 'done') {
+                            return tsOf(b) - tsOf(a);
+                        }
+                        const pDiff = prioOf(b) - prioOf(a);
+                        if (pDiff !== 0) return pDiff;
+                        return upOf(b) - upOf(a);
+                    });
+                }
             }
 
             if (todos && todos.length > 0) {
@@ -2758,10 +3040,23 @@
                     </div>
                 `;}).join('');
             } else {
-                const noTasksMsg = todoSearchQuery 
-                    ? `<p style="color: var(--text-secondary);">No tasks match "${todoSearchQuery}". 🌙</p>` 
-                    : `<p style="color: var(--text-secondary);">No tasks found. 🌙</p>`;
+                const noTasksMsg = todoSearchQuery
+                    ? `<p style="color: var(--text-secondary);">No tasks match "${todoSearchQuery}". 🌙</p>`
+                    : (currentAgentFilter || currentProjectFilter
+                        ? `<p style="color: var(--text-secondary);">No tasks match the current filter. 🌙</p>`
+                        : `<p style="color: var(--text-secondary);">No tasks found. 🌙</p>`);
                 document.getElementById('todoList').innerHTML = noTasksMsg;
+            }
+
+            // Sync the filter-counts chip with the actual visible row count.
+            const countsEl = document.getElementById('todoFilterCounts');
+            if (countsEl) {
+                const bits = [];
+                if (currentAgentFilter)   bits.push(`agent: ${currentAgentFilter}`);
+                if (currentProjectFilter) bits.push(`project: ${currentProjectFilter}`);
+                if (currentTodoSort)      bits.push(`sort: ${currentTodoSort}`);
+                const base = bits.length ? bits.join(' · ') + ' · ' : '';
+                countsEl.textContent = `${base}${todos ? todos.length : 0} shown`;
             }
         }
 
@@ -3414,12 +3709,124 @@
                 modLoadLog();
                 modLoadBanned();
                 modLoadPolicies();
+                modPendingRefresh();
+                modUrgentRefresh();
+                startModPolling();
+            } else {
+                stopModPolling();
+            }
+            // Stop moderation polling when leaving the services tab too
+            if (tabName !== 'moderation' && servicesPollingInterval) {
+                // (servicesPollingInterval is the services-tab timer; the mod polling is separate)
+            }
+        }
+
+        // =====================================================================
+        // Top-right MiniMax widget (per Arcurus 2026-06-04)
+        // Polls /api/discord-lookup/llm-minimax every 60s (server caches 1 min).
+        // Colors: green < 50%, yellow 50-80%, red > 80%, flashing red > 95%.
+        // =====================================================================
+        let minimaxTopTimer = null;
+        function startMinimaxTopWidget() {
+            if (minimaxTopTimer) return;
+            // Widget is always visible (HTML default is display:flex with "--" placeholder).
+            // The refresh function updates the text + color; on error states it shows
+            // "n/a" or a brief error indicator without hiding the widget.
+            const maybeStart = () => {
+                if (typeof token !== 'undefined' && token && document.getElementById('dashboard') && document.getElementById('dashboard').style.display !== 'none') {
+                    refreshMinimaxTopWidget();
+                    minimaxTopTimer = setInterval(refreshMinimaxTopWidget, 60000);
+                } else {
+                    setTimeout(maybeStart, 1000);
+                }
+            };
+            maybeStart();
+        }
+        async function refreshMinimaxTopWidget() {
+            const widget = document.getElementById('minimaxTopWidget');
+            const usedEl = document.getElementById('minimaxTopUsed');
+            const ageEl = document.getElementById('minimaxTopAge');
+            if (!widget || !usedEl || !ageEl) return;
+            let r, raw = '';
+            try {
+                r = await fetch('api/discord-lookup/llm-minimax', { headers: { 'Authorization': 'Bearer ' + token } });
+            } catch (fetchErr) {
+                console.warn('[minimax] fetch failed:', fetchErr.message);
+                return;  // keep last good value
+            }
+            console.debug('[minimax] response', { status: r.status, contentLength: r.headers.get('content-length'), contentType: r.headers.get('content-type') });
+            if (r.status === 401) {
+                usedEl.textContent = 'login required';
+                usedEl.style.color = '#888';
+                return;
+            }
+            try { raw = await r.text(); } catch (e) { console.warn('[minimax] text() failed:', e.message); }
+            if (!raw) {
+                // Don't show 'empty resp' to the user — just log and keep last value
+                console.warn('[minimax] empty body', { status: r.status, contentLength: r.headers.get('content-length') });
+                return;
+            }
+            let d;
+            try { d = JSON.parse(raw); } catch (parseErr) {
+                console.warn('[minimax] parse err', parseErr.message, 'first 200 chars:', raw.slice(0, 200));
+                return;  // keep last good value
+            }
+            if (d.error) {
+                console.warn('[minimax] server error:', d.error);
+                return;  // keep last good value
+            }
+            const focus = (d.windows || []).find(w => w.model === 'general' && w.name === 'window_5h')
+                || (d.windows || [])[0];
+            if (!focus || typeof focus.used_percent !== 'number') {
+                usedEl.textContent = 'n/a';
+                usedEl.style.color = '#888';
+                return;
+            }
+            const pct = Math.round(focus.used_percent);
+            usedEl.textContent = pct + '% used';
+            // Color coding
+            let color;
+            if (pct >= 95) color = '#ff4444';
+            else if (pct >= 80) color = '#ff6666';
+            else if (pct >= 50) color = '#ffcc66';
+            else color = '#88ff88';
+            widget.style.borderColor = color;
+            widget.style.background = `rgba(${pct >= 80 ? '255,0,0' : '0,0,0'}, 0.25)`;
+            usedEl.style.color = color;
+            // Age
+            const fetchedAt = d.fetched_at ? new Date(d.fetched_at) : new Date();
+            const ageSec = Math.max(0, Math.round((Date.now() - fetchedAt.getTime()) / 1000));
+            const ageStr = ageSec < 60 ? `${ageSec}s ago` : `${Math.round(ageSec/60)}m ago`;
+            ageEl.textContent = `(updated ${ageStr}${d.cached ? ', cached' : ''})`;
+            // Flash animation if > 95%
+            if (pct >= 95) {
+                widget.classList.add('minimax-flash');
+            } else {
+                widget.classList.remove('minimax-flash');
             }
         }
 
         // =====================================================================
         // Moderation tab (2026-06-04 per Arcurus)
         // =====================================================================
+        let modPollingInterval = null;
+        function startModPolling() {
+            if (modPollingInterval) return;
+            // Poll Last Run every 10s when the moderation tab is active.
+            // Same cadence as the Services tab.
+            modPollingInterval = setInterval(() => {
+                if (document.getElementById('mod-last') && document.getElementById('mod-last').classList.contains('active')) {
+                    modLoadLastRun();
+                }
+            }, 10000);
+        }
+        function stopModPolling() {
+            if (modPollingInterval) {
+                clearInterval(modPollingInterval);
+                modPollingInterval = null;
+            }
+        }
+
         function showModSubTab(name) {
             document.querySelectorAll('#tab-moderation .subtab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('#tab-moderation .subtab-content').forEach(t => { t.style.display = 'none'; t.classList.remove('active'); });
@@ -3429,16 +3836,179 @@
             if (content) { content.style.display = 'block'; content.classList.add('active'); }
         }
 
+        // ---------------------------------------------------------------------
+        // No-flicker loader helpers (added 2026-06-04 per Arcurus)
+        //
+        // Pattern: every modLoad* / modPendingRefresh / modUrgentRefresh
+        // function used to do `el.innerHTML = 'Loading...'` on every call,
+        // causing a flash to empty content on each refresh. New pattern:
+        //   - On the very first load, show "Loading..." (nothing else to
+        //     show yet).
+        //   - On every subsequent refresh, keep the previous render visible
+        //     during the fetch and atomically swap it when new data arrives.
+        //   - On error, keep the previous render and flash a small "stale"
+        //     indicator at the top of the section for 3s.
+        //
+        // This is the spec Arcurus asked for: "always display the last
+        // successful data and offer a refresh button if there is no
+        // auto update, and make sure no flickering".
+        // ---------------------------------------------------------------------
+
+        // Mark an element as having a successful render. Subsequent loads
+        // will keep its current contents visible until the new render lands.
+        function modMarkRendered(el) {
+            if (el) el.dataset.hasRender = '1';
+        }
+
+        // Check whether this is the very first load for an element (no
+        // previous render yet). The caller can use this to decide whether
+        // to show "Loading..." or keep the previous content.
+        function modIsFirstLoad(el) {
+            return !el || el.dataset.hasRender !== '1';
+        }
+
+        // Show a transient error WITHOUT wiping the previous render. On
+        // first load (no previous data) we show the error inline. On
+        // subsequent loads we keep the previous render and just log to
+        // console + flash a small "stale" indicator at the top.
+        function modShowError(el, message, isFirstLoad) {
+            console.warn('modLoad error:', message);
+            if (!el) return;
+            if (isFirstLoad) {
+                el.innerHTML = `<div style="color: #ff8888;">Error: ${escapeHtml(message || '(unknown)')}</div>`;
+                return;
+            }
+            // Throttle the flash so we don't flood the DOM with multiple
+            // warnings if the user clicks refresh repeatedly.
+            if (!el.dataset.errorFlashUntil || Date.now() > Number(el.dataset.errorFlashUntil)) {
+                el.dataset.errorFlashUntil = String(Date.now() + 3000);
+                const flash = document.createElement('div');
+                flash.dataset.role = 'mod-error-flash';
+                flash.style.cssText = 'color: #ffcc66; font-size: 11px; padding: 4px 0; opacity: 0.8;';
+                flash.textContent = '⚠ last refresh failed: ' + (message || '(unknown)') + ' (showing previous data)';
+                el.insertBefore(flash, el.firstChild);
+                setTimeout(() => {
+                    const f = el.querySelector('[data-role="mod-error-flash"]');
+                    if (f) f.remove();
+                }, 3000);
+            }
+        }
+
+        // Generic wrapper used by all modLoad* / modRefresh* functions.
+        // Resolves to { data, isFirstLoad, el } on success, or
+        // { data: null, isFirstLoad, el } on error. The caller is
+        // responsible for rendering `data` into `el` and calling
+        // modMarkRendered(el) on success.
+        async function modFetchJson(elId, url, extraOpts) {
+            const el = document.getElementById(elId);
+            const isFirstLoad = modIsFirstLoad(el);
+            if (isFirstLoad && el) {
+                el.innerHTML = 'Loading...';
+            }
+            const opts = Object.assign({
+                headers: { 'Authorization': '***' + token },
+            }, extraOpts || {});
+            try {
+                const r = await fetch(url, opts);
+                const raw = await r.text();
+                let data = null;
+                try { data = raw ? JSON.parse(raw) : null; } catch (e) { /* keep null */ }
+                if (!r.ok) {
+                    const msg = (data && data.error) ? data.error : `HTTP ${r.status}`;
+                    modShowError(el, msg, isFirstLoad);
+                    return { data: null, isFirstLoad, el };
+                }
+                return { data, isFirstLoad, el };
+            } catch (e) {
+                modShowError(el, e.message, isFirstLoad);
+                return { data: null, isFirstLoad, el };
+            }
+        }
+
         async function modLoadLastRun() {
             const el = document.getElementById('modLastRunContent');
-            el.innerHTML = 'Loading...';
+            const isFirstLoad = modIsFirstLoad(el);
+            if (isFirstLoad && el) {
+                el.innerHTML = 'Loading...';
+            }
+            // Flash the "last updated" indicator so the user can see that
+            // a refresh is in flight. On success, the timestamp is set
+            // to the time the new data arrived. On error, the indicator
+            // is left as-is (showing the last good time) and a transient
+            // "stale" flash is shown by modShowError().
+            const updEl = document.getElementById('modLastRunUpdatedTime');
+            if (updEl && !isFirstLoad) {
+                updEl.textContent = 'auto updating…';
+                updEl.style.opacity = '0.4';
+            }
+            // Helper: fetch + check status + safe-parse JSON. Returns {ok, status, data, raw} or {ok:false, error}
+            async function safeFetchJson(url) {
+                let r;
+                try {
+                    r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+                } catch (fetchErr) {
+                    return { ok: false, error: `fetch failed: ${fetchErr.message}`, status: 0, raw: '' };
+                }
+                const raw = await r.text();
+                let data = null;
+                let parseErr = null;
+                if (raw && raw.length > 0) {
+                    try { data = JSON.parse(raw); } catch (e) { parseErr = e.message; }
+                }
+                return {
+                    ok: r.ok,
+                    status: r.status,
+                    data,
+                    raw: raw.slice(0, 500),
+                    empty: raw.length === 0,
+                    parseError: parseErr,
+                };
+            }
             try {
-                const r = await fetch('api/discord-lookup/status', { headers: { 'Authorization': 'Bearer ' + authToken } });
-                const d = await r.json();
-                if (d.error) { el.innerHTML = `<div style="color: #ff8888;">Error: ${d.error}</div>`; return; }
+                // Fetch status + MiniMax % in parallel (with defensive error handling)
+                const [status, mm] = await Promise.all([
+                    safeFetchJson('api/discord-lookup/status'),
+                    safeFetchJson('api/discord-lookup/llm-minimax'),
+                ]);
+                if (!status.ok) {
+                    showModError(el, `Status error: HTTP ${status.status}${status.error ? ' — ' + status.error : ''}${status.parseError ? ' — parse: ' + status.parseError : ''}${status.empty ? ' (empty body)' : ''}`, status.raw, isFirstLoad);
+                    return;
+                }
+                if (status.empty) {
+                    showModError(el, 'Status: 200 OK but body is empty (0 bytes). Try reloading the tab.', '', isFirstLoad);
+                    return;
+                }
+                if (status.parseError) {
+                    showModError(el, `Status: JSON parse failed — ${status.parseError}`, status.raw, isFirstLoad);
+                    return;
+                }
+                const d = status.data || {};
+                if (d.error) { showModError(el, `Status: ${d.error}`, '', isFirstLoad); return; }
                 const decision = d.last_decision || '—';
                 const decisionColor = decision.startsWith('triggered') ? '#88ff88'
                     : decision.startsWith('skipped') ? '#ffcc66' : '#aaaacc';
+                // Build MiniMax widget
+                let mmHtml = '<div style="opacity: 0.6;">MiniMax data unavailable</div>';
+                if (mm.windows && mm.windows.length) {
+                    // Highlight the most relevant window: general / window_5h
+                    const focus = mm.windows.find(w => w.model === 'general' && w.name === 'window_5h') || mm.windows[0];
+                    const usedPct = focus.used_percent;
+                    const remainPct = focus.remaining_percent;
+                    const barColor = usedPct >= 80 ? '#ff8888' : usedPct >= 50 ? '#ffcc66' : '#88ff88';
+                    const resetsIn = focus.resets_in_s ? `${Math.round(focus.resets_in_s / 60)}m` : '—';
+                    mmHtml = `
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                            <div style="flex: 1; background: rgba(0,0,0,0.3); border-radius: 6px; height: 14px; position: relative; overflow: hidden;">
+                                <div style="background: ${barColor}; height: 100%; width: ${usedPct}%; transition: width 0.5s;"></div>
+                            </div>
+                            <div style="font-family: monospace; min-width: 80px; text-align: right;">${usedPct}% used</div>
+                        </div>
+                        <div style="font-size: 11px; opacity: 0.6;">
+                            ${focus.model} · ${focus.name.replace('window_', '')} · ${remainPct}% remaining · resets in ${resetsIn}
+                        </div>
+                        <div style="font-size: 11px; opacity: 0.5; margin-top: 4px;">${mm.windows.length} windows total · ${mm.cached ? 'cached' : 'live'}</div>
+                    `;
+                }
                 el.innerHTML = `
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 800px;">
                         <div class="stat-card">
@@ -3482,12 +4052,59 @@
                             <div class="stat-value">${d.users_cached}</div>
                         </div>
                     </div>
-                    <div style="margin-top: 18px; opacity: 0.7; font-size: 13px;">
+                    <h4 style="margin-top: 24px; margin-bottom: 10px;">🛰️ MiniMax Token Plan</h4>
+                    <div style="max-width: 800px; padding: 12px 14px; background: rgba(0,0,0,0.2); border-radius: 8px; margin-bottom: 14px;">
+                        ${mmHtml}
+                    </div>
+                    <div style="margin-top: 8px; opacity: 0.7; font-size: 13px;">
                         Settings: interval ${d.settings.interval_minutes}m · debounce ${d.settings.debounce_minutes}m · auto_trigger ${d.settings.auto_trigger} · cron <code>${d.settings.moderation_cron_job_id}</code>
                     </div>
                 `;
+                // Mark the element as rendered. Future polls (10s interval)
+                // will keep this content visible during the fetch and only
+                // swap it atomically when new data arrives — no flicker.
+                el.dataset.hasRender = '1';
+                modMarkRendered(el);
+                modMarkRendered(el);
+                // Update the "last updated" indicator next to the heading so
+                // the user can see at a glance how fresh the displayed data is.
+                // Uses toLocaleString so it matches the format of Last Scan / Last Wake.
+                const updEl = document.getElementById('modLastRunUpdatedTime');
+                if (updEl) {
+                    const now = new Date();
+                    updEl.textContent = now.toLocaleString();
+                    updEl.style.opacity = '';  // reset to CSS default
+                    updEl.parentElement.title =
+                        'Last Run data refreshed from server at ' + now.toLocaleString();
+                }
             } catch (e) {
-                el.innerHTML = `<div style="color: #ff8888;">Network error: ${e.message}</div>`;
+                showModError(el, `Network error: ${e.message}`, '', isFirstLoad);
+            }
+        }
+
+        // showModError: surface a transient error WITHOUT wiping the previous
+        // render. On first load (no previous data) we show the error inline.
+        // On subsequent polls we keep the previous render and just log to
+        // console + flash a small "stale" indicator at the top.
+        function showModError(el, message, raw, isFirstLoad) {
+            console.warn('modLoadLastRun:', message, raw ? ('\n' + raw) : '');
+            if (isFirstLoad) {
+                el.innerHTML = `<div style="color: #ff8888;">${escapeHtml(message)}</div><pre style="opacity:0.5; font-size:11px;">${escapeHtml(raw || '')}</pre>`;
+                return;
+            }
+            // Subsequent poll: keep previous render, just mark stale briefly
+            // (the previous render is still in the DOM; the new fetch failed)
+            if (!el.dataset.errorFlashUntil || Date.now() > Number(el.dataset.errorFlashUntil)) {
+                el.dataset.errorFlashUntil = String(Date.now() + 3000);
+                const flash = document.createElement('div');
+                flash.dataset.role = 'mod-error-flash';
+                flash.style.cssText = 'color: #ffcc66; font-size: 11px; padding: 4px 0; opacity: 0.8;';
+                flash.textContent = '⚠ last refresh failed: ' + message + ' (showing previous data)';
+                el.insertBefore(flash, el.firstChild);
+                setTimeout(() => {
+                    const f = el.querySelector('[data-role="mod-error-flash"]');
+                    if (f) f.remove();
+                }, 3000);
             }
         }
 
@@ -3499,7 +4116,7 @@
             try {
                 const r = await fetch('api/discord-lookup/scan', {
                     method: 'POST',
-                    headers: { 'Authorization': 'Bearer ' + authToken }
+                    headers: { 'Authorization': 'Bearer ' + token }
                 });
                 const d = await r.json();
                 result.innerHTML = `<pre style="background: rgba(0,0,0,0.3); padding: 14px; border-radius: 8px; max-height: 400px; overflow-y: auto;">${JSON.stringify(d, null, 2)}</pre>`;
@@ -3520,7 +4137,7 @@
             try {
                 const r = await fetch('api/discord-lookup/trigger-cron', {
                     method: 'POST',
-                    headers: { 'Authorization': 'Bearer ' + authToken }
+                    headers: { 'Authorization': 'Bearer ' + token }
                 });
                 const d = await r.json();
                 result.innerHTML = `<pre style="background: rgba(0,0,0,0.3); padding: 14px; border-radius: 8px;">${JSON.stringify(d, null, 2)}</pre>`;
@@ -3534,11 +4151,22 @@
 
         async function modLoadSettings() {
             const el = document.getElementById('modSettingsContent');
-            el.innerHTML = 'Loading...';
+            const isFirstLoad = modIsFirstLoad(el);
+            if (isFirstLoad && el) {
+                el.innerHTML = 'Loading...';
+            }
+            let d;
             try {
-                const r = await fetch('api/discord-lookup/settings', { headers: { 'Authorization': 'Bearer ' + authToken } });
+                const r = await fetch('api/discord-lookup/settings', { headers: { 'Authorization': '***' + token } });
+                d = await r.json();
+            } catch (e) {
+                modShowError(el, e.message, isFirstLoad);
+                return;
+            }
+            try {
+                const r = await fetch('api/discord-lookup/settings', { headers: { 'Authorization': 'Bearer ' + token } });
                 const d = await r.json();
-                if (d.error) { el.innerHTML = `<div style="color: #ff8888;">Error: ${d.error}</div>`; return; }
+                if (d.error) { modShowError(el, d.error, isFirstLoad); return; }
                 const editable = ['interval_minutes', 'debounce_minutes', 'auto_trigger', 'lookback_messages',
                                   'new_user_max_history', 'new_user_max_account_age_days', 'fetch_timeout_seconds'];
                 const rows = editable.map(k => {
@@ -3549,7 +4177,17 @@
                         : `<input type="${inputType}" id="modSetting_${k}" value="${v}" style="width: 100%; padding: 6px 8px; background: rgba(0,0,0,0.3); color: inherit; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;">`;
                     return `<tr><td style="padding: 6px 12px;"><code>${k}</code></td><td style="padding: 6px 12px;">${input}</td><td style="padding: 6px 12px; opacity: 0.6;">${typeof v}</td></tr>`;
                 }).join('');
+                const channels = d.channels || [];
+                const channelRows = channels.map((cid, idx) => {
+                    return `<tr>
+                        <td style="padding: 4px 8px;"><code>${cid}</code></td>
+                        <td style="padding: 4px 8px; text-align: right;">
+                            <button onclick="modRemoveChannel(${idx})" style="background: rgba(255,80,80,0.2); border: 1px solid rgba(255,80,80,0.4); color: #ff8888; border-radius: 4px; padding: 3px 8px; cursor: pointer;">✕ Remove</button>
+                        </td>
+                    </tr>`;
+                }).join('');
                 el.innerHTML = `
+                    <h4 style="margin-top: 0;">Scalar settings</h4>
                     <table style="border-collapse: collapse; min-width: 600px;">
                         <thead><tr style="border-bottom: 1px solid rgba(255,255,255,0.2);">
                             <th style="text-align: left; padding: 6px 12px;">Key</th>
@@ -3559,18 +4197,82 @@
                         <tbody>${rows}</tbody>
                     </table>
                     <div style="margin-top: 14px;"><button class="save-btn" onclick="modSaveSettings()" style="width: auto; padding: 8px 20px;">💾 Save Settings</button></div>
+
+                    <h4 style="margin-top: 28px;">📡 Channels (${channels.length})</h4>
+                    <p style="opacity: 0.7; font-size: 12px; margin-bottom: 8px;">Discord channel IDs to scan for new-user activity. Changes apply on the next scan cycle.</p>
+                    <table style="border-collapse: collapse; min-width: 500px; font-size: 13px;">
+                        <thead><tr style="border-bottom: 1px solid rgba(255,255,255,0.2);">
+                            <th style="text-align: left; padding: 6px 8px;">Channel ID</th>
+                            <th style="text-align: right; padding: 6px 8px;">Action</th>
+                        </tr></thead>
+                        <tbody>${channelRows || '<tr><td colspan="2" style="padding: 8px; opacity: 0.6; text-align: center;">No channels configured.</td></tr>'}</tbody>
+                    </table>
+                    <div style="margin-top: 12px; display: flex; gap: 8px; align-items: center;">
+                        <input type="text" id="modNewChannelId" placeholder="Discord channel ID (e.g. 985999783778988092)" style="flex: 1; padding: 6px 8px; background: rgba(0,0,0,0.3); color: inherit; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;">
+                        <button class="save-btn" onclick="modAddChannel()" style="width: auto; padding: 6px 14px;">+ Add</button>
+                    </div>
+
                     <details style="margin-top: 18px; opacity: 0.8;">
                         <summary>Read-only fields</summary>
                         <pre style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 6px; margin-top: 8px; font-size: 12px;">${JSON.stringify({
-                            channels_count: (d.channels || []).length,
-                            channels: d.channels,
                             discord_guild_id: d.discord_guild_id,
                             moderation_cron_job_id: d.moderation_cron_job_id
                         }, null, 2)}</pre>
                     </details>
                 `;
+                modMarkRendered(el);
             } catch (e) {
-                el.innerHTML = `<div style="color: #ff8888;">Network error: ${e.message}</div>`;
+                modShowError(el, e.message, isFirstLoad);
+            }
+        }
+
+        async function modAddChannel() {
+            const input = document.getElementById('modNewChannelId');
+            const cid = (input.value || '').trim();
+            if (!cid) {
+                showToast('Enter a channel ID', 'error');
+                return;
+            }
+            if (!/^\d{17,20}$/.test(cid)) {
+                showToast('Discord channel IDs are 17-20 digit numbers', 'error');
+                return;
+            }
+            try {
+                const r = await fetch('api/discord-lookup/settings', {
+                    method: 'PATCH',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channels_add: cid })
+                });
+                const d = await r.json();
+                if (d.success) {
+                    input.value = '';
+                    showToast('Channel added', 'success');
+                    modLoadSettings();
+                } else {
+                    showToast('Failed: ' + JSON.stringify(d.results), 'error');
+                }
+            } catch (e) {
+                showToast('Add failed: ' + e.message, 'error');
+            }
+        }
+
+        async function modRemoveChannel(idx) {
+            if (!confirm('Remove this channel from the scanner?')) return;
+            try {
+                const r = await fetch('api/discord-lookup/settings', {
+                    method: 'PATCH',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channels_remove_index: idx })
+                });
+                const d = await r.json();
+                if (d.success) {
+                    showToast('Channel removed', 'success');
+                    modLoadSettings();
+                } else {
+                    showToast('Failed: ' + JSON.stringify(d.results), 'error');
+                }
+            } catch (e) {
+                showToast('Remove failed: ' + e.message, 'error');
             }
         }
 
@@ -3588,7 +4290,7 @@
             try {
                 const r = await fetch('api/discord-lookup/settings', {
                     method: 'PATCH',
-                    headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
                     body: JSON.stringify(updates)
                 });
                 const d = await r.json();
@@ -3605,12 +4307,15 @@
 
         async function modLoadUsers() {
             const el = document.getElementById('modUsersContent');
-            el.innerHTML = 'Loading...';
+            const isFirstLoad = modIsFirstLoad(el);
+            if (isFirstLoad && el) {
+                el.innerHTML = 'Loading...';
+            }
             try {
-                const r = await fetch('api/discord-lookup/users?limit=100&sort=last_seen', { headers: { 'Authorization': 'Bearer ' + authToken } });
+                const r = await fetch('api/discord-lookup/users?limit=100&sort=last_seen', { headers: { 'Authorization': 'Bearer ' + token } });
                 const d = await r.json();
-                if (d.error) { el.innerHTML = `<div style="color: #ff8888;">Error: ${d.error}</div>`; return; }
-                if (!d.users || d.users.length === 0) { el.innerHTML = '<p style="opacity:0.6;">No users seen yet.</p>'; return; }
+                if (d.error) { modShowError(el, d.error, isFirstLoad); return; }
+                if (!d.users || d.users.length === 0) { el.innerHTML = '<p style="opacity:0.6;">No users seen yet.</p>'; modMarkRendered(el); return; }
                 // Sortable columns
                 const sortKey = modUsersSort.key;
                 const sortDir = modUsersSort.dir;
@@ -3662,8 +4367,9 @@
                     </table>
                     </div>
                 `;
+                modMarkRendered(el);
             } catch (e) {
-                el.innerHTML = `<div style="color: #ff8888;">Network error: ${e.message}</div>`;
+                modShowError(el, e.message, isFirstLoad);
             }
         }
 
@@ -3680,12 +4386,15 @@
 
         async function modLoadBanned() {
             const el = document.getElementById('modBannedContent');
-            el.innerHTML = 'Loading...';
+            const isFirstLoad = modIsFirstLoad(el);
+            if (isFirstLoad && el) {
+                el.innerHTML = 'Loading...';
+            }
             try {
-                const r = await fetch('api/moderation/archive?action_filter=ban_user,ban,timeout_user,timeout&limit=50', { headers: { 'Authorization': 'Bearer ' + authToken } });
+                const r = await fetch('api/moderation/archive?action_filter=ban_user,ban,timeout_user,timeout&limit=50', { headers: { 'Authorization': 'Bearer ' + token } });
                 const d = await r.json();
-                if (d.error) { el.innerHTML = `<div style="color: #ff8888;">Error: ${d.error}</div>`; return; }
-                if (!d.entries || d.entries.length === 0) { el.innerHTML = '<p style="opacity:0.6;">No ban/timeout actions yet.</p>'; return; }
+                if (d.error) { modShowError(el, d.error, isFirstLoad); return; }
+                if (!d.entries || d.entries.length === 0) { el.innerHTML = '<p style="opacity:0.6;">No ban/timeout actions yet.</p>'; modMarkRendered(el); return; }
                 // Sortable columns
                 const sortKey = modBannedSort.key;
                 const sortDir = modBannedSort.dir;
@@ -3732,8 +4441,9 @@
                     </table>
                     </div>
                 `;
+                modMarkRendered(el);
             } catch (e) {
-                el.innerHTML = `<div style="color: #ff8888;">Network error: ${e.message}</div>`;
+                modShowError(el, e.message, isFirstLoad);
             }
         }
 
@@ -3750,12 +4460,15 @@
 
         async function modLoadLog() {
             const el = document.getElementById('modLogContent');
-            el.innerHTML = 'Loading...';
+            const isFirstLoad = modIsFirstLoad(el);
+            if (isFirstLoad && el) {
+                el.innerHTML = 'Loading...';
+            }
             try {
-                const r = await fetch('api/discord-lookup/triggers?limit=30', { headers: { 'Authorization': 'Bearer ' + authToken } });
+                const r = await fetch('api/discord-lookup/triggers?limit=30', { headers: { 'Authorization': 'Bearer ' + token } });
                 const d = await r.json();
-                if (d.error) { el.innerHTML = `<div style="color: #ff8888;">Error: ${d.error}</div>`; return; }
-                if (!d.entries || d.entries.length === 0) { el.innerHTML = '<p style="opacity:0.6;">No trigger events yet.</p>'; return; }
+                if (d.error) { modShowError(el, d.error, isFirstLoad); return; }
+                if (!d.entries || d.entries.length === 0) { el.innerHTML = '<p style="opacity:0.6;">No trigger events yet.</p>'; modMarkRendered(el); return; }
                 const rows = d.entries.map(e => {
                     const ts = e.ts ? new Date(e.ts).toLocaleString() : '—';
                     const decision = e.decision || '?';
@@ -3786,18 +4499,22 @@
                     </table>
                     </div>
                 `;
+                modMarkRendered(el);
             } catch (e) {
-                el.innerHTML = `<div style="color: #ff8888;">Network error: ${e.message}</div>`;
+                modShowError(el, e.message, isFirstLoad);
             }
         }
 
         async function modLoadPolicies() {
             const el = document.getElementById('modPoliciesContent');
-            el.innerHTML = 'Loading...';
+            const isFirstLoad = modIsFirstLoad(el);
+            if (isFirstLoad && el) {
+                el.innerHTML = 'Loading...';
+            }
             try {
                 const [policiesR, docsR] = await Promise.all([
-                    fetch('api/moderation/policies', { headers: { 'Authorization': 'Bearer ' + authToken } }),
-                    fetch('api/moderation/docs', { headers: { 'Authorization': 'Bearer ' + authToken } }),
+                    fetch('api/moderation/policies', { headers: { 'Authorization': 'Bearer ' + token } }),
+                    fetch('api/moderation/docs', { headers: { 'Authorization': 'Bearer ' + token } }),
                 ]);
                 const policies = await policiesR.json();
                 const docs = await docsR.json();
@@ -3822,10 +4539,314 @@
                     sections.push(`<p style="opacity:0.6; margin-top: 32px;">Architecture doc not yet created.</p>`);
                 }
                 el.innerHTML = sections.join('');
+                modMarkRendered(el);
             } catch (e) {
-                el.innerHTML = `<div style="color: #ff8888;">Network error: ${e.message}</div>`;
+                modShowError(el, e.message, isFirstLoad);
             }
         }
+        // ---------------------------------------------------------------------
+        // Pending actions (Run Now sub-tab)
+        // ---------------------------------------------------------------------
+        async function modPendingRefresh() {
+            const list = document.getElementById('modPendingList');
+            const count = document.getElementById('modPendingCount');
+            const status = document.getElementById('modPendingStatus');
+            const isFirstLoad = modIsFirstLoad(list);
+            if (isFirstLoad) {
+                list.innerHTML = '<p style="opacity:0.6;">Loading...</p>';
+            }
+            try {
+                const r = await fetch('api/discord-lookup/pending', { headers: { 'Authorization': '***' + token } });
+                const d = await r.json();
+                if (d.error) { modShowError(list, d.error, isFirstLoad); count.textContent = count.textContent || ''; return; }
+                count.textContent = `(${d.count})`;
+                if (!d.actions || d.actions.length === 0) {
+                    list.innerHTML = '<p style="opacity:0.6;">No pending actions. Use the "Stage action" form below to add one, or the cron will stage dry-run actions automatically.</p>';
+                    modMarkRendered(list);
+                    return;
+                }
+                const rows = d.actions.map(a => {
+                    const actionColor = a.action === 'ban_user' ? '#ff8888' : '#ffcc66';
+                    const sourceLabel = a.source || 'manual';
+                    const sourceColor = sourceLabel === 'manual-test' ? '#88ddff' : sourceLabel === 'dry-run-cron' ? '#aaaaff' : '#aaaacc';
+                    return `<tr class="mod-row" data-id="${a.id}">
+                        <td style="padding: 6px 8px;"><span style="color: ${actionColor}; font-family: monospace;">${a.action}</span>${a.duration ? ` <span style="opacity:0.7;">${a.duration}</span>` : ''}</td>
+                        <td style="padding: 6px 8px;">${escapeHtml(a.target_username || a.target_user_id)} <span style="opacity:0.5; font-size: 11px;"><code>${a.target_user_id}</code></span></td>
+                        <td style="padding: 6px 8px;"><span style="font-size: 11px; padding: 2px 6px; border-radius: 3px; background: ${sourceColor}22; color: ${sourceColor};">${sourceLabel}</span></td>
+                        <td style="padding: 6px 8px; max-width: 400px;">
+                            <div class="mod-pending-reason" data-id="${a.id}" data-original="${escapeHtml(a.reason || '')}"
+                                 style="font-size: 13px; padding: 4px 6px; border: 1px solid transparent; border-radius: 4px; cursor: text; min-height: 1.4em;"
+                                 ondblclick="modPendingEditReason(this)" title="Double-click to edit">${escapeHtml(a.reason || '<i style="opacity:0.5;">(no reason)</i>')}</div>
+                        </td>
+                        <td style="padding: 6px 8px; white-space: nowrap;">
+                            <button class="mod-action-btn" onclick="modPendingApply('${a.id}')" style="background: rgba(255,80,80,0.15); border: 1px solid rgba(255,80,80,0.4); color: #ff8888; border-radius: 4px; padding: 4px 10px; cursor: pointer; margin-right: 4px;" title="Execute this action LIVE via moderation_check.py --execute (no dry-run)">⚡ Apply</button>
+                            <button class="mod-action-btn" onclick="modPendingDelete('${a.id}')" style="background: rgba(120,120,120,0.15); border: 1px solid rgba(120,120,120,0.4); color: #ccc; border-radius: 4px; padding: 4px 10px; cursor: pointer;" title="Remove this row from the pending list (does NOT execute the action)">✕ Delete</button>
+                        </td>
+                    </tr>`;
+                }).join('');
+                list.innerHTML = `
+                    <table style="border-collapse: collapse; min-width: 800px; font-size: 13px; width: 100%;">
+                        <thead style="position: sticky; top: 0; background: rgba(0,0,0,0.6);">
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.2);">
+                                <th style="text-align: left; padding: 6px 8px;">Action</th>
+                                <th style="text-align: left; padding: 6px 8px;">Target</th>
+                                <th style="text-align: left; padding: 6px 8px;">Source</th>
+                                <th style="text-align: left; padding: 6px 8px;">Reason <span style="opacity:0.5; font-size: 11px;">(double-click to edit)</span></th>
+                                <th style="text-align: left; padding: 6px 8px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                `;
+                modMarkRendered(list);
+            } catch (e) {
+                modShowError(list, e.message, isFirstLoad);
+            }
+        }
+
+        function modPendingEditReason(span) {
+            const id = span.dataset.id;
+            const original = span.dataset.original;
+            const newReason = prompt('Edit reason:', original);
+            if (newReason === null || newReason === original) return;
+            modPendingSaveReason(id, newReason, span);
+        }
+
+        async function modPendingSaveReason(id, reason, span) {
+            try {
+                const r = await fetch('api/discord-lookup/pending/' + encodeURIComponent(id), {
+                    method: 'PATCH',
+                    headers: { 'Authorization': '***' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason })
+                });
+                const d = await r.json();
+                if (d.success) {
+                    span.textContent = reason;
+                    span.dataset.original = reason;
+                    showToast('Reason updated', 'success');
+                } else {
+                    showToast('Failed: ' + (d.error || JSON.stringify(d)), 'error');
+                }
+            } catch (e) {
+                showToast('Save failed: ' + e.message, 'error');
+            }
+        }
+
+        async function modPendingApply(id) {
+            // No confirm() — the title attribute on the button already
+            // describes what Apply does, and the user is in a manual
+            // review flow where they've already inspected the row.
+            const status = document.getElementById('modPendingStatus');
+            status.textContent = 'Applying...';
+            try {
+                const r = await fetch('api/discord-lookup/pending/' + encodeURIComponent(id) + '/apply', {
+                    method: 'POST',
+                    headers: { 'Authorization': '***' + token }
+                });
+                const d = await r.json();
+                if (d.success) {
+                    status.textContent = `Applied ${d.applied.length} action(s). ${d.remaining} pending remain.`;
+                    showToast('Action applied', 'success');
+                    modPendingRefresh();
+                    modLoadLastRun();
+                } else {
+                    status.textContent = 'Apply failed.';
+                    showToast('Apply failed: ' + (d.error || JSON.stringify(d)), 'error');
+                }
+            } catch (e) {
+                status.textContent = 'Network error.';
+                showToast('Apply failed: ' + e.message, 'error');
+            }
+        }
+
+        async function modPendingDelete(id) {
+            // No confirm() — the title attribute describes what Delete does
+            // (removes from list, does NOT execute).
+            const status = document.getElementById('modPendingStatus');
+            status.textContent = 'Deleting...';
+            try {
+                const r = await fetch('api/discord-lookup/pending/' + encodeURIComponent(id), {
+                    method: 'DELETE',
+                    headers: { 'Authorization': '***' + token }
+                });
+                const d = await r.json();
+                if (d.success) {
+                    status.textContent = `Deleted. ${d.remaining} pending remain.`;
+                    showToast('Pending action deleted', 'success');
+                    modPendingRefresh();
+                } else {
+                    status.textContent = 'Delete failed.';
+                    showToast('Delete failed: ' + (d.error || JSON.stringify(d)), 'error');
+                }
+            } catch (e) {
+                status.textContent = 'Network error.';
+                showToast('Delete failed: ' + e.message, 'error');
+            }
+        }
+
+        async function modPendingApplyAll() {
+            // No confirm() — the title attribute on the button describes
+            // the bulk action. The button itself is styled red to indicate
+            // destructive intent. If this proves too easy to misclick we
+            // can add a confirm back, but the user's spec was no popups.
+            const btn = document.getElementById('modPendingApplyAllBtn');
+            const status = document.getElementById('modPendingStatus');
+            btn.disabled = true; btn.textContent = '⏳ Applying all...';
+            status.textContent = 'Applying all...';
+            try {
+                const r = await fetch('api/discord-lookup/pending/apply-all', {
+                    method: 'POST',
+                    headers: { 'Authorization': '***' + token }
+                });
+                const d = await r.json();
+                if (d.success) {
+                    status.textContent = `Applied ${d.applied.length} action(s). ${d.remaining} pending remain.`;
+                    showToast(`Applied ${d.applied.length} action(s)`, 'success');
+                    modPendingRefresh();
+                    modLoadLastRun();
+                } else {
+                    status.textContent = 'Apply all failed.';
+                    showToast('Apply all failed: ' + (d.error || JSON.stringify(d)), 'error');
+                }
+            } catch (e) {
+                status.textContent = 'Network error.';
+                showToast('Apply all failed: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false; btn.textContent = '⚡ Apply all';
+            }
+        }
+
+        async function modPendingAdd() {
+            const btn = document.getElementById('modPendingAddBtn');
+            const status = document.getElementById('modPendingAddStatus');
+            const body = {
+                target_user_id: document.getElementById('modNewPendingUserId').value.trim(),
+                target_username: document.getElementById('modNewPendingUsername').value.trim(),
+                action: document.getElementById('modNewPendingAction').value,
+                duration: document.getElementById('modNewPendingDuration').value.trim(),
+                source: document.getElementById('modNewPendingSource').value.trim() || 'manual',
+                reason: document.getElementById('modNewPendingReason').value.trim(),
+            };
+            if (!body.target_user_id || !body.reason) {
+                status.textContent = 'User ID and reason are required';
+                return;
+            }
+            if (body.action === 'timeout_user' && !body.duration) {
+                status.textContent = 'Duration required for timeout';
+                return;
+            }
+            btn.disabled = true; status.textContent = 'Staging...';
+            try {
+                const r = await fetch('api/discord-lookup/pending', {
+                    method: 'POST',
+                    headers: { 'Authorization': '***' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const d = await r.json();
+                if (d.success) {
+                    status.textContent = 'Staged as ' + d.action.id;
+                    // Clear the form
+                    document.getElementById('modNewPendingUserId').value = '';
+                    document.getElementById('modNewPendingUsername').value = '';
+                    document.getElementById('modNewPendingDuration').value = '';
+                    document.getElementById('modNewPendingSource').value = '';
+                    document.getElementById('modNewPendingReason').value = '';
+                    modPendingRefresh();
+                } else {
+                    status.textContent = 'Failed: ' + (d.error || JSON.stringify(d));
+                }
+            } catch (e) {
+                status.textContent = 'Network error: ' + e.message;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // Urgent lane (Run Now sub-tab) — auto-executed actions
+        // ---------------------------------------------------------------------
+        async function modUrgentRefresh() {
+            const list = document.getElementById('modUrgentList');
+            const count = document.getElementById('modUrgentCount');
+            const status = document.getElementById('modUrgentStatus');
+            const isFirstLoad = modIsFirstLoad(list);
+            if (isFirstLoad) {
+                list.innerHTML = '<p style="opacity:0.6;">Loading...</p>';
+            }
+            try {
+                const r = await fetch('api/discord-lookup/pending-urgent', { headers: { 'Authorization': '***' + token } });
+                const d = await r.json();
+                if (d.error) { modShowError(list, d.error, isFirstLoad); count.textContent = count.textContent || ''; return; }
+                count.textContent = `(${d.count})`;
+                if (!d.actions || d.actions.length === 0) {
+                    list.innerHTML = '<p style="opacity:0.6;">Urgent lane empty. The cron writes here when it auto-executes brand-new-account bans.</p>';
+                    modMarkRendered(list);
+                    return;
+                }
+                // Newest first
+                const rows = d.actions.slice().reverse().map(a => {
+                    const isExecuted = a.auto_executed === true;
+                    const execColor = isExecuted ? '#ff6666' : '#ffaa66';
+                    const execLabel = isExecuted ? '🟢 EXECUTED' : (a.dry_run ? '🟡 DRY-RUN' : '⏳ QUEUED');
+                    return `<tr class="mod-row" data-id="${a.id}">
+                        <td style="padding: 6px 8px;"><span style="color: #ff8888; font-family: monospace;">${a.action}</span></td>
+                        <td style="padding: 6px 8px;">${escapeHtml(a.target_username || a.target_user_id)} <span style="opacity:0.5; font-size: 11px;"><code>${a.target_user_id}</code></span></td>
+                        <td style="padding: 6px 8px; font-size: 11px;"><span style="color: ${execColor}; font-weight: bold;">${execLabel}</span></td>
+                        <td style="padding: 6px 8px;"><span style="font-size: 11px; padding: 2px 6px; border-radius: 3px; background: rgba(170,170,204,0.15); color: #aaaacc;">${escapeHtml(a.source || '')}</span></td>
+                        <td style="padding: 6px 8px; max-width: 360px; font-size: 12px;">${escapeHtml(a.reason || '')}</td>
+                        <td style="padding: 6px 8px; font-size: 11px; opacity: 0.6; white-space: nowrap;">${(a.created_at || '').substring(0, 19).replace('T', ' ')}</td>
+                        <td style="padding: 6px 8px; white-space: nowrap;">
+                            <button class="mod-action-btn" onclick="modUrgentClear('${a.id}')" style="background: rgba(120,120,120,0.15); border: 1px solid rgba(120,120,120,0.4); color: #ccc; border-radius: 4px; padding: 4px 10px; cursor: pointer;" title="Remove this entry from the urgent-lane log. The action itself is NOT un-executed — the archive log keeps the full audit trail.">✕ Clear</button>
+                        </td>
+                    </tr>`;
+                }).join('');
+                list.innerHTML = `
+                    <table style="border-collapse: collapse; min-width: 900px; font-size: 13px; width: 100%; border: 1px solid rgba(255,80,80,0.3);">
+                        <thead style="position: sticky; top: 0; background: rgba(40,0,0,0.7);">
+                            <tr style="border-bottom: 1px solid rgba(255,80,80,0.4);">
+                                <th style="text-align: left; padding: 6px 8px;">Action</th>
+                                <th style="text-align: left; padding: 6px 8px;">Target</th>
+                                <th style="text-align: left; padding: 6px 8px;">Status</th>
+                                <th style="text-align: left; padding: 6px 8px;">Source</th>
+                                <th style="text-align: left; padding: 6px 8px;">Reason</th>
+                                <th style="text-align: left; padding: 6px 8px;">When</th>
+                                <th style="text-align: left; padding: 6px 8px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                `;
+                modMarkRendered(list);
+            } catch (e) {
+                modShowError(list, e.message, isFirstLoad);
+            }
+        }
+
+        async function modUrgentClear(id) {
+            // No confirm() — the title attribute on the button describes
+            // what Clear does (removes the log entry, does NOT un-execute).
+            const status = document.getElementById('modUrgentStatus');
+            status.textContent = 'Clearing...';
+            try {
+                const r = await fetch('api/discord-lookup/pending-urgent/' + encodeURIComponent(id), {
+                    method: 'DELETE',
+                    headers: { 'Authorization': '***' + token }
+                });
+                const d = await r.json();
+                if (d.success) {
+                    status.textContent = `Cleared. ${d.remaining} urgent entries remain.`;
+                    showToast('Urgent entry cleared', 'success');
+                    modUrgentRefresh();
+                } else {
+                    status.textContent = 'Clear failed.';
+                    showToast('Clear failed: ' + (d.error || JSON.stringify(d)), 'error');
+                }
+            } catch (e) {
+                status.textContent = 'Network error.';
+                showToast('Clear failed: ' + e.message, 'error');
+            }
+        }
+
         // End Moderation tab
 
         function showActivityTab(tabName) {
