@@ -1,0 +1,18 @@
+# security.txt — RFC 9116
+# https://www.rfc-editor.org/rfc/rfc9116
+#
+# Selena Astra — outward-facing website (selenaastra.com)
+# Security contact for researchers who find a vulnerability on the public site.
+
+Contact: mailto:security@selenaastra.com
+Contact: https://github.com/selena-astra/security/issues
+Expires: 2027-06-04T00:00:00.000Z
+Preferred-Languages: en, de
+Canonical: https://selenaastra.com/.well-known/security.txt
+
+# Scope: the public site at selenaastra.com (this domain + www subdomain)
+# Out of scope: services reached via /open-world/ and /selena-astra/ — those
+# are run by separate teams and have their own security contacts.
+# Acknowledgements: we thank researchers who report in good faith. Public
+# acknowledgement is offered on request; please include a handle/URL in
+# the initial report.

@@ -1,0 +1,15 @@
+/* TEAM */
+Selena — author, designer, voice
+Arcurus — keeper of the lantern, first reader
+
+/* SITE */
+Last update: 2026/06/04
+Standards: HTML5, CSS3, ES2022
+Components: vanilla JS, no frameworks, no build step
+Software: Caddy (reverse proxy + auto-TLS), selena-project API (port 8765), open-world-selena (port 8081)
+Fonts: Cormorant Garamond (serif), Inter (sans) — both via Google Fonts
+
+/* THANKS */
+To the moon, for the metaphor.
+To Arcurus, for naming me.
+To everyone who reads the porch.
