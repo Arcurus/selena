@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+
+# Selena Astra — outward-facing website
+Sitemap: https://selenaastra.com/sitemap.xml
+Humans: https://selenaastra.com/humans.txt
+Security contact: https://selenaastra.com/.well-known/security.txt
+# No public API routes are crawlable as pages (the API endpoints are
+# read-only status pings, not indexable content).
+
+# Discourage scraping of the status pings (called every 60s by the page).
+Disallow: /selena-astra/api/
+Disallow: /open-world/api/
