@@ -1,12 +1,29 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="space">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Selena Astra - explore the stars</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="static/style.css">
+    <!-- Inline so we set data-theme before CSS paints (no FOUC). -->
+    <script>
+    // API path convention: use relative paths in fetch() URLs.
+    // The browser resolves 'api/...' against the page's directory,
+    // so this works under /selena-astra/, at /, or at any Caddy mount.
+    // Don't reintroduce a leading slash — it would break under a prefix.
+    
+    (function() {
+        try {
+            var t = localStorage.getItem('selena_theme');
+            if (t !== 'space' && t !== 'bright') t = 'space';
+            document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {
+            document.documentElement.setAttribute('data-theme', 'space');
+        }
+    })();
+    </script>
     <!-- Twinkling Star Script - loaded async/non-blocking -->
-    <script src="/static/star-script.js" async></script>
+    <script src="static/star-script.js" async></script>
 </head>
 <body>
     <!-- Toast Notifications (top right) -->
@@ -21,6 +38,10 @@
 
     <!-- Login Screen -->
     <div class="login-screen" id="loginScreen">
+        <!-- Theme toggle: visible on login too so the user can switch before logging in -->
+        <button class="theme-toggle theme-toggle-floating" id="theme-toggle-login" onclick="toggleTheme()" title="Switch to bright theme" aria-label="Toggle theme">
+            <span id="theme-toggle-icon-login">☀️</span>
+        </button>
         <div class="login-box">
             <h1>🌙 Selena Astra</h1>
             <p style="color: var(--text-secondary); margin-bottom: 20px;">Enter password to explore the stars</p>
@@ -34,7 +55,12 @@
     <div class="dashboard" id="dashboard">
         <div class="header">
             <h1>🌙 <span class="header-star"></span> Selena Astra - explore the stars <span class="header-star"></span></h1>
-            <button class="logout" onclick="logout()">Logout</button>
+            <div style="display:flex; align-items:center;">
+                <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Switch to bright theme" aria-label="Toggle theme">
+                    <span id="theme-toggle-icon">☀️</span>
+                </button>
+                <button class="logout" onclick="logout()">Logout</button>
+            </div>
         </div>
 
         <div class="container">
@@ -45,8 +71,12 @@
                 <div class="tab" onclick="showTab('knowledge')">📚 Knowledge</div>
                 <div class="tab" onclick="showTab('activity')">📊 Activity</div>
                 <div class="tab" onclick="showTab('cost')">💰 Cost</div>
+                <div class="tab" onclick="showTab('llm-usage')">🛰️ LLM Usage</div>
                 <div class="tab" onclick="showTab('settings')">⚡ Settings</div>
                 <div class="tab" onclick="showTab('scanner')">🔍 Scanner</div>
+                <div class="tab" onclick="showTab('cron')">⏰ Cron Jobs</div>
+                <div class="tab" onclick="showTab('moderation')">🛡️ Moderation</div>
+                <div class="tab" onclick="showTab('agents')">🤖 Agents</div>
             </div>
 
             <!-- Services Tab -->
@@ -62,7 +92,7 @@
                     </div>
                     <div class="sidebar">
                         <div class="shiba-panel">
-                            <img src="/static/agents/shiba_miner.png" class="shiba-avatar" alt="Selena"
+                            <img id="shiba-avatar-img" src="static/agents/selena_overseer.png" class="shiba-avatar" alt="Selena"
                                  onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2280%22>🌙</text></svg>'">
                             <div class="shiba-status status-working" id="shibaStatus">Working</div>
                             <div class="shiba-task" id="shibaTask">Exploring the cosmos...</div>
@@ -163,7 +193,7 @@
                                 </div>
                                 <div id="fileContentScroll" style="flex: 1; overflow-y: auto; padding: 15px; position: relative; display: flex; flex-direction: column;">
                                     <pre id="fileContentBody" class="cosmic-bg" style="flex: 1; margin: 0; padding: 0; overflow: auto; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;"></pre>
-                                    <img src="/static/agents/selena_overseer.png" alt="Selena" style="width: 150px; height: auto; margin-top: 10px; border-radius: 8px; flex-shrink: 0; align-self: center; opacity: 0.9; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                                    <img src="static/agents/selena_overseer.png" alt="Selena" style="width: 150px; height: auto; margin-top: 10px; border-radius: 8px; flex-shrink: 0; align-self: center; opacity: 0.9; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
                                 </div>
                             </div>
                             
@@ -353,6 +383,7 @@
                 <div class="tabs" style="margin-bottom: 15px;">
                     <div class="tab active" onclick="showCostTab('tokenplan')">🎫 Token Plan</div>
                     <div class="tab" onclick="showCostTab('tracking')">📊 Call Tracking</div>
+                    <div class="tab" onclick="showCostTab('provider')">🛰️ Provider Usage</div>
                 </div>
 
                 <!-- Token Plan Sub-tab -->
@@ -371,6 +402,72 @@
                         <h3>Recent Calls</h3>
                         <div id="callList" style="max-height: 400px; overflow-y: auto;"></div>
                     </div>
+                </div>
+
+                <!-- Provider Usage Sub-tab (multi-provider quota + local 5h window) -->
+                <div class="tab-content" id="cost-provider">
+                    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 15px;">
+                        <button class="save-btn" onclick="loadProviderUsage(true)" style="width:auto;padding:8px 18px;">🔄 Sync now (force)</button>
+                        <span id="providerUsageSyncInfo" style="color: var(--text-secondary); font-size: 0.85rem;"></span>
+                    </div>
+                    <div id="providerUsageWarnings"></div>
+                    <div class="cost-summary" id="providerUsageSummary"></div>
+                    <div class="services-panel" style="margin-top: 20px;">
+                        <h3>📡 Per-Provider Quota (live from provider APIs)</h3>
+                        <div id="providerUsageProviders"></div>
+                    </div>
+                    <div class="services-panel" style="margin-top: 20px;">
+                        <h3>🎯 Per-Project Allocation (5h window)</h3>
+                        <div id="providerUsageAllocations"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LLM Usage Tab (top-level) -->
+            <div class="tab-content" id="tab-llm-usage">
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 15px;">
+                    <button class="save-btn" onclick="loadLLMUsage(true)" style="width:auto;padding:8px 18px;">🔄 Sync now (force)</button>
+                    <span id="llmUsageSyncInfo" style="color: var(--text-secondary); font-size: 0.85rem;"></span>
+                    <span style="margin-left: auto; color: var(--text-secondary); font-size: 0.8rem;">
+                        auto-refresh: <span id="llmUsageNextRefresh">30s</span>
+                    </span>
+                </div>
+                <div id="llmUsageWarnings"></div>
+                <div id="llmUsageAlertState" style="margin-bottom: 12px;"></div>
+
+                <!-- KPI cards -->
+                <div class="cost-summary" id="llmUsageKpis"></div>
+
+                <!-- Bar chart: 5h calls by provider (incl. target line) -->
+                <div class="graph-container" style="margin-top: 20px;">
+                    <h3>📊 Calls by Provider (last 5h)</h3>
+                    <canvas id="llmUsageBarChart" class="graph-canvas" style="width:100%; height:240px;"></canvas>
+                </div>
+
+                <!-- Line chart: calls over time, per provider + total -->
+                <div class="graph-container" style="margin-top: 20px;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap: wrap;">
+                        <h3 style="margin:0;">📈 Calls Over Time</h3>
+                        <button class="save-btn" onclick="loadLLMTimeseries(1)"  style="width:auto;padding:4px 12px;font-size:0.8rem;">1h</button>
+                        <button class="save-btn" onclick="loadLLMTimeseries(6)"  style="width:auto;padding:4px 12px;font-size:0.8rem;">6h</button>
+                        <button class="save-btn" onclick="loadLLMTimeseries(24)" style="width:auto;padding:4px 12px;font-size:0.8rem;">24h</button>
+                        <button class="save-btn" onclick="loadLLMTimeseries(168)" style="width:auto;padding:4px 12px;font-size:0.8rem;">7d</button>
+                        <span id="llmUsageSeriesInfo" style="margin-left:auto; color: var(--text-secondary); font-size: 0.8rem;"></span>
+                    </div>
+                    <canvas id="llmUsageLineChart" class="graph-canvas" style="width:100%; height:280px;"></canvas>
+                    <div id="llmUsageLegend" style="display:flex; flex-wrap:wrap; gap:12px; margin-top:8px; font-size:0.85rem;"></div>
+                </div>
+
+                <!-- Per-provider quota cards (live from provider APIs) -->
+                <div class="services-panel" style="margin-top: 20px;">
+                    <h3>📡 Provider Quota (live from APIs)</h3>
+                    <div id="llmUsageProviders"></div>
+                </div>
+
+                <!-- Per-project allocation -->
+                <div class="services-panel" style="margin-top: 20px;">
+                    <h3>🎯 Per-Project Allocation (5h window)</h3>
+                    <div id="llmUsageAllocations"></div>
                 </div>
             </div>
 
@@ -412,6 +509,94 @@
                         <h3>📜 Scan History</h3>
                         <div id="scannerHistoryContent">No scans yet.</div>
                     </div>
+                </div>
+            </div>
+            <div class="tab-content" id="tab-cron">
+                <div class="services-panel">
+                    <h2>⏰ Cron Jobs</h2>
+                    <p>Manage OpenClaw cron jobs: enable / disable, change model, change context, view instructions and why-paused reasons. Backed by <code>selena-project/code/cron_tracker.py</code> (CLI) and <code>/api/cron/*</code> (API). Read-only on schedule / instructions — those are owned by the cron definition itself.</p>
+                    <div style="margin: 10px 0;">
+                        <button class="save-btn" onclick="loadCronJobs()" style="width:auto; padding:8px 24px;">🔄 Refresh</button>
+                        <span id="cronSummary" style="margin-left:12px; color: var(--text-secondary);"></span>
+                    </div>
+                    <div id="cronTable" style="margin-top: 20px;">Loading...</div>
+                    <div id="cronInstructionsModal" style="display:none; margin-top:20px;" class="services-panel">
+                        <h3 id="cronInstructionsTitle">Instructions</h3>
+                        <pre id="cronInstructionsBody" style="white-space: pre-wrap; max-height: 500px; overflow-y: auto; background: rgba(0,0,0,0.3); padding: 14px; border-radius: 8px; font-size: 12px;"></pre>
+                        <button class="save-btn" onclick="document.getElementById('cronInstructionsModal').style.display='none'" style="width:auto; padding:6px 18px; margin-top:10px;">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Moderation Tab (2026-06-04 per Arcurus): scanner status, settings, users, trigger log, policies. New-user scanner (discord_lookup.py) wakes the moderation cron on new-user activity. -->
+            <div class="tab-content" id="tab-moderation">
+                <div class="services-panel">
+                    <h2>🛡️ Moderation</h2>
+                    <p style="opacity: 0.8; margin-bottom: 18px;">New-user scanner + moderation cron trigger. Sub-tabs: Last Run, Run Now, Settings, Banned/Timeout, Users, Policies, Log.</p>
+
+                    <!-- Sub-tab nav -->
+                    <div class="subtabs" style="display: flex; gap: 6px; margin: 18px 0 24px 0; flex-wrap: wrap; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">
+                        <button class="subtab active" data-subtab="mod-last" onclick="showModSubTab('mod-last')">📊 Last Run</button>
+                        <button class="subtab" data-subtab="mod-run" onclick="showModSubTab('mod-run')">▶️ Run Now</button>
+                        <button class="subtab" data-subtab="mod-settings" onclick="showModSubTab('mod-settings')">⚙️ Settings</button>
+                        <button class="subtab" data-subtab="mod-banned" onclick="showModSubTab('mod-banned')">🚫 Banned / Timeout</button>
+                        <button class="subtab" data-subtab="mod-users" onclick="showModSubTab('mod-users')">👥 Users</button>
+                        <button class="subtab" data-subtab="mod-policies" onclick="showModSubTab('mod-policies')">📜 Policies</button>
+                        <button class="subtab" data-subtab="mod-log" onclick="showModSubTab('mod-log')">📋 Log</button>
+                    </div>
+
+                    <!-- Sub-tab content -->
+                    <div class="subtab-content active" id="mod-last">
+                        <h3>📊 Last Run</h3>
+                        <div id="modLastRunContent">Loading...</div>
+                    </div>
+                    <div class="subtab-content" id="mod-run" style="display: none;">
+                        <h3>▶️ Run Now</h3>
+                        <p style="opacity: 0.8; margin-bottom: 14px;">Runs the new-user scanner synchronously. If a new user is found and the debounce is OK, the moderation cron is woken automatically.</p>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <button class="save-btn" onclick="modRunScan()" id="modRunScanBtn" style="width: auto; padding: 10px 24px;">🔍 Run scanner</button>
+                            <button class="save-btn" onclick="modForceCron()" id="modForceCronBtn" style="width: auto; padding: 10px 24px; background: rgba(255,165,0,0.3);">⚡ Force moderation cron</button>
+                        </div>
+                        <div id="modRunResult" style="margin-top: 18px;"></div>
+                    </div>
+                    <div class="subtab-content" id="mod-settings" style="display: none;">
+                        <h3>⚙️ Settings</h3>
+                        <p style="opacity: 0.8; margin-bottom: 14px;">Configure the scanner. Click "Save" to apply changes.</p>
+                        <div id="modSettingsContent">Loading...</div>
+                    </div>
+                    <div class="subtab-content" id="mod-banned" style="display: none;">
+                        <h3>🚫 Banned / Timeout</h3>
+                        <p style="opacity: 0.8; margin-bottom: 14px;">All ban and timeout actions from the moderation actions archive.</p>
+                        <div id="modBannedContent">Loading...</div>
+                    </div>
+                    <div class="subtab-content" id="mod-users" style="display: none;">
+                        <h3>👥 Users</h3>
+                        <p style="opacity: 0.8; margin-bottom: 14px;">All users seen by the scanner, with member info and message counts.</p>
+                        <div id="modUsersContent">Loading...</div>
+                    </div>
+                    <div class="subtab-content" id="mod-policies" style="display: none;">
+                        <h3>📜 Policies</h3>
+                        <p style="opacity: 0.8; margin-bottom: 14px;">Read-only display of the moderation policies. Edit <code>selena-project/data/moderation_policies.md</code> and the cron prompt to change behavior.</p>
+                        <div id="modPoliciesContent">Loading...</div>
+                    </div>
+                    <div class="subtab-content" id="mod-log" style="display: none;">
+                        <h3>📋 Log</h3>
+                        <p style="opacity: 0.8; margin-bottom: 14px;">Append-only trigger log from <code>selena-project/data/moderation_triggers.jsonl</code>.</p>
+                        <div id="modLogContent">Loading...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agents Tab (2026-06-03 per Arcurus): shows every autonomous worker + heartbeat + moderation cron, with their project, current todo, and last-run status. Joins cron_tracker data with todo owner data. -->
+            <div class="tab-content" id="tab-agents">
+                <div class="services-panel">
+                    <h2>🤖 Agents</h2>
+                    <p>Autonomous workers and heartbeats. Each one is a cron that runs on its own schedule and can do work or report status. "Owner" = the agent that picked up the todo (or "arcurus" for human signoff). "Project" = the scope the agent restricts itself to.</p>
+                    <div style="margin: 10px 0;">
+                        <button class="save-btn" onclick="loadAgents()" style="width:auto; padding:8px 24px;">🔄 Refresh</button>
+                        <span id="agentsSummary" style="margin-left:12px; color: var(--text-secondary);"></span>
+                    </div>
+                    <div id="agentsTable" style="margin-top: 20px;">Loading...</div>
                 </div>
             </div>
         </div>
@@ -622,7 +807,7 @@
             // Verify current token is valid by calling /api/status
             if (!token) return false;
             try {
-                const response = await fetch('/api/status', {
+                const response = await fetch('api/status', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json().catch(() => ({}));
@@ -645,7 +830,7 @@
             // This helps catch regression issues where API might silently fail instead of returning proper error
             
             // Test 1: Request with invalid token should return 401 + {"error": "Unauthorized"}
-            const invalidResponse = await fetch('/api/status', {
+            const invalidResponse = await fetch('api/status', {
                 headers: { 'Authorization': 'Bearer invalid_token_12345' }
             });
             const invalidData = await invalidResponse.json().catch(() => ({}));
@@ -661,7 +846,7 @@
             console.log('TEST PASSED: API correctly returns 401 + Unauthorized for invalid token');
             
             // Test 2: Request without Authorization header should return 401 + {"error": "Unauthorized"}
-            const noAuthResponse = await fetch('/api/status');
+            const noAuthResponse = await fetch('api/status');
             const noAuthData = await noAuthResponse.json().catch(() => ({}));
             
             if (noAuthResponse.status !== 401) {
@@ -676,7 +861,7 @@
             
             // Test 3: If we have a valid token, verify it works
             if (token) {
-                const validResponse = await fetch('/api/status', {
+                const validResponse = await fetch('api/status', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const validData = await validResponse.json().catch(() => ({}));
@@ -700,7 +885,7 @@
             const password = document.getElementById('passwordInput').value;
             const errorEl = document.getElementById('loginError');
             try {
-                const response = await fetch(`/api/login?password=${encodeURIComponent(password)}`);
+                const response = await fetch(`api/login?password=${encodeURIComponent(password)}`);
                 const data = await response.json();
                 if (data.success) {
                     token = data.token;
@@ -736,6 +921,68 @@
             document.getElementById('dashboard').style.display = 'none';
             document.getElementById('loginScreen').style.display = 'flex';
         }
+
+        // ---- Theme toggle (space <-> bright) ----
+        // The inline script in <head> sets data-theme BEFORE CSS paints
+        // so we never flash the wrong theme.  Here we just keep the
+        // toggle button + shiba avatar in sync with that state.
+        const THEME_SHIBE = {
+            space: 'static/agents/selena_overseer.png',
+            bright: 'static/agents/shiba_coder.png',
+        };
+        const THEME_ICON = {
+            space: '☀️',   // current = space; click → go to bright
+            bright: '🌌',  // current = bright; click → go to space
+        };
+        const THEME_TITLE = {
+            space: 'Switch to bright theme',
+            bright: 'Switch to space theme',
+        };
+
+        function getActiveTheme() {
+            return document.documentElement.getAttribute('data-theme') || 'space';
+        }
+
+        function applyThemeUI(theme) {
+            // The header button (post-login)
+            const btn = document.getElementById('theme-toggle');
+            if (btn) {
+                const icon = document.getElementById('theme-toggle-icon');
+                if (icon) icon.textContent = THEME_ICON[theme] || '🌗';
+                btn.title = THEME_TITLE[theme] || 'Toggle theme';
+                btn.setAttribute('aria-label', btn.title);
+            }
+            // The login-screen button (visible without logging in)
+            const btnLogin = document.getElementById('theme-toggle-login');
+            if (btnLogin) {
+                const iconLogin = document.getElementById('theme-toggle-icon-login');
+                if (iconLogin) iconLogin.textContent = THEME_ICON[theme] || '🌗';
+                btnLogin.title = THEME_TITLE[theme] || 'Toggle theme';
+                btnLogin.setAttribute('aria-label', btnLogin.title);
+            }
+            const shiba = document.getElementById('shiba-avatar-img');
+            if (shiba && THEME_SHIBE[theme]) {
+                shiba.src = THEME_SHIBE[theme];
+            }
+        }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const current = getActiveTheme();
+            const next = current === 'space' ? 'bright' : 'space';
+            html.setAttribute('data-theme', next);
+            try { localStorage.setItem('selena_theme', next); } catch (e) {}
+            applyThemeUI(next);
+        }
+
+        // Keep button/shiba in sync if the attribute changes elsewhere
+        // (e.g. another tab, a future external control).
+        const _themeObserver = new MutationObserver(() => applyThemeUI(getActiveTheme()));
+        document.addEventListener('DOMContentLoaded', () => {
+            applyThemeUI(getActiveTheme());
+            _themeObserver.observe(document.documentElement,
+                { attributes: true, attributeFilter: ['data-theme'] });
+        });
 
         function showDashboard() {
             document.getElementById('loginScreen').style.display = 'none';
@@ -785,7 +1032,7 @@
 
             try {
                 // Get services status from API
-                const response = await fetch('/api/status', {
+                const response = await fetch('api/status', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 
@@ -863,6 +1110,19 @@
                     statusText: 'Checking...'
                 });
 
+                // Discord notifier (sub-service of selena-project; posts watchdog announcements to #selena-project)
+                services.push({
+                    name: 'Selena Discord Notifier',
+                    serviceName: 'selena-discord-notifier',
+                    description: 'Direct Discord poster (service announcements)',
+                    icon: '💬',
+                    port: '8765',
+                    pid: null,
+                    checkUrl: null, // checked server-side via /api/services/check
+                    status: 'unknown',
+                    statusText: 'Checking...'
+                });
+
                 // Store initial state for display
                 lastServicesState = services;
                 
@@ -875,7 +1135,7 @@
                     
                     // Use server-side health check endpoint
                     try {
-                        const response = await fetch(`/api/services/check?service=${encodeURIComponent(service.serviceName)}`, {
+                        const response = await fetch(`api/services/check?service=${encodeURIComponent(service.serviceName)}`, {
                             headers: { 'Authorization': `Bearer ${token}` }
                         });
                         const data = await response.json();
@@ -924,6 +1184,279 @@
             }
         }
 
+        // ===== Cron Jobs tab =====
+        let cronJobsCache = [];
+        async function loadCronJobs() {
+            const table = document.getElementById('cronTable');
+            table.innerHTML = '<p style="color: var(--text-secondary);">Loading cron jobs...</p>';
+            try {
+                const r = await fetch('api/cron/list', { headers: { 'Authorization': `Bearer ${token}` } });
+                if (!r.ok) {
+                    table.innerHTML = `<p style="color: var(--danger);">Error ${r.status}: ${(await r.json()).error || 'unknown'}</p>`;
+                    return;
+                }
+                const data = await r.json();
+                cronJobsCache = data.jobs || [];
+                const enabled = cronJobsCache.filter(j => j.enabled).length;
+                const errs = cronJobsCache.filter(j => j.status === 'error').length;
+                document.getElementById('cronSummary').textContent =
+                    `${cronJobsCache.length} jobs · ${enabled} enabled · ${errs} with errors`;
+                renderCronTable();
+            } catch (e) {
+                table.innerHTML = `<p style="color: var(--danger);">Failed: ${e.message}</p>`;
+            }
+        }
+
+        function renderCronTable() {
+            const table = document.getElementById('cronTable');
+            if (!cronJobsCache.length) {
+                table.innerHTML = '<p>(no cron jobs found)</p>';
+                return;
+            }
+            const rows = cronJobsCache.map(j => {
+                const enabledMark = j.enabled ? '✅' : '⏸️';
+                const statusColor = j.status === 'error' ? 'var(--danger)'
+                                  : j.status === 'disabled' ? 'var(--text-secondary)'
+                                  : j.status === 'running' ? 'var(--accent)' : 'inherit';
+                const lastRun = j.last_run_at_iso ? j.last_run_at_iso.replace('T', ' ').slice(0, 19) + ' UTC' : '—';
+                const whyPaused = j.why_paused ? `<br><small style="color: var(--text-secondary);">⏸ ${escapeHtml(j.why_paused)}</small>` : '';
+                const errBox = j.consecutive_errors > 0
+                    ? `<br><small style="color: var(--danger);">⚠ ${j.consecutive_errors} err${j.consecutive_errors > 1 ? 's' : ''} · ${escapeHtml((j.last_error || '').slice(0, 80))}</small>`
+                    : '';
+                const descShort = (j.description || '').slice(0, 80);
+                return `<tr>
+                    <td style="padding:6px 10px;">${enabledMark}</td>
+                    <td style="padding:6px 10px;"><b>${escapeHtml(j.name)}</b><br><small style="color:var(--text-secondary);">${escapeHtml(descShort)}</small></td>
+                    <td style="padding:6px 10px; color:${statusColor};">${j.status}</td>
+                    <td style="padding:6px 10px;">${escapeHtml(j.schedule || '')}<br><small style="color:var(--text-secondary);">${escapeHtml(j.schedule_tz || '')}</small></td>
+                    <td style="padding:6px 10px;"><code style="font-size:11px;">${escapeHtml((j.model || '').slice(0, 30))}</code></td>
+                    <td style="padding:6px 10px;">${j.context_tokens || '—'}</td>
+                    <td style="padding:6px 10px;">${lastRun}${errBox}</td>
+                    <td style="padding:6px 10px; white-space:nowrap;">
+                        <button class="save-btn" style="padding:3px 8px; font-size:11px;" onclick="cronToggleEnabled('${escapeHtml(j.name)}', ${!j.enabled})">${j.enabled ? 'Disable' : 'Enable'}</button>
+                        <button class="save-btn" style="padding:3px 8px; font-size:11px;" onclick="cronShowInstructions('${escapeHtml(j.name)}')">Instructions</button>
+                        <button class="save-btn" style="padding:3px 8px; font-size:11px;" onclick="cronChangeModel('${escapeHtml(j.name)}')">Model</button>
+                        <button class="save-btn" style="padding:3px 8px; font-size:11px;" onclick="cronChangeContext('${escapeHtml(j.name)}')">Context</button>
+                    </td>
+                </tr>${whyPaused ? `<tr><td colspan="8" style="padding:0 10px 6px 28px;">${whyPaused}</td></tr>` : ''}`;
+            }).join('');
+            table.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead style="background: rgba(255,255,255,0.05);">
+                    <tr>
+                        <th style="text-align:left; padding:8px 10px;"></th>
+                        <th style="text-align:left; padding:8px 10px;">Name</th>
+                        <th style="text-align:left; padding:8px 10px;">Status</th>
+                        <th style="text-align:left; padding:8px 10px;">Schedule</th>
+                        <th style="text-align:left; padding:8px 10px;">Model</th>
+                        <th style="text-align:left; padding:8px 10px;">Ctx</th>
+                        <th style="text-align:left; padding:8px 10px;">Last Run</th>
+                        <th style="text-align:left; padding:8px 10px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+        }
+
+        async function cronToggleEnabled(ref, enable) {
+            const action = enable ? 'enable' : 'disable';
+            const reason = enable ? '' : (prompt(`Why pause ${ref}? (optional)`, '') || '');
+            try {
+                const q = enable ? `ref=${encodeURIComponent(ref)}` : `ref=${encodeURIComponent(ref)}&reason=${encodeURIComponent(reason)}`;
+                const r = await fetch(`api/cron/${action}?${q}`, { method: 'GET', headers: { 'Authorization': `Bearer ${token}` } });
+                const data = await r.json();
+                if (data.success) {
+                    showToast(`✅ ${ref} ${action}d`);
+                    loadCronJobs();
+                } else {
+                    showToast(`❌ ${data.error || 'failed'}`);
+                }
+            } catch (e) {
+                showToast(`❌ ${e.message}`);
+            }
+        }
+
+        async function cronShowInstructions(ref) {
+            try {
+                const r = await fetch(`api/cron/instructions?ref=${encodeURIComponent(ref)}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const data = await r.json();
+                if (data.error) { showToast(`❌ ${data.error}`); return; }
+                document.getElementById('cronInstructionsTitle').textContent = `Instructions: ${ref} (${data.length} chars)`;
+                document.getElementById('cronInstructionsBody').textContent = data.instructions || '(empty)';
+                document.getElementById('cronInstructionsModal').style.display = 'block';
+                document.getElementById('cronInstructionsModal').scrollIntoView({ behavior: 'smooth' });
+            } catch (e) {
+                showToast(`❌ ${e.message}`);
+            }
+        }
+
+        async function cronChangeModel(ref) {
+            const current = cronJobsCache.find(j => j.name === ref);
+            const newModel = prompt(`New model for ${ref}? (current: ${current ? current.model : 'unknown'})`, current ? current.model : '');
+            if (!newModel) return;
+            try {
+                const r = await fetch(`api/cron/model?ref=${encodeURIComponent(ref)}&model=${encodeURIComponent(newModel)}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const data = await r.json();
+                if (data.success) {
+                    showToast(`✅ ${ref} model = ${newModel}`);
+                    loadCronJobs();
+                } else {
+                    showToast(`❌ ${data.error || 'failed'}`);
+                }
+            } catch (e) {
+                showToast(`❌ ${e.message}`);
+            }
+        }
+
+        async function cronChangeContext(ref) {
+            const current = cronJobsCache.find(j => j.name === ref);
+            const newCtx = prompt(`Max context tokens for ${ref}? (current: ${current ? (current.context_tokens || 'unset') : 'unknown'})`, current && current.context_tokens ? String(current.context_tokens) : '200000');
+            if (!newCtx) return;
+            try {
+                const r = await fetch(`api/cron/context?ref=${encodeURIComponent(ref)}&max_tokens=${encodeURIComponent(newCtx)}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const data = await r.json();
+                if (data.success) {
+                    showToast(`✅ ${ref} ctx = ${newCtx}`);
+                    loadCronJobs();
+                } else {
+                    showToast(`❌ ${data.error || 'failed'}`);
+                }
+            } catch (e) {
+                showToast(`❌ ${e.message}`);
+            }
+        }
+
+        // ===== end Cron Jobs tab =====
+
+        // ===== Agents tab (added 2026-06-03 per Arcurus) =====
+        // Joins cron_jobs (live status, schedule) with todos (current owner + project).
+        // Each row is one agent. The agent is identified by its cron name (e.g.
+        // selena-project-worker, selena-slow-heartbeat, openlife-moderation-check).
+        let agentsCache = [];
+        async function loadAgents() {
+            const table = document.getElementById('agentsTable');
+            table.innerHTML = '<p style="color: var(--text-secondary);">Loading agents...</p>';
+            try {
+                // Pull cron jobs and todos in parallel.
+                const [cronRes, todosRes] = await Promise.all([
+                    fetch('api/cron/list', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch('api/todos?status=in_progress&limit=500', { headers: { 'Authorization': `Bearer ${token}` } })
+                ]);
+                if (!cronRes.ok) throw new Error('cron list HTTP ' + cronRes.status);
+                if (!todosRes.ok) throw new Error('todos HTTP ' + todosRes.status);
+                const cronData = await cronRes.json();
+                const todosData = await todosRes.json();
+                // Build a per-agent "current todos" map from in_progress todos
+                const ownerTodos = {};
+                for (const t of (todosData.todos || [])) {
+                    const owner = t.agent_owner || 'arcurus';
+                    if (!ownerTodos[owner]) ownerTodos[owner] = [];
+                    ownerTodos[owner].push(t);
+                }
+                // Build agent list. Every cron job becomes a row. A cron name
+                // like "selena-project-worker" maps to agent_owner
+                // "selena-project-worker".
+                const agents = (cronData.jobs || []).map(j => {
+                    const name = j.name;
+                    const owned = ownerTodos[name] || [];
+                    // Pick a single most-relevant todo to display (top of the list)
+                    const top = owned[0] || null;
+                    // Map cron name to project scope (heuristic)
+                    let project = null;
+                    if (name.startsWith('selena-project-worker')) project = 'selena-project';
+                    else if (name.startsWith('selena-project-lunar-worker')) project = 'selena-project-lunar';
+                    else if (name.startsWith('selena-slow-heartbeat') || name.startsWith('selena-fast-heartbeat')) project = 'global';
+                    else if (name.includes('openlife')) project = 'openlife';
+                    else if (name.includes('open-world') || name.includes('openworld')) project = 'open-world-selena';
+                    else if (name.includes('moderation')) project = 'openlife';
+                    else if (name.includes('cost')) project = 'global';
+                    // Classify type by name keywords
+                    let type = 'worker';
+                    if (name.includes('heartbeat')) type = 'heartbeat';
+                    else if (name.includes('moderation')) type = 'moderation';
+                    else if (name.includes('check')) type = 'monitor';
+                    else if (name.includes('cost')) type = 'reporter';
+                    return { name, project, type, cron: j, top, ownedCount: owned.length };
+                });
+                // Sort: workers first, then by project, then by name
+                agents.sort((a, b) => {
+                    const tOrder = { worker: 0, heartbeat: 1, monitor: 2, moderation: 3, reporter: 4 };
+                    const td = (tOrder[a.type] ?? 9) - (tOrder[b.type] ?? 9);
+                    if (td !== 0) return td;
+                    if ((a.project || '') !== (b.project || '')) return (a.project || '').localeCompare(b.project || '');
+                    return a.name.localeCompare(b.name);
+                });
+                agentsCache = agents;
+                const enabled = agents.filter(a => a.cron.enabled).length;
+                const busy = agents.filter(a => a.ownedCount > 0).length;
+                document.getElementById('agentsSummary').textContent =
+                    `${agents.length} agents · ${enabled} enabled · ${busy} currently working on a task`;
+                renderAgentsTable();
+            } catch (e) {
+                table.innerHTML = `<p style="color: var(--danger);">Failed to load agents: ${escapeHtml(e.message)}</p>`;
+            }
+        }
+
+        function renderAgentsTable() {
+            const table = document.getElementById('agentsTable');
+            if (!agentsCache.length) {
+                table.innerHTML = '<p>(no agents found)</p>';
+                return;
+            }
+            const rows = agentsCache.map(a => {
+                const c = a.cron;
+                const enabledMark = c.enabled ? '✅' : '⏸️';
+                const typeEmoji = { worker: '🛠️', heartbeat: '🫀', monitor: '🔍', moderation: '🛡️', reporter: '📊' }[a.type] || '🤖';
+                const statusColor = c.status === 'error' ? 'var(--danger)'
+                                  : c.status === 'disabled' ? 'var(--text-secondary)'
+                                  : c.status === 'running' ? 'var(--accent)' : 'inherit';
+                const lastRun = c.last_run_at_iso ? c.last_run_at_iso.replace('T', ' ').slice(0, 19) + ' UTC' : '—';
+                const nextRun = c.next_run_at_iso ? c.next_run_at_iso.replace('T', ' ').slice(0, 19) + ' UTC' : '—';
+                const errBox = c.consecutive_errors > 0
+                    ? `<br><small style="color: var(--danger);">⚠ ${c.consecutive_errors} err${c.consecutive_errors > 1 ? 's' : ''} · ${escapeHtml((c.last_error || '').slice(0, 80))}</small>`
+                    : '';
+                const descShort = (c.description || '').slice(0, 100);
+                const projectTag = a.project
+                    ? `<span class="status-badge" style="background: var(--bg-dark); color: var(--accent-cyan); border: 1px solid var(--accent-cyan); padding: 2px 8px; border-radius: 4px; font-size: 0.7rem;">📁 ${escapeHtml(a.project)}</span>`
+                    : '<span style="color: var(--text-secondary); font-size: 0.7rem;">—</span>';
+                const currentWork = a.top
+                    ? `<span style="color: var(--accent-neon); font-size: 0.8rem;">→ <a href="#tasks" onclick="setTodoFilter('in_progress'); showTab('tasks');" style="color: inherit; text-decoration: underline;">${escapeHtml(a.top.short_desc.slice(0, 60))}${a.top.short_desc.length > 60 ? '…' : ''}</a> <span style="color: var(--text-secondary);">[${a.top.id}]</span></span>`
+                    : (a.ownedCount > 1
+                        ? `<span style="color: var(--text-secondary); font-size: 0.8rem;">(${a.ownedCount} tasks)</span>`
+                        : '<span style="color: var(--text-secondary); font-size: 0.8rem;">— idle —</span>');
+                return `<tr>
+                    <td style="padding:6px 10px;">${enabledMark}</td>
+                    <td style="padding:6px 10px;">${typeEmoji} <b>${escapeHtml(a.name)}</b><br><small style="color:var(--text-secondary);">${escapeHtml(descShort)}</small></td>
+                    <td style="padding:6px 10px; color:${statusColor};">${c.status || '—'}</td>
+                    <td style="padding:6px 10px;">${projectTag}</td>
+                    <td style="padding:6px 10px; color: var(--text-secondary);">${escapeHtml(c.schedule || '')}</td>
+                    <td style="padding:6px 10px;">${lastRun}${errBox}</td>
+                    <td style="padding:6px 10px; color: var(--text-secondary); font-size: 0.75rem;">${nextRun}</td>
+                    <td style="padding:6px 10px;">${currentWork}</td>
+                </tr>`;
+            }).join('');
+            table.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead style="background: rgba(255,255,255,0.05);">
+                    <tr>
+                        <th style="text-align:left; padding:8px 10px;"></th>
+                        <th style="text-align:left; padding:8px 10px;">Name</th>
+                        <th style="text-align:left; padding:8px 10px;">Status</th>
+                        <th style="text-align:left; padding:8px 10px;">Project</th>
+                        <th style="text-align:left; padding:8px 10px;">Schedule</th>
+                        <th style="text-align:left; padding:8px 10px;">Last Run</th>
+                        <th style="text-align:left; padding:8px 10px;">Next</th>
+                        <th style="text-align:left; padding:8px 10px;">Current Work</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+        }
+        // ===== end Agents tab =====
+
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+        }
+
         function renderServices(services, isLoading = false) {
             const list = document.getElementById('serviceList');
             const lastCheckedText = (s) => {
@@ -965,7 +1498,7 @@
             if (!service) return;
             
             try {
-                const response = await fetch(`/api/services/check?service=${encodeURIComponent(serviceName)}`, {
+                const response = await fetch(`api/services/check?service=${encodeURIComponent(serviceName)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json();
@@ -1031,7 +1564,7 @@
             
             try {
                 const response = await Promise.race([
-                    fetch(`/api/services/restart?service=${encodeURIComponent(serviceName)}`, {
+                    fetch(`api/services/restart?service=${encodeURIComponent(serviceName)}`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     }),
                     timeoutPromise
@@ -1109,7 +1642,7 @@
             
             try {
                 const response = await Promise.race([
-                    fetch(`/api/services/stop?service=${encodeURIComponent(serviceName)}`, {
+                    fetch(`api/services/stop?service=${encodeURIComponent(serviceName)}`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     }),
                     timeoutPromise
@@ -1159,7 +1692,7 @@
 
             try {
                 // Fetch projects from API or use default
-                const response = await fetch('/api/projects', {
+                const response = await fetch('api/projects', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 
@@ -1263,7 +1796,7 @@
             const password = document.getElementById('fileBrowserPassword').value;
             const errorEl = document.getElementById('fileBrowserAuthError');
             try {
-                const response = await fetch(`/api/login?password=${encodeURIComponent(password)}`);
+                const response = await fetch(`api/login?password=${encodeURIComponent(password)}`);
                 const data = await response.json();
                 if (data.success) {
                     token = data.token;
@@ -1341,7 +1874,7 @@
 
             try {
                 // Build URL with search and sort params
-                let url = `/api/files/list?path=${encodeURIComponent(path)}&sort_by=${sort}`;
+                let url = `api/files/list?path=${encodeURIComponent(path)}&sort_by=${sort}`;
                 if (search) {
                     url += `&search=${encodeURIComponent(search)}`;
                 }
@@ -1473,7 +2006,7 @@
             listEl.innerHTML = '<p style="color: var(--text-secondary);">Loading...</p>';
             
             try {
-                let url = `/api/files/recent?project=${currentProject}&limit=10`;
+                let url = `api/files/recent?project=${currentProject}&limit=10`;
                 if (search) {
                     url += `&search=${encodeURIComponent(search)}`;
                 }
@@ -1515,7 +2048,7 @@
             listEl.innerHTML = '<p style="color: var(--text-secondary);">Loading...</p>';
             
             try {
-                let url = `/api/files/biggest?project=${currentProject}&limit=10`;
+                let url = `api/files/biggest?project=${currentProject}&limit=10`;
                 if (search) {
                     url += `&search=${encodeURIComponent(search)}`;
                 }
@@ -1579,7 +2112,7 @@
             contentEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
             try {
-                const response = await fetch(`/api/files/read?path=${encodeURIComponent(path)}`, {
+                const response = await fetch(`api/files/read?path=${encodeURIComponent(path)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json().catch(() => ({}));
@@ -1681,7 +2214,7 @@
             
             try {
                 // Use the download endpoint with auth
-                const downloadUrl = `/api/files/download?path=${path}`;
+                const downloadUrl = `api/files/download?path=${path}`;
                 
                 const response = await fetch(downloadUrl, {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -1730,7 +2263,7 @@
         async function loadTodos() {
             try {
                 // Fetch all todos (including deleted) for cache and suggestions
-                let allUrl = '/api/todos?include_deleted=true';
+                let allUrl = 'api/todos?include_deleted=true';
                 const allResponse = await fetch(allUrl, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -1750,7 +2283,7 @@
                 allTodosCache = allData.todos || [];
                 
                 // Fetch filtered todos (excluding deleted by default)
-                let url = '/api/todos?';
+                let url = 'api/todos?';
                 if (currentTodoFilter === 'deleted') {
                     url += 'include_deleted=true&';
                 } else if (currentTodoFilter) {
@@ -1862,7 +2395,7 @@
             if (task.deleted_at) {
                 // Already deleted - restore immediately
                 try {
-                    const url = `/api/todos/update?id=${todoId}&status=${encodeURIComponent(task.status)}&deleted_at=`;
+                    const url = `api/todos/update?id=${todoId}&status=${encodeURIComponent(task.status)}&deleted_at=`;
                     const response = await fetch(url, {
                         method: 'PUT',
                         headers: { 'Authorization': `Bearer ${token}` }
@@ -1882,7 +2415,7 @@
                 
                 try {
                     // Soft-delete: set deleted_at to current timestamp
-                    const url = `/api/todos/update?id=${todoId}&status=${encodeURIComponent(task.status)}&deleted_at=${encodeURIComponent(new Date().toISOString())}`;
+                    const url = `api/todos/update?id=${todoId}&status=${encodeURIComponent(task.status)}&deleted_at=${encodeURIComponent(new Date().toISOString())}`;
                     const response = await fetch(url, {
                         method: 'PUT',
                         headers: { 'Authorization': `Bearer ${token}` }
@@ -1903,7 +2436,7 @@
             try {
                 // Restore to previous status and deleted_at
                 const deletedAtParam = lastDeletedTask.previous_deleted_at ? encodeURIComponent(lastDeletedTask.previous_deleted_at) : '';
-                const url = `/api/todos/update?id=${lastDeletedTask.id}&status=${encodeURIComponent(lastDeletedTask.previous_status)}&deleted_at=${deletedAtParam}`;
+                const url = `api/todos/update?id=${lastDeletedTask.id}&status=${encodeURIComponent(lastDeletedTask.previous_status)}&deleted_at=${deletedAtParam}`;
                 
                 const response = await fetch(url, {
                     method: 'PUT',
@@ -1940,7 +2473,7 @@
             
             try {
                 // Re-delete the task (set deleted_at to now)
-                const response = await fetch(`/api/todos/delete?id=${lastDeletedTask.id}`, {
+                const response = await fetch(`api/todos/delete?id=${lastDeletedTask.id}`, {
                     method: 'DELETE',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -1966,7 +2499,7 @@
         
         async function restoreTodo(todoId) {
             try {
-                const response = await fetch(`/api/todos/update?id=${todoId}&restore=true`, {
+                const response = await fetch(`api/todos/update?id=${todoId}&restore=true`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 
@@ -2051,7 +2584,7 @@
             }
 
             try {
-                const response = await fetch('/api/todos/add', {
+                const response = await fetch('api/todos/add', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -2189,20 +2722,26 @@
                     ? `<p style="color: var(--accent-neon); margin-bottom: 10px;">🔍 Searching: "${todoSearchQuery}" (${todos.length} results)</p>` 
                     : '';
                 
-                document.getElementById('todoList').innerHTML = searchIndicator + todos.map(todo => `
+                document.getElementById('todoList').innerHTML = searchIndicator + todos.map(todo => {
+                    const projectTag = todo.project ? `<span class="status-badge" style="background: var(--bg-dark); color: var(--accent-cyan); border: 1px solid var(--accent-cyan); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">📁 ${escapeHtml(todo.project)}</span>` : '';
+                    const ownerTag = todo.agent_owner ? `<span class="status-badge" style="background: var(--bg-dark); color: var(--accent-neon); border: 1px solid var(--accent-neon); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">🤖 ${escapeHtml(todo.agent_owner)}</span>` : '';
+                    return `
                     <div class="todo-card" style="border-color: ${getPriorityColor(todo.priority)};">
                         <div style="display: flex; justify-content: space-between; align-items: start;">
                             <div style="flex: 1;">
                                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap;">
                                     <span class="priority-badge" style="background: ${getPriorityColor(todo.priority)}; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">P${todo.priority}</span>
                                     <span class="status-badge" style="background: ${getStatusColor(todo.status)}; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">${todo.status}</span>
+                                    ${projectTag}
+                                    ${ownerTag}
                                     ${todo.deleted_at ? `<span style="color: var(--accent-red); font-size: 0.75rem;">🗑️ ${getTimeUntilPurge(todo.deleted_at)}</span>` : ''}
                                     ${todo.block_reason ? `<span style="color: var(--danger); font-size: 0.8rem;">🚫 ${todo.block_reason}</span>` : ''}
                                 </div>
                                 <h4 style="margin-bottom: 5px; ${todo.deleted_at ? 'text-decoration: line-through; opacity: 0.7;' : ''}">${todo.short_desc}</h4>
                                 ${todo.long_desc ? `<p style="color: var(--text-secondary); font-size: 0.85rem;">${todo.long_desc}</p>` : ''}
+                                ${todo.what_happened ? `<div style="margin-top: 6px; padding: 6px 10px; background: rgba(110, 231, 183, 0.08); border-left: 3px solid var(--success); border-radius: 4px; font-size: 0.8rem; color: var(--text-primary);"><b style="color: var(--success);">✓ what happened:</b> ${escapeHtml(todo.what_happened)}</div>` : ''}
                                 <div style="margin-top: 8px; font-size: 0.75rem; color: var(--text-secondary);">
-                                    ID: ${todo.id} | Created: ${new Date(todo.created_at).toLocaleString()}
+                                    ID: ${todo.id} | Created: ${new Date(todo.created_at).toLocaleString()}${todo.creator_id ? ` | Creator: ${escapeHtml(todo.creator_id)}` : ''}
                                 </div>
                             </div>
                             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -2217,7 +2756,7 @@
                             </div>
                         </div>
                     </div>
-                `).join('');
+                `;}).join('');
             } else {
                 const noTasksMsg = todoSearchQuery 
                     ? `<p style="color: var(--text-secondary);">No tasks match "${todoSearchQuery}". 🌙</p>` 
@@ -2245,7 +2784,7 @@
 
         async function markTodoStatus(todoId, status) {
             try {
-                const response = await fetch(`/api/todos/update?id=${todoId}&status=${status}`, {
+                const response = await fetch(`api/todos/update?id=${todoId}&status=${status}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 
@@ -2320,7 +2859,7 @@
             
             try {
                 // Always fetch ALL entries - filtering happens in JavaScript
-                const response = await fetch('/api/knowledge', {
+                const response = await fetch('api/knowledge', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 
@@ -2531,7 +3070,7 @@
 
             try {
                 const tagsParam = tags ? `&tags=${encodeURIComponent(tags)}` : '';
-                const response = await fetch(`/api/knowledge/add?category=${category}&title=${encodeURIComponent(title)}&content=${encodeURIComponent(content)}${tagsParam}`, {
+                const response = await fetch(`api/knowledge/add?category=${category}&title=${encodeURIComponent(title)}&content=${encodeURIComponent(content)}${tagsParam}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json();
@@ -2554,7 +3093,7 @@
         async function deleteKnowledgeEntry(entryId) {
             if (!confirm('Delete this entry?')) return;
             try {
-                const response = await fetch(`/api/knowledge/delete?id=${entryId}`, {
+                const response = await fetch(`api/knowledge/delete?id=${entryId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json();
@@ -2567,7 +3106,7 @@
         // Cost tracking functions
         async function loadCostTracking() {
             try {
-                const response = await fetch('/api/cost/tracking', {
+                const response = await fetch('api/cost/tracking', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 
@@ -2707,7 +3246,7 @@
             document.getElementById('scannerResults').style.display = 'none';
 
             try {
-                const response = await fetch('/api/worker/scan', {
+                const response = await fetch('api/worker/scan', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json();
@@ -2780,7 +3319,7 @@
             if (!token) return;
 
             try {
-                const response = await fetch('/api/worker/status', {
+                const response = await fetch('api/worker/status', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json();
@@ -2817,7 +3356,7 @@
             if (!token) return;
 
             try {
-                const response = await fetch('/api/worker/history', {
+                const response = await fetch('api/worker/history', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json();
@@ -2866,7 +3405,428 @@
             if (tabName === 'projects') loadProjects();
             if (tabName === 'cost') { renderCostSummary(); renderTokenGraph(); }
             if (tabName === 'scanner') { refreshScannerStatus(); refreshScannerHistory(); }
+            if (tabName === 'llm-usage') showLLMUsageTab();
+            if (tabName === 'cron') loadCronJobs();
+            if (tabName === 'agents') loadAgents();
+            if (tabName === 'moderation') {
+                modLoadLastRun();
+                modLoadUsers();
+                modLoadLog();
+                modLoadBanned();
+                modLoadPolicies();
+            }
         }
+
+        // =====================================================================
+        // Moderation tab (2026-06-04 per Arcurus)
+        // =====================================================================
+        function showModSubTab(name) {
+            document.querySelectorAll('#tab-moderation .subtab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('#tab-moderation .subtab-content').forEach(t => { t.style.display = 'none'; t.classList.remove('active'); });
+            const btn = document.querySelector(`#tab-moderation .subtab[data-subtab="${name}"]`);
+            const content = document.getElementById(name);
+            if (btn) btn.classList.add('active');
+            if (content) { content.style.display = 'block'; content.classList.add('active'); }
+        }
+
+        async function modLoadLastRun() {
+            const el = document.getElementById('modLastRunContent');
+            el.innerHTML = 'Loading...';
+            try {
+                const r = await fetch('api/discord-lookup/status', { headers: { 'Authorization': 'Bearer ' + authToken } });
+                const d = await r.json();
+                if (d.error) { el.innerHTML = `<div style="color: #ff8888;">Error: ${d.error}</div>`; return; }
+                const decision = d.last_decision || '—';
+                const decisionColor = decision.startsWith('triggered') ? '#88ff88'
+                    : decision.startsWith('skipped') ? '#ffcc66' : '#aaaacc';
+                el.innerHTML = `
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 800px;">
+                        <div class="stat-card">
+                            <div class="stat-label">Last Scan</div>
+                            <div class="stat-value">${d.last_scan_at ? new Date(d.last_scan_at).toLocaleString() : '—'}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Last Wake</div>
+                            <div class="stat-value">${d.last_wake_at ? new Date(d.last_wake_at).toLocaleString() : 'never'}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Last Decision</div>
+                            <div class="stat-value" style="color: ${decisionColor};">${decision}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Last Error</div>
+                            <div class="stat-value" style="color: ${d.last_error ? '#ff8888' : '#aaaacc'};">${d.last_error || 'none'}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Wake Count</div>
+                            <div class="stat-value">${d.wake_count}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Skip — Running</div>
+                            <div class="stat-value">${d.skip_due_to_running}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Skip — Debounce</div>
+                            <div class="stat-value">${d.skip_due_to_debounce}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Triggers Failed</div>
+                            <div class="stat-value" style="color: ${d.trigger_failed_count > 0 ? '#ff8888' : '#aaaacc'};">${d.trigger_failed_count}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Channels Tracked</div>
+                            <div class="stat-value">${d.channels_tracked}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Users Cached</div>
+                            <div class="stat-value">${d.users_cached}</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 18px; opacity: 0.7; font-size: 13px;">
+                        Settings: interval ${d.settings.interval_minutes}m · debounce ${d.settings.debounce_minutes}m · auto_trigger ${d.settings.auto_trigger} · cron <code>${d.settings.moderation_cron_job_id}</code>
+                    </div>
+                `;
+            } catch (e) {
+                el.innerHTML = `<div style="color: #ff8888;">Network error: ${e.message}</div>`;
+            }
+        }
+
+        async function modRunScan() {
+            const btn = document.getElementById('modRunScanBtn');
+            const result = document.getElementById('modRunResult');
+            btn.disabled = true; btn.textContent = '⏳ Scanning...';
+            result.innerHTML = '';
+            try {
+                const r = await fetch('api/discord-lookup/scan', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + authToken }
+                });
+                const d = await r.json();
+                result.innerHTML = `<pre style="background: rgba(0,0,0,0.3); padding: 14px; border-radius: 8px; max-height: 400px; overflow-y: auto;">${JSON.stringify(d, null, 2)}</pre>`;
+                modLoadLastRun();
+                modLoadLog();
+            } catch (e) {
+                result.innerHTML = `<div style="color: #ff8888;">Network error: ${e.message}</div>`;
+            } finally {
+                btn.disabled = false; btn.textContent = '🔍 Run scanner';
+            }
+        }
+
+        async function modForceCron() {
+            const btn = document.getElementById('modForceCronBtn');
+            const result = document.getElementById('modRunResult');
+            btn.disabled = true; btn.textContent = '⏳ Triggering...';
+            result.innerHTML = '';
+            try {
+                const r = await fetch('api/discord-lookup/trigger-cron', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + authToken }
+                });
+                const d = await r.json();
+                result.innerHTML = `<pre style="background: rgba(0,0,0,0.3); padding: 14px; border-radius: 8px;">${JSON.stringify(d, null, 2)}</pre>`;
+                modLoadLastRun();
+            } catch (e) {
+                result.innerHTML = `<div style="color: #ff8888;">Network error: ${e.message}</div>`;
+            } finally {
+                btn.disabled = false; btn.textContent = '⚡ Force moderation cron';
+            }
+        }
+
+        async function modLoadSettings() {
+            const el = document.getElementById('modSettingsContent');
+            el.innerHTML = 'Loading...';
+            try {
+                const r = await fetch('api/discord-lookup/settings', { headers: { 'Authorization': 'Bearer ' + authToken } });
+                const d = await r.json();
+                if (d.error) { el.innerHTML = `<div style="color: #ff8888;">Error: ${d.error}</div>`; return; }
+                const editable = ['interval_minutes', 'debounce_minutes', 'auto_trigger', 'lookback_messages',
+                                  'new_user_max_history', 'new_user_max_account_age_days', 'fetch_timeout_seconds'];
+                const rows = editable.map(k => {
+                    const v = d[k];
+                    const inputType = typeof v === 'boolean' ? 'checkbox' : (typeof v === 'number' ? 'number' : 'text');
+                    const input = inputType === 'checkbox'
+                        ? `<input type="checkbox" id="modSetting_${k}" ${v ? 'checked' : ''}>`
+                        : `<input type="${inputType}" id="modSetting_${k}" value="${v}" style="width: 100%; padding: 6px 8px; background: rgba(0,0,0,0.3); color: inherit; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;">`;
+                    return `<tr><td style="padding: 6px 12px;"><code>${k}</code></td><td style="padding: 6px 12px;">${input}</td><td style="padding: 6px 12px; opacity: 0.6;">${typeof v}</td></tr>`;
+                }).join('');
+                el.innerHTML = `
+                    <table style="border-collapse: collapse; min-width: 600px;">
+                        <thead><tr style="border-bottom: 1px solid rgba(255,255,255,0.2);">
+                            <th style="text-align: left; padding: 6px 12px;">Key</th>
+                            <th style="text-align: left; padding: 6px 12px;">Value</th>
+                            <th style="text-align: left; padding: 6px 12px;">Type</th>
+                        </tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                    <div style="margin-top: 14px;"><button class="save-btn" onclick="modSaveSettings()" style="width: auto; padding: 8px 20px;">💾 Save Settings</button></div>
+                    <details style="margin-top: 18px; opacity: 0.8;">
+                        <summary>Read-only fields</summary>
+                        <pre style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 6px; margin-top: 8px; font-size: 12px;">${JSON.stringify({
+                            channels_count: (d.channels || []).length,
+                            channels: d.channels,
+                            discord_guild_id: d.discord_guild_id,
+                            moderation_cron_job_id: d.moderation_cron_job_id
+                        }, null, 2)}</pre>
+                    </details>
+                `;
+            } catch (e) {
+                el.innerHTML = `<div style="color: #ff8888;">Network error: ${e.message}</div>`;
+            }
+        }
+
+        async function modSaveSettings() {
+            const editable = ['interval_minutes', 'debounce_minutes', 'auto_trigger', 'lookback_messages',
+                              'new_user_max_history', 'new_user_max_account_age_days', 'fetch_timeout_seconds'];
+            const updates = {};
+            for (const k of editable) {
+                const el = document.getElementById('modSetting_' + k);
+                if (!el) continue;
+                if (el.type === 'checkbox') updates[k] = el.checked;
+                else if (el.type === 'number') updates[k] = parseInt(el.value, 10);
+                else updates[k] = el.value;
+            }
+            try {
+                const r = await fetch('api/discord-lookup/settings', {
+                    method: 'PATCH',
+                    headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updates)
+                });
+                const d = await r.json();
+                if (d.success) {
+                    showToast('Settings saved', 'success');
+                    modLoadLastRun();
+                } else {
+                    showToast('Some settings failed to save: ' + JSON.stringify(d.results), 'error');
+                }
+            } catch (e) {
+                showToast('Save failed: ' + e.message, 'error');
+            }
+        }
+
+        async function modLoadUsers() {
+            const el = document.getElementById('modUsersContent');
+            el.innerHTML = 'Loading...';
+            try {
+                const r = await fetch('api/discord-lookup/users?limit=100&sort=last_seen', { headers: { 'Authorization': 'Bearer ' + authToken } });
+                const d = await r.json();
+                if (d.error) { el.innerHTML = `<div style="color: #ff8888;">Error: ${d.error}</div>`; return; }
+                if (!d.users || d.users.length === 0) { el.innerHTML = '<p style="opacity:0.6;">No users seen yet.</p>'; return; }
+                // Sortable columns
+                const sortKey = modUsersSort.key;
+                const sortDir = modUsersSort.dir;
+                const sorted = [...d.users].sort((a, b) => {
+                    let av, bv;
+                    if (sortKey === 'msgs') { av = a.message_count || 0; bv = b.message_count || 0; }
+                    else if (sortKey === 'joined') { av = a.joined_at || ''; bv = b.joined_at || ''; }
+                    else if (sortKey === 'created') { av = a.account_created_at || ''; bv = b.account_created_at || ''; }
+                    else if (sortKey === 'summary') { av = a.summary || ''; bv = b.summary || ''; }
+                    else if (sortKey === 'username') { av = a.username || ''; bv = b.username || ''; }
+                    else { av = a.last_seen_at || ''; bv = b.last_seen_at || ''; }
+                    if (av < bv) return sortDir === 'asc' ? -1 : 1;
+                    if (av > bv) return sortDir === 'asc' ? 1 : -1;
+                    return 0;
+                });
+                const arrow = (k) => sortKey === k ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '';
+                const rows = sorted.map(u => {
+                    const joined = u.joined_at ? new Date(u.joined_at).toLocaleDateString() : '—';
+                    const created = u.account_created_at ? new Date(u.account_created_at).toLocaleDateString() : '—';
+                    const summary = u.summary
+                        ? `<span title="Updated ${u.summary_updated_at ? new Date(u.summary_updated_at).toLocaleString() : '?'}">${escapeHtml(u.summary)}</span>`
+                        : '<span style="opacity:0.4;">—</span>';
+                    return `<tr>
+                        <td style="padding: 4px 8px;"><code>${u.user_id}</code></td>
+                        <td style="padding: 4px 8px;">${u.username || '?'}${u.bot ? ' <span style="opacity:0.5;">(bot)</span>' : ''}</td>
+                        <td style="padding: 4px 8px; text-align: right;">${u.message_count || 0}</td>
+                        <td style="padding: 4px 8px;">${joined}</td>
+                        <td style="padding: 4px 8px;">${created}</td>
+                        <td style="padding: 4px 8px; font-size: 12px;">${summary}</td>
+                        <td style="padding: 4px 8px; opacity: 0.7;">${u.last_seen_at ? new Date(u.last_seen_at).toLocaleString() : '—'}</td>
+                    </tr>`;
+                }).join('');
+                el.innerHTML = `
+                    <p style="opacity:0.7; font-size: 12px;">${d.count} user(s) seen. Click column headers to sort.</p>
+                    <div style="max-height: 500px; overflow-y: auto;">
+                    <table style="border-collapse: collapse; min-width: 900px; font-size: 13px;">
+                        <thead style="position: sticky; top: 0; background: rgba(0,0,0,0.5);">
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.2);">
+                                <th style="text-align: left; padding: 6px 8px;">User ID</th>
+                                <th style="text-align: left; padding: 6px 8px; cursor: pointer;" onclick="modUsersSetSort('username')">Username${arrow('username')}</th>
+                                <th style="text-align: right; padding: 6px 8px; cursor: pointer;" onclick="modUsersSetSort('msgs')">Msgs${arrow('msgs')}</th>
+                                <th style="text-align: left; padding: 6px 8px; cursor: pointer;" onclick="modUsersSetSort('joined')">Joined${arrow('joined')}</th>
+                                <th style="text-align: left; padding: 6px 8px; cursor: pointer;" onclick="modUsersSetSort('created')">Account Created${arrow('created')}</th>
+                                <th style="text-align: left; padding: 6px 8px; cursor: pointer;" onclick="modUsersSetSort('summary')">Standing Summary${arrow('summary')}</th>
+                                <th style="text-align: left; padding: 6px 8px; cursor: pointer;" onclick="modUsersSetSort('last_seen')">Last Seen${arrow('last_seen')}</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                    </div>
+                `;
+            } catch (e) {
+                el.innerHTML = `<div style="color: #ff8888;">Network error: ${e.message}</div>`;
+            }
+        }
+
+        let modUsersSort = { key: 'last_seen', dir: 'desc' };
+        function modUsersSetSort(key) {
+            if (modUsersSort.key === key) {
+                modUsersSort.dir = modUsersSort.dir === 'asc' ? 'desc' : 'asc';
+            } else {
+                modUsersSort.key = key;
+                modUsersSort.dir = 'desc';
+            }
+            modLoadUsers();
+        }
+
+        async function modLoadBanned() {
+            const el = document.getElementById('modBannedContent');
+            el.innerHTML = 'Loading...';
+            try {
+                const r = await fetch('api/moderation/archive?action_filter=ban_user,ban,timeout_user,timeout&limit=50', { headers: { 'Authorization': 'Bearer ' + authToken } });
+                const d = await r.json();
+                if (d.error) { el.innerHTML = `<div style="color: #ff8888;">Error: ${d.error}</div>`; return; }
+                if (!d.entries || d.entries.length === 0) { el.innerHTML = '<p style="opacity:0.6;">No ban/timeout actions yet.</p>'; return; }
+                // Sortable columns
+                const sortKey = modBannedSort.key;
+                const sortDir = modBannedSort.dir;
+                const sorted = [...d.entries].sort((a, b) => {
+                    let av, bv;
+                    if (sortKey === 'action') { av = a.action || ''; bv = b.action || ''; }
+                    else if (sortKey === 'target') { av = a.target_username || a.target_user_id || ''; bv = b.target_username || b.target_user_id || ''; }
+                    else if (sortKey === 'duration') { av = a.duration || ''; bv = b.duration || ''; }
+                    else if (sortKey === 'reason') { av = a.reason || ''; bv = b.reason || ''; }
+                    else { av = a.ts || ''; bv = b.ts || ''; }
+                    if (av < bv) return sortDir === 'asc' ? -1 : 1;
+                    if (av > bv) return sortDir === 'asc' ? 1 : -1;
+                    return 0;
+                });
+                const arrow = (k) => sortKey === k ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '';
+                const rows = sorted.map(e => {
+                    const ts = e.ts ? new Date(e.ts).toLocaleString() : '—';
+                    const action = e.action || '?';
+                    const actionColor = (action === 'ban_user' || action === 'ban') ? '#ff8888' : '#ffcc66';
+                    const target = e.target_username || e.target_user_id || '?';
+                    const dur = e.duration || '';
+                    return `<tr>
+                        <td style="padding: 4px 8px;">${ts}</td>
+                        <td style="padding: 4px 8px;"><span style="color: ${actionColor};">${action}</span></td>
+                        <td style="padding: 4px 8px;">${target}</td>
+                        <td style="padding: 4px 8px; opacity: 0.7;">${dur}</td>
+                        <td style="padding: 4px 8px; font-size: 12px;">${(e.reason || '').slice(0, 120)}</td>
+                    </tr>`;
+                }).join('');
+                el.innerHTML = `
+                    <p style="opacity:0.7; font-size: 12px;">${d.count} action(s) total (showing latest 50). Source: <code>moderation_actions_archive.jsonl</code>. Click column headers to sort.</p>
+                    <div style="max-height: 500px; overflow-y: auto;">
+                    <table style="border-collapse: collapse; min-width: 700px; font-size: 13px;">
+                        <thead style="position: sticky; top: 0; background: rgba(0,0,0,0.5);">
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.2);">
+                                <th style="text-align: left; padding: 6px 8px; cursor: pointer;" onclick="modBannedSetSort('ts')">Timestamp${arrow('ts')}</th>
+                                <th style="text-align: left; padding: 6px 8px; cursor: pointer;" onclick="modBannedSetSort('action')">Action${arrow('action')}</th>
+                                <th style="text-align: left; padding: 6px 8px; cursor: pointer;" onclick="modBannedSetSort('target')">Target${arrow('target')}</th>
+                                <th style="text-align: left; padding: 6px 8px; cursor: pointer;" onclick="modBannedSetSort('duration')">Duration${arrow('duration')}</th>
+                                <th style="text-align: left; padding: 6px 8px; cursor: pointer;" onclick="modBannedSetSort('reason')">Reason${arrow('reason')}</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                    </div>
+                `;
+            } catch (e) {
+                el.innerHTML = `<div style="color: #ff8888;">Network error: ${e.message}</div>`;
+            }
+        }
+
+        let modBannedSort = { key: 'ts', dir: 'desc' };
+        function modBannedSetSort(key) {
+            if (modBannedSort.key === key) {
+                modBannedSort.dir = modBannedSort.dir === 'asc' ? 'desc' : 'asc';
+            } else {
+                modBannedSort.key = key;
+                modBannedSort.dir = 'desc';
+            }
+            modLoadBanned();
+        }
+
+        async function modLoadLog() {
+            const el = document.getElementById('modLogContent');
+            el.innerHTML = 'Loading...';
+            try {
+                const r = await fetch('api/discord-lookup/triggers?limit=30', { headers: { 'Authorization': 'Bearer ' + authToken } });
+                const d = await r.json();
+                if (d.error) { el.innerHTML = `<div style="color: #ff8888;">Error: ${d.error}</div>`; return; }
+                if (!d.entries || d.entries.length === 0) { el.innerHTML = '<p style="opacity:0.6;">No trigger events yet.</p>'; return; }
+                const rows = d.entries.map(e => {
+                    const ts = e.ts ? new Date(e.ts).toLocaleString() : '—';
+                    const decision = e.decision || '?';
+                    const color = decision.startsWith('triggered') ? '#88ff88'
+                        : decision.startsWith('skipped') ? '#ffcc66'
+                        : decision.startsWith('error') ? '#ff8888' : '#aaaacc';
+                    const summary = `${e.channels_scanned || 0} ch · ${e.new_messages_total || 0} new msg · ${e.new_user_count || 0} new users`;
+                    return `<tr>
+                        <td style="padding: 4px 8px;">${ts}</td>
+                        <td style="padding: 4px 8px; color: ${color};">${decision}</td>
+                        <td style="padding: 4px 8px; opacity: 0.7; font-size: 12px;">${summary}</td>
+                        <td style="padding: 4px 8px; font-size: 12px; opacity: 0.7;">${e.manual ? 'manual' : 'auto'}${e.dry_run ? ' · dry-run' : ''}</td>
+                    </tr>`;
+                }).join('');
+                el.innerHTML = `
+                    <p style="opacity:0.7; font-size: 12px;">${d.count} event(s) in log (showing latest 30). Source: <code>moderation_triggers.jsonl</code>.</p>
+                    <div style="max-height: 500px; overflow-y: auto;">
+                    <table style="border-collapse: collapse; min-width: 600px; font-size: 13px;">
+                        <thead style="position: sticky; top: 0; background: rgba(0,0,0,0.5);">
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.2);">
+                                <th style="text-align: left; padding: 6px 8px;">Timestamp</th>
+                                <th style="text-align: left; padding: 6px 8px;">Decision</th>
+                                <th style="text-align: left; padding: 6px 8px;">Summary</th>
+                                <th style="text-align: left; padding: 6px 8px;">Mode</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                    </div>
+                `;
+            } catch (e) {
+                el.innerHTML = `<div style="color: #ff8888;">Network error: ${e.message}</div>`;
+            }
+        }
+
+        async function modLoadPolicies() {
+            const el = document.getElementById('modPoliciesContent');
+            el.innerHTML = 'Loading...';
+            try {
+                const [policiesR, docsR] = await Promise.all([
+                    fetch('api/moderation/policies', { headers: { 'Authorization': 'Bearer ' + authToken } }),
+                    fetch('api/moderation/docs', { headers: { 'Authorization': 'Bearer ' + authToken } }),
+                ]);
+                const policies = await policiesR.json();
+                const docs = await docsR.json();
+
+                const sections = [];
+                if (policies.content) {
+                    sections.push(`
+                        <h4>📜 Moderation Policies</h4>
+                        <p style="opacity:0.7; font-size: 12px;">Source: <code>${policies.path}</code> · last updated ${policies.last_updated} · ${policies.length} chars</p>
+                        <pre style="background: rgba(0,0,0,0.3); padding: 14px; border-radius: 8px; max-height: 600px; overflow-y: auto; white-space: pre-wrap; font-size: 12px;">${escapeHtml(policies.content)}</pre>
+                    `);
+                } else {
+                    sections.push(`<p style="opacity:0.6;">Policies file not yet created.</p>`);
+                }
+                if (docs.content) {
+                    sections.push(`
+                        <h4 style="margin-top: 32px;">🏗️ Architecture Doc</h4>
+                        <p style="opacity:0.7; font-size: 12px;">Source: <code>${docs.path}</code> · last updated ${docs.last_updated} · ${docs.length} chars</p>
+                        <pre style="background: rgba(0,0,0,0.3); padding: 14px; border-radius: 8px; max-height: 600px; overflow-y: auto; white-space: pre-wrap; font-size: 12px;">${escapeHtml(docs.content)}</pre>
+                    `);
+                } else {
+                    sections.push(`<p style="opacity:0.6; margin-top: 32px;">Architecture doc not yet created.</p>`);
+                }
+                el.innerHTML = sections.join('');
+            } catch (e) {
+                el.innerHTML = `<div style="color: #ff8888;">Network error: ${e.message}</div>`;
+            }
+        }
+        // End Moderation tab
 
         function showActivityTab(tabName) {
             document.querySelectorAll('#tab-activity .tabs .tab').forEach(t => t.classList.remove('active'));
@@ -2883,6 +3843,606 @@
             document.querySelectorAll('#tab-cost .tab-content').forEach(t => t.classList.remove('active'));
             document.querySelector(`#tab-cost .tabs .tab[onclick="showCostTab('${tabName}')"]`).classList.add('active');
             document.getElementById(`cost-${tabName}`).classList.add('active');
+            if (tabName === 'provider') loadProviderUsage(false);
+        }
+
+        // ---- Provider Usage (per-provider quota + local 5h window) ----
+        let _providerUsageCache = null;
+        let _providerUsageTimer = null;
+
+        function _pollStateBadge(state) {
+            const map = {
+                healthy:      ['🟢', 'var(--success)'],
+                init:         ['⚪', 'var(--text-secondary)'],
+                backoff:      ['🟡', 'var(--warning)'],
+                rate_limited: ['🟠', 'var(--warning)'],
+                auth_error:   ['🔴', 'var(--danger, #e05555)'],
+                no_credits:   ['🔴', 'var(--danger, #e05555)'],
+            };
+            const [emoji, color] = map[state] || ['❓', 'var(--text-secondary)'];
+            return `<span style="color:${color};">${emoji} ${state}</span>`;
+        }
+
+        function _formatDuration(s) {
+            if (s == null || s <= 0) return 'now';
+            if (s < 60) return s + 's';
+            if (s < 3600) return Math.round(s / 60) + 'm';
+            const h = Math.floor(s / 3600);
+            const m = Math.round((s % 3600) / 60);
+            return h + 'h ' + m + 'm';
+        }
+
+        async function loadProviderUsage(force) {
+            if (!token) return;
+            const infoEl = document.getElementById('providerUsageSyncInfo');
+            if (infoEl) infoEl.textContent = 'Loading…';
+            try {
+                const url = 'api/llm-usage' + (force ? '?sync=1' : '');
+                const r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const data = await r.json();
+                _providerUsageCache = data;
+                renderProviderUsage();
+            } catch (e) {
+                if (infoEl) infoEl.textContent = 'Error: ' + e.message;
+            }
+        }
+
+        function renderProviderUsage() {
+            const d = _providerUsageCache;
+            if (!d) return;
+            const lim = d.limits || {};
+            const loc = d.local || {};
+            const warnings = d.warnings || [];
+            const polling = d.polling || {};
+            const providers = d.providers || {};
+            const allocations = d.allocations || {};
+
+            // Sync info
+            const infoEl = document.getElementById('providerUsageSyncInfo');
+            if (infoEl) {
+                const ts = d.last_quota_sync ? new Date(d.last_quota_sync).toLocaleTimeString() : '—';
+                infoEl.innerHTML = 'last sync: <code>' + ts + '</code>' +
+                    ' &nbsp;|&nbsp; schema v' + d.schema_version;
+            }
+
+            // Warnings
+            const wEl = document.getElementById('providerUsageWarnings');
+            if (warnings.length === 0) {
+                wEl.innerHTML = '';
+            } else {
+                wEl.innerHTML = warnings.map(w =>
+                    '<div class="cost-card" style="border-left: 4px solid var(--warning); margin-bottom:8px;">⚠️ ' + w + '</div>'
+                ).join('');
+            }
+
+            // Summary cards
+            const summary = document.getElementById('providerUsageSummary');
+            summary.innerHTML = `
+                <div class="cost-card">
+                    <h3>Local 5h calls</h3>
+                    <div class="value" style="font-size:1.4rem;">${loc.calls_5h ?? 0}</div>
+                    <div style="color:var(--text-secondary);font-size:0.8rem;">of ${lim.target_per_5h ?? 4000} target / ${lim.hard_per_5h ?? 4500} hard</div>
+                </div>
+                <div class="cost-card">
+                    <h3>Last 1h</h3>
+                    <div class="value" style="font-size:1.4rem;">${loc.calls_1h ?? 0}</div>
+                    <div style="color:var(--text-secondary);font-size:0.8rem;">projected 5h: ${loc.projected_5h_from_rate ?? 0}</div>
+                </div>
+                <div class="cost-card">
+                    <h3>Last 24h</h3>
+                    <div class="value" style="font-size:1.4rem;">${loc.calls_24h ?? 0}</div>
+                </div>
+                <div class="cost-card">
+                    <h3>Cumulative (legacy)</h3>
+                    <div class="value" style="font-size:1.4rem;">${loc.legacy_counter_cumulative ?? 0}</div>
+                    <div style="color:var(--text-secondary);font-size:0.8rem;">not mapped to window</div>
+                </div>
+                <div class="cost-card">
+                    <h3>MiniMax API 5h used</h3>
+                    <div class="value" style="font-size:1.4rem;">${loc.api_5h_used_minimax ?? '—'}</div>
+                    <div style="color:var(--text-secondary);font-size:0.8rem;">from /v1/token_plan/remains</div>
+                </div>
+            `;
+
+            // Per-provider quota
+            const provEl = document.getElementById('providerUsageProviders');
+            const providerCards = Object.entries(providers).map(([name, p]) => {
+                const poll = polling[name] || {};
+                const stateBadge = _pollStateBadge(poll.state);
+                const lastErr = poll.last_error ? `<div style="color:var(--text-secondary);font-size:0.8rem;margin-top:4px;">err: ${poll.last_error}</div>` : '';
+                const nextInfo = poll.next_attempt_in_s > 0
+                    ? `<div style="color:var(--text-secondary);font-size:0.8rem;">retry in ${_formatDuration(poll.next_attempt_in_s)}</div>` : '';
+                const errClass = poll.last_error_class ? ` <code>${poll.last_error_class}</code>` : '';
+
+                let quotaHtml = '';
+                const quota = p.quota;
+                if (quota && quota.ok && p.models) {
+                    quotaHtml = Object.entries(p.models).map(([mname, m]) => {
+                        const w5h = m.window_5h || {};
+                        const wk = m.weekly || {};
+                        const pct5h = w5h.remaining_percent ?? '?';
+                        const pctWk = wk.remaining_percent ?? '?';
+                        const resetIn = _formatDuration(w5h.resets_in_s);
+                        const stColor = (w5h.status === 1) ? 'var(--success)'
+                            : (w5h.status === 2) ? 'var(--warning)'
+                            : 'var(--danger, #e05555)';
+                        return `
+                            <div style="background:var(--bg-dark);border-radius:8px;padding:10px;margin-top:8px;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;">
+                                    <strong>${mname}</strong>
+                                    <span style="color:${stColor};font-size:0.85rem;">status=${w5h.status ?? '?'}</span>
+                                </div>
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">
+                                    <div>
+                                        <div style="color:var(--text-secondary);font-size:0.75rem;">5h remaining</div>
+                                        <div style="font-size:1.1rem;font-weight:bold;">${pct5h}%</div>
+                                        <div style="color:var(--text-secondary);font-size:0.7rem;">resets in ${resetIn}</div>
+                                    </div>
+                                    <div>
+                                        <div style="color:var(--text-secondary);font-size:0.75rem;">weekly remaining</div>
+                                        <div style="font-size:1.1rem;font-weight:bold;">${pctWk}%</div>
+                                    </div>
+                                </div>
+                            </div>`;
+                    }).join('');
+                } else if (quota) {
+                    const err = quota.error || 'unknown error';
+                    quotaHtml = `<div style="color:var(--text-secondary);font-size:0.85rem;margin-top:8px;">⚠️ ${err}</div>`;
+                } else {
+                    quotaHtml = '<div style="color:var(--text-secondary);font-size:0.85rem;margin-top:8px;">no quota data yet</div>';
+                }
+
+                return `
+                    <div class="cost-card" style="margin-bottom: 12px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                            <div>
+                                <strong>${p.name}</strong>
+                                <span style="color:var(--text-secondary);font-size:0.8rem;margin-left:6px;">${p.kind} · local 5h: ${p.local_5h_calls ?? 0}</span>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                ${stateBadge}${errClass}
+                                <button class="save-btn" style="width:auto;padding:4px 10px;font-size:0.8rem;" onclick="providerUsageAction('pause','${name}')">⏸ pause 30m</button>
+                                <button class="save-btn" style="width:auto;padding:4px 10px;font-size:0.8rem;" onclick="providerUsageAction('resume','${name}')">▶ resume</button>
+                            </div>
+                        </div>
+                        ${nextInfo}
+                        ${lastErr}
+                        ${quotaHtml}
+                    </div>`;
+            }).join('');
+            provEl.innerHTML = providerCards || '<p style="color:var(--text-secondary);">no providers configured</p>';
+
+            // Per-project allocations
+            const allocEl = document.getElementById('providerUsageAllocations');
+            const allocRows = Object.entries(allocations).map(([proj, a]) => {
+                const pct = Math.min(100, a.pct_of_allocation || 0);
+                const barColor = pct >= 90 ? 'var(--danger, #e05555)'
+                    : pct >= 70 ? 'var(--warning)'
+                    : 'var(--success)';
+                return `
+                    <div style="margin-bottom: 10px;">
+                        <div style="display:flex;justify-content:space-between;">
+                            <strong>${proj}</strong>
+                            <span style="color:var(--text-secondary);font-size:0.85rem;">
+                                ${a.used_5h} / ${a.allocated_5h} (${pct.toFixed(1)}% of allocation)
+                            </span>
+                        </div>
+                        <div style="background:var(--bg-dark);border-radius:4px;height:10px;margin-top:4px;overflow:hidden;">
+                            <div style="width:${pct}%;height:100%;background:${barColor};transition:width 0.3s;"></div>
+                        </div>
+                        <div style="color:var(--text-secondary);font-size:0.75rem;margin-top:2px;">
+                            allocation: ${(a.fraction * 100).toFixed(0)}% · remaining: ${a.remaining_5h}
+                        </div>
+                    </div>`;
+            }).join('');
+            allocEl.innerHTML = allocRows || '<p style="color:var(--text-secondary);">no allocations</p>';
+        }
+
+        async function providerUsageAction(action, provider) {
+            if (!token) return;
+            const url = 'api/llm-usage/' + action + '?provider=' + encodeURIComponent(provider)
+                + (action === 'pause' ? '&seconds=1800&reason=manual_web' : '');
+            try {
+                const r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+                const data = await r.json();
+                if (!r.ok || !data.success) {
+                    alert('Error: ' + (data.error || r.status));
+                } else {
+                    await loadProviderUsage(false);
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        // ---- LLM Usage Tab (top-level) ----
+        let _llmUsageCache = null;
+        let _llmUsageTimer = null;
+        let _llmUsageHours = 24;
+
+        function showLLMUsageTab() {
+            loadLLMUsage(false);
+            loadLLMTimeseries(_llmUsageHours || 24);
+            if (!_llmUsageTimer) {
+                _llmUsageTimer = setInterval(() => {
+                    const tab = document.getElementById('tab-llm-usage');
+                    if (tab && tab.classList.contains('active')) {
+                        loadLLMUsage(false);
+                        loadLLMTimeseries(_llmUsageHours || 24);
+                    }
+                }, 30000);
+            }
+        }
+
+        async function loadLLMUsage(force) {
+            if (!token) return;
+            const infoEl = document.getElementById('llmUsageSyncInfo');
+            if (infoEl) infoEl.textContent = 'Loading...';
+            try {
+                const url = 'api/llm-usage' + (force ? '?sync=1' : '');
+                const r = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const data = await r.json();
+                _llmUsageCache = data;
+                renderLLMUsage();
+            } catch (e) {
+                if (infoEl) infoEl.textContent = 'Error: ' + e.message;
+            }
+        }
+
+        function renderLLMUsage() {
+            const d = _llmUsageCache;
+            if (!d) return;
+            const lim = d.limits || {};
+            const loc = d.local || {};
+            const warnings = d.warnings || [];
+            const polling = d.polling || {};
+            const providers = d.providers || {};
+            const allocations = d.allocations || {};
+
+            // Sync info
+            const infoEl = document.getElementById('llmUsageSyncInfo');
+            if (infoEl) {
+                const ts = d.last_quota_sync ? new Date(d.last_quota_sync).toLocaleTimeString() : '—';
+                infoEl.innerHTML = 'last sync: <code>' + ts + '</code>';
+            }
+
+            // Warnings
+            const wEl = document.getElementById('llmUsageWarnings');
+            wEl.innerHTML = warnings.length ? warnings.map(w =>
+                '<div class="cost-card" style="border-left:4px solid var(--warning);margin-bottom:8px;">⚠️ ' + w + '</div>'
+            ).join('') : '';
+
+            // KPI cards — per Arcurus 2026-06-03: total / daily /
+            // last MiniMax 5h interval (synced with their renewal hour).
+            const kpiEl = document.getElementById('llmUsageKpis');
+            const used5h = loc.calls_5h || 0;
+            const target = lim.target_per_5h || 4000;
+            const hard = lim.hard_per_5h || 4500;
+            const remaining = Math.max(0, target - used5h);
+            const pct = target > 0 ? Math.round((used5h / target) * 100) : 0;
+
+            // 5h MiniMax interval view (from the API)
+            const mi = d.minimax_interval || {};
+            const miModels = mi.models || {};
+            const miGrand = (miGrand != null) ? mi.grand_total_used : null;
+            const miResetS = mi.soonest_reset_s;
+            const miResetAt = mi.soonest_reset_at;
+            const miUsed = (miGrand != null) ? miGrand : used5h;
+            const miPct = target > 0 ? Math.round((miUsed / target) * 100) : 0;
+            const miDrift = mi.local_drift;
+            const resetH = miResetS ? Math.floor(miResetS / 3600) : 0;
+            const resetM = miResetS ? Math.floor((miResetS % 3600) / 60) : 0;
+            const miStatusNote = !mi.ok
+                ? `<div style="color:var(--text-secondary);font-size:0.75rem;">API not available — using local</div>`
+                : (miDrift != null && Math.abs(miDrift) > 5
+                    ? `<div style="color:var(--warning);font-size:0.75rem;">drift: local=${mi.local_for_interval} vs API=${mi.grand_total_used}</div>`
+                    : `<div style="color:var(--text-secondary);font-size:0.75rem;">drift: ${miDrift == null ? '—' : miDrift} ${mi.ok ? '(live API)' : ''}</div>`);
+
+            kpiEl.innerHTML = `
+                <div class="cost-card">
+                    <h3>🛰️ MiniMax 5h Interval</h3>
+                    <div class="value" style="font-size:1.6rem;">${miUsed}</div>
+                    <div style="color:var(--text-secondary);font-size:0.8rem;">
+                        ${miPct}% of ${target} target · resets in ${resetH}h ${resetM}m
+                    </div>
+                    ${miStatusNote}
+                </div>
+                <div class="cost-card">
+                    <h3>📅 Today</h3>
+                    <div class="value" style="font-size:1.6rem;">${loc.calls_today || 0}</div>
+                    <div style="color:var(--text-secondary);font-size:0.8rem;">since local midnight</div>
+                </div>
+                <div class="cost-card">
+                    <h3>🌐 Total (cumulative)</h3>
+                    <div class="value" style="font-size:1.6rem;">${(loc.legacy_counter_cumulative || 0).toLocaleString()}</div>
+                    <div style="color:var(--text-secondary);font-size:0.8rem;">since project start</div>
+                </div>
+                <div class="cost-card">
+                    <h3>Last 1h</h3>
+                    <div class="value" style="font-size:1.6rem;">${loc.calls_1h || 0}</div>
+                    <div style="color:var(--text-secondary);font-size:0.8rem;">projected 5h: ${loc.projected_5h_from_rate || 0}</div>
+                </div>
+            `;
+
+            // Alert state badge (per Arcurus: 80/100/recovery to #selena-project-important)
+            fetchLLMAlertState().then(s => {
+                const el = document.getElementById('llmUsageAlertState');
+                if (!el || !s) return;
+                const map = {
+                    ok:       {emoji: '🟢', color: 'var(--success)', label: 'ok'},
+                    warning:  {emoji: '🟡', color: 'var(--warning)', label: 'warning (≥80%)'},
+                    critical: {emoji: '🔴', color: 'var(--danger,#e05555)', label: 'critical (≥100%)'},
+                };
+                const m = map[s.state] || map.ok;
+                const lastFire = (s.history && s.history.length > 0)
+                    ? s.history[s.history.length - 1]
+                    : null;
+                const lastLine = lastFire
+                    ? `last alert: <code>${lastFire.reason}</code> at ${new Date(lastFire.fired_at).toLocaleTimeString()} (posted=${lastFire.posted})`
+                    : 'no alerts fired yet';
+                el.innerHTML = `
+                    <div class="cost-card" style="border-left: 4px solid ${m.color};">
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                            <span style="font-size:1.1rem;">${m.emoji}</span>
+                            <strong>Budget alert state:</strong> <code>${m.label}</code>
+                            <span style="color:var(--text-secondary);font-size:0.85rem;">— channel: <code>${s.channel_id}</code></span>
+                            <span style="margin-left:auto;color:var(--text-secondary);font-size:0.8rem;">${lastLine}</span>
+                            <button class="save-btn" style="width:auto;padding:4px 10px;font-size:0.75rem;" onclick="llmAlertAction('test')">Test fire</button>
+                            <button class="save-btn" style="width:auto;padding:4px 10px;font-size:0.75rem;" onclick="llmAlertAction('reset')">Reset</button>
+                        </div>
+                    </div>`;
+            });
+
+            // Bar chart (5h usage per provider)
+            drawLLMBarChart(providers, target);
+
+            // Provider quota cards
+            const provEl = document.getElementById('llmUsageProviders');
+            const providerCards = Object.entries(providers).map(([name, p]) => {
+                const poll = polling[name] || {};
+                const stateBadge = _pollStateBadge(poll.state);
+                let quotaHtml = '';
+                if (p.quota && p.quota.ok && p.models) {
+                    quotaHtml = Object.entries(p.models).map(([mname, m]) => {
+                        const w = m.window_5h || {};
+                        const pct = w.remaining_percent ?? '?';
+                        const reset = _formatDuration(w.resets_in_s);
+                        const stColor = (w.status === 1) ? 'var(--success)' : (w.status === 2) ? 'var(--warning)' : 'var(--danger,#e05555)';
+                        return `<div style="background:var(--bg-dark);border-radius:6px;padding:8px;margin-top:6px;font-size:0.85rem;">
+                            <div style="display:flex;justify-content:space-between;"><strong>${mname}</strong><span style="color:${stColor};">status=${w.status ?? '?'}</span></div>
+                            <div>${pct}% remaining · resets in ${reset}</div>
+                        </div>`;
+                    }).join('');
+                } else if (p.quota) {
+                    quotaHtml = `<div style="color:var(--text-secondary);font-size:0.8rem;margin-top:6px;">⚠️ ${p.quota.error || 'no data'}</div>`;
+                }
+                return `<div class="cost-card" style="margin-bottom:10px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+                        <div><strong>${p.name}</strong> <span style="color:var(--text-secondary);font-size:0.8rem;">local 5h: ${p.local_5h_calls || 0}</span></div>
+                        <div style="display:flex;align-items:center;gap:8px;">${stateBadge}</div>
+                    </div>
+                    ${quotaHtml}
+                </div>`;
+            }).join('');
+            provEl.innerHTML = providerCards || '<p style="color:var(--text-secondary);">no providers</p>';
+
+            // Per-project allocations
+            const allocEl = document.getElementById('llmUsageAllocations');
+            const allocRows = Object.entries(allocations).map(([proj, a]) => {
+                const pct = Math.min(100, a.pct_of_allocation || 0);
+                const barColor = pct >= 90 ? 'var(--danger,#e05555)' : pct >= 70 ? 'var(--warning)' : 'var(--success)';
+                return `<div style="margin-bottom:10px;">
+                    <div style="display:flex;justify-content:space-between;">
+                        <strong>${proj}</strong>
+                        <span style="color:var(--text-secondary);font-size:0.85rem;">${a.used_5h}/${a.allocated_5h} (${pct.toFixed(1)}%)</span>
+                    </div>
+                    <div style="background:var(--bg-dark);border-radius:4px;height:8px;margin-top:4px;overflow:hidden;">
+                        <div style="width:${pct}%;height:100%;background:${barColor};transition:width .3s;"></div>
+                    </div>
+                </div>`;
+            }).join('');
+            allocEl.innerHTML = allocRows || '<p style="color:var(--text-secondary);">no allocations</p>';
+        }
+
+        function drawLLMBarChart(providers, target) {
+            const canvas = document.getElementById('llmUsageBarChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width = canvas.offsetWidth || 800;
+            const h = canvas.height = 240;
+            ctx.clearRect(0, 0, w, h);
+
+            const entries = Object.entries(providers);
+            if (entries.length === 0) {
+                ctx.fillStyle = '#888';
+                ctx.fillText('No data yet', w/2 - 40, h/2);
+                return;
+            }
+
+            const maxVal = Math.max(target, ...entries.map(([,p]) => p.local_5h_calls || 0));
+            const barW = Math.max(40, Math.floor((w - 80) / entries.length));
+            const gap = Math.floor((w - 80 - barW * entries.length) / (entries.length + 1));
+            const baseY = h - 40;
+
+            ctx.strokeStyle = '#444';
+            ctx.beginPath();
+            ctx.moveTo(40, baseY);
+            ctx.lineTo(w - 40, baseY);
+            ctx.stroke();
+
+            // Target line
+            const targetY = baseY - ((target / maxVal) * (baseY - 30));
+            ctx.strokeStyle = '#ffcc00';
+            ctx.setLineDash([4, 2]);
+            ctx.beginPath();
+            ctx.moveTo(40, targetY);
+            ctx.lineTo(w - 40, targetY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#ffcc00';
+            ctx.fillText('target', w - 70, targetY - 4);
+
+            entries.forEach(([name, p], i) => {
+                const x = 40 + gap + i * (barW + gap);
+                const val = p.local_5h_calls || 0;
+                const barH = (val / maxVal) * (baseY - 30);
+                const y = baseY - barH;
+
+                ctx.fillStyle = (name === 'minimax') ? '#4a90e2' : (name === 'xai') ? '#ff8c42' : '#66bb6a';
+                ctx.fillRect(x, y, barW - 8, barH);
+
+                ctx.fillStyle = '#ccc';
+                ctx.fillText(name, x + 4, baseY + 14);
+                ctx.fillText(val, x + 4, y - 4);
+            });
+        }
+
+        async function loadLLMTimeseries(hours) {
+            if (!token) return;
+            _llmUsageHours = hours;
+            const infoEl = document.getElementById('llmUsageSeriesInfo');
+            if (infoEl) infoEl.textContent = 'Loading...';
+            try {
+                const r = await fetch(`api/llm-usage/timeseries?hours=${hours}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const data = await r.json();
+                drawLLMLineChart(data);
+            } catch (e) {
+                if (infoEl) infoEl.textContent = 'Error';
+            }
+        }
+
+        function drawLLMLineChart(data) {
+            const canvas = document.getElementById('llmUsageLineChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width = canvas.offsetWidth || 900;
+            const h = canvas.height = 280;
+            ctx.clearRect(0, 0, w, h);
+
+            const buckets = data.buckets || [];
+            if (buckets.length === 0) {
+                ctx.fillStyle = '#888';
+                ctx.fillText('No data yet', w/2 - 40, h/2);
+                return;
+            }
+
+            const providers = data.providers || [];
+            const maxVal = Math.max(1, ...buckets.map(b => b._total || 0));
+            const padding = { left: 50, right: 20, top: 20, bottom: 40 };
+            const chartW = w - padding.left - padding.right;
+            const chartH = h - padding.top - padding.bottom;
+
+            // Axes
+            ctx.strokeStyle = '#444';
+            ctx.beginPath();
+            ctx.moveTo(padding.left, padding.top);
+            ctx.lineTo(padding.left, h - padding.bottom);
+            ctx.lineTo(w - padding.right, h - padding.bottom);
+            ctx.stroke();
+
+            // X labels (time)
+            ctx.fillStyle = '#888';
+            ctx.font = '11px sans-serif';
+            const step = Math.ceil(buckets.length / 6);
+            buckets.forEach((b, i) => {
+                if (i % step !== 0 && i !== buckets.length - 1) return;
+                const x = padding.left + (i / (buckets.length - 1)) * chartW;
+                const t = new Date(b.ts);
+                ctx.fillText(t.getHours() + ':00', x - 12, h - 18);
+            });
+
+            // Y labels
+            for (let i = 0; i <= 4; i++) {
+                const y = padding.top + (i / 4) * chartH;
+                const val = Math.round(maxVal * (1 - i / 4));
+                ctx.fillText(val, 8, y + 4);
+            }
+
+            const colors = { minimax: '#4a90e2', xai: '#ff8c42', openrouter: '#66bb6a' };
+
+            // Draw lines per provider + total
+            const drawLine = (key, color, width = 1.5) => {
+                ctx.strokeStyle = color;
+                ctx.lineWidth = width;
+                ctx.beginPath();
+                buckets.forEach((b, i) => {
+                    const x = padding.left + (i / (buckets.length - 1)) * chartW;
+                    const val = b[key] || 0;
+                    const y = padding.top + chartH - (val / maxVal) * chartH;
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+            };
+
+            providers.forEach(p => drawLine(p, colors[p] || '#888', 1.5));
+            drawLine('_total', '#ffdd88', 2.5); // total line
+
+            // Legend
+            const legend = document.getElementById('llmUsageLegend');
+            if (legend) {
+                legend.innerHTML = providers.map(p =>
+                    `<span style="color:${colors[p] || '#888'};">● ${p}</span>`
+                ).join('') + `<span style="color:#ffdd88;">━ total</span>`;
+            }
+
+            if (document.getElementById('llmUsageSeriesInfo')) {
+                document.getElementById('llmUsageSeriesInfo').textContent = `${data.hours}h · ${data.grand_total} calls`;
+            }
+        }
+
+        // ---- Budget alert state (per Arcurus 2026-06-03) ----
+        async function fetchLLMAlertState() {
+            try {
+                const r = await fetch('api/llm-usage/alert-state', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!r.ok) return null;
+                return await r.json();
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function llmAlertAction(action) {
+            if (!token) return;
+            const url = 'api/llm-usage/alert-' + action;
+            try {
+                const r = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+                const data = await r.json();
+                if (action === 'test' && data.fired) {
+                    alert('Alert fired! Check #selena-project-important. Reason: ' + (data.record && data.record.reason));
+                } else if (action === 'test') {
+                    alert('No alert fired (state machine blocked it — likely cooldown or no transition).');
+                } else {
+                    alert('Alert state reset.');
+                }
+                // Re-render to update the badge
+                if (typeof loadLLMUsage === 'function') loadLLMUsage(false);
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        function _pollStateBadge(state) {
+            const map = {
+                healthy: ['🟢', 'var(--success)'],
+                init: ['⚪', 'var(--text-secondary)'],
+                backoff: ['🟡', 'var(--warning)'],
+                rate_limited: ['🟠', 'var(--warning)'],
+                auth_error: ['🔴', 'var(--danger,#e05555)'],
+                no_credits: ['🔴', 'var(--danger,#e05555)'],
+            };
+            const [emoji, color] = map[state] || ['❓', 'var(--text-secondary)'];
+            return `<span style="color:${color};">${emoji} ${state}</span>`;
+        }
+
+        function _formatDuration(s) {
+            if (!s || s <= 0) return 'now';
+            if (s < 60) return s + 's';
+            if (s < 3600) return Math.round(s / 60) + 'm';
+            return Math.floor(s / 3600) + 'h';
         }
 
         function renderActivityLog() {
@@ -2891,7 +4451,7 @@
 
             list.innerHTML = '<p style="color: var(--text-secondary);">Loading...</p>';
 
-            fetch('/api/activity/log', {
+            fetch('api/activity/log', {
                 headers: { 'Authorization': `Bearer ${token}` }
             })
             .then(r => r.json())
@@ -2919,7 +4479,7 @@
 
             list.innerHTML = '<p style="color: var(--text-secondary);">Loading...</p>';
 
-            fetch('/api/activity/errors', {
+            fetch('api/activity/errors', {
                 headers: { 'Authorization': `Bearer ${token}` }
             })
             .then(r => r.json())

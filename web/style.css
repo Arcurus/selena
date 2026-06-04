@@ -1,23 +1,97 @@
-/* Selena Astra - Flashing Blue Starry Theme */
+/* Selena Astra - Flashing Blue Starry Theme (default) */
+/* Bright theme is a light variant; switched via data-theme="bright" on <html>. */
 
-:root {
+:root,
+:root[data-theme="space"] {
+    color-scheme: dark;
     --bg-dark: #050510;
     --bg-card: #0a0a20;
     --bg-card-hover: #121230;
+    --bg-login: rgba(10, 10, 32, 0.85);
+    --bg-input: #0a0a20;
+    --border-subtle: rgba(74, 144, 255, 0.2);
+    --border-strong: rgba(74, 144, 255, 0.5);
     --accent-blue: #4a90ff;
     --accent-glow: #2563eb;
     --accent-neon: #60a5fa;
     --accent-purple: #a855f7;
+    --accent-orange: #ff9f43;
     --text-primary: #e0f0ff;
     --text-secondary: #8ab4f8;
+    --text-muted: #6b7a9a;
     --shiba-orange: #ff9f43;
+    --shiba-avatar: url('static/agents/selena_overseer.png');
     --success: #10b981;
     --warning: #f59e0b;
     --danger: #ef4444;
     --accent-red: #ef4444;
     --working: #3b82f6;
     --star-color: rgba(255, 255, 255, 0.8);
+    --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    --login-shadow: 0 0 60px rgba(74, 144, 255, 0.3);
 }
+
+:root[data-theme="bright"] {
+    color-scheme: light;
+    --bg-dark: #eef3ff;
+    --bg-card: #ffffff;
+    --bg-card-hover: #f5f8ff;
+    --bg-login: rgba(255, 255, 255, 0.92);
+    --bg-input: #ffffff;
+    --border-subtle: rgba(37, 99, 235, 0.15);
+    --border-strong: rgba(37, 99, 235, 0.35);
+    --accent-blue: #2563eb;
+    --accent-glow: #1d4ed8;
+    --accent-neon: #3b82f6;
+    --accent-purple: #7c3aed;
+    --accent-orange: #ea580c;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --shiba-orange: #ea580c;
+    --shiba-avatar: url('static/agents/shiba_coder.png');
+    --success: #059669;
+    --warning: #d97706;
+    --danger: #dc2626;
+    --accent-red: #dc2626;
+    --working: #2563eb;
+    --star-color: transparent;
+    --card-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+    --login-shadow: 0 8px 40px rgba(37, 99, 235, 0.18);
+}
+
+/* Bright theme hides the cosmic background */
+:root[data-theme="bright"] .starfield,
+:root[data-theme="bright"] .nebula,
+:root[data-theme="bright"] #shootingStarsCanvas {
+    display: none !important;
+}
+
+/* Toggle button: small, top-right, mirrors the current theme's accent */
+.theme-toggle {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    width: 40px;
+    height: 40px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 12px;
+    transition: transform 0.2s, background 0.2s, border-color 0.2s;
+    padding: 0;
+    line-height: 1;
+}
+.theme-toggle:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--accent-blue);
+    transform: rotate(15deg) scale(1.05);
+}
+.theme-toggle:active { transform: scale(0.95); }
+
 
 /* Toast Notifications */
 .toast {
@@ -100,6 +174,10 @@ body {
     color: var(--text-primary);
     min-height: 100vh;
     overflow-x: hidden;
+    transition: background 0.3s ease, color 0.3s ease;
+}
+:root[data-theme="bright"] body {
+    background: linear-gradient(180deg, #eef3ff 0%, #dbe5ff 100%);
 }
 
 /* Starfield Background */
@@ -191,21 +269,41 @@ body {
     50% { box-shadow: 0 0 50px rgba(74, 144, 255, 0.5); }
 }
 
-.login-box h1 { 
-    color: var(--accent-neon); 
-    margin-bottom: 20px; 
-    font-size: 2.2rem; 
+/* Bright theme: lighter login box, no glow animation */
+:root[data-theme="bright"] .login-box {
+    background: var(--bg-card);
+    border-color: var(--accent-blue);
+    box-shadow: var(--card-shadow), 0 0 0 1px var(--border-subtle);
+    animation: none;
+}
+:root[data-theme="bright"] .login-box h1 {
+    color: var(--accent-glow);
+    text-shadow: none;
+}
+:root[data-theme="bright"] .login-box input {
+    background: var(--bg-input);
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+}
+:root[data-theme="bright"] .login-box input:focus {
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.login-box h1 {
+    color: var(--accent-neon);
+    margin-bottom: 20px;
+    font-size: 2.2rem;
     text-shadow: 0 0 20px var(--accent-blue);
 }
 
 .login-box input {
-    width: 100%; 
-    padding: 12px; 
+    width: 100%;
+    padding: 12px;
     margin: 10px 0;
-    background: var(--bg-dark); 
+    background: var(--bg-dark);
     border: 1px solid var(--accent-blue);
-    border-radius: 8px; 
-    color: var(--text-primary); 
+    border-radius: 8px;
+    color: var(--text-primary);
     font-size: 1rem;
 }
 .login-box input:focus {
@@ -214,18 +312,18 @@ body {
 }
 
 .login-box button {
-    width: 100%; 
-    padding: 12px; 
+    width: 100%;
+    padding: 12px;
     margin-top: 20px;
-    background: linear-gradient(135deg, var(--accent-blue), var(--accent-glow)); 
-    border: none; 
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-glow));
+    border: none;
     border-radius: 8px;
-    color: white; 
-    font-size: 1rem; 
+    color: white;
+    font-size: 1rem;
     cursor: pointer;
     transition: all 0.3s;
 }
-.login-box button:hover { 
+.login-box button:hover {
     transform: translateY(-2px);
     box-shadow: 0 5px 20px rgba(74, 144, 255, 0.4);
 }
@@ -344,6 +442,36 @@ body {
 
 .tab-content { display: none; }
 .tab-content.active { display: block; }
+
+/* Sub-tab styles (for Moderation tab) */
+.subtab {
+    background: var(--bg-dark);
+    border: 1px solid var(--accent-blue);
+    border-radius: 8px;
+    padding: 8px 16px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.85rem;
+    opacity: 0.7;
+}
+.subtab:hover { opacity: 1.0; transform: translateY(-1px); }
+.subtab.active {
+    opacity: 1.0;
+    border-width: 2px;
+    background: var(--bg-card);
+}
+.subtab-content { padding: 8px 0; }
+
+/* Stat cards for Moderation tab */
+.stat-card {
+    background: var(--bg-card);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 12px 16px;
+}
+.stat-label { font-size: 0.8rem; opacity: 0.7; margin-bottom: 4px; }
+.stat-value { font-size: 1.1rem; font-weight: 500; font-family: 'SF Mono', Monaco, monospace; }
 
 /* Service List */
 .service-list { 
@@ -1161,9 +1289,155 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: url('/images/cosmic-footer.png') no-repeat center bottom / 100% auto;
+    background: url('images/cosmic-footer.png') no-repeat center bottom / 100% auto;
     background-attachment: scroll;
     opacity: 0.5;
     z-index: -1;
     pointer-events: none;
+}
+
+/* =========================================================================
+   Bright theme overrides (active when <html data-theme="bright">)
+   ------------------------------------------------------------------------- */
+:root[data-theme="bright"] .header {
+    background: linear-gradient(135deg, #ffffff 0%, #eef3ff 100%);
+    border-bottom: 1px solid var(--border-subtle);
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+}
+:root[data-theme="bright"] .header h1 {
+    color: var(--accent-glow);
+    text-shadow: none;
+    animation: none;
+}
+:root[data-theme="bright"] .header .logout {
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+}
+:root[data-theme="bright"] .header .logout:hover {
+    background: var(--accent-blue);
+    color: #fff;
+}
+
+:root[data-theme="bright"] .services-panel,
+:root[data-theme="bright"] .cost-panel,
+:root[data-theme="bright"] .projects-panel,
+:root[data-theme="bright"] .tasks-panel,
+:root[data-theme="bright"] .activity-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--card-shadow);
+}
+:root[data-theme="bright"] .services-panel h2,
+:root[data-theme="bright"] .cost-panel h2,
+:root[data-theme="bright"] .projects-panel h2,
+:root[data-theme="bright"] .tasks-panel h2,
+:root[data-theme="bright"] .activity-panel h2 {
+    color: var(--accent-glow);
+}
+
+:root[data-theme="bright"] .tab {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    box-shadow: var(--card-shadow);
+}
+:root[data-theme="bright"] .tab:hover {
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+}
+:root[data-theme="bright"] .tab.active {
+    background: var(--bg-card);
+    border-color: var(--accent-blue);
+    border-width: 2px;
+    animation: none;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* cost-card: white card, dark text in bright theme */
+:root[data-theme="bright"] .cost-card,
+:root[data-theme="bright"] .cost-summary > .cost-card {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--card-shadow);
+}
+:root[data-theme="bright"] .cost-card h3 {
+    color: var(--text-secondary);
+}
+
+/* Shiba status: keep the color tints but use a lighter chip */
+:root[data-theme="bright"] .shiba-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--card-shadow);
+}
+:root[data-theme="bright"] .shiba-avatar {
+    background: var(--bg-card-hover);
+    border: 2px solid var(--border-subtle);
+    border-radius: 12px;
+}
+
+/* Auth/login container backdrop */
+:root[data-theme="bright"] .login-screen {
+    background: linear-gradient(180deg, #eef3ff 0%, #dbe5ff 100%);
+}
+
+/* Settings + scanner panels share the same look */
+:root[data-theme="bright"] .settings-panel,
+:root[data-theme="bright"] .task-summary-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--card-shadow);
+}
+
+/* Inputs across the app */
+:root[data-theme="bright"] input,
+:root[data-theme="bright"] textarea,
+:root[data-theme="bright"] select {
+    background: var(--bg-input);
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+}
+:root[data-theme="bright"] input:focus,
+:root[data-theme="bright"] textarea:focus,
+:root[data-theme="bright"] select:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* Graph container and canvas: keep a subtle bg in bright theme */
+:root[data-theme="bright"] .graph-container,
+:root[data-theme="bright"] .graph-canvas {
+    background: var(--bg-card-hover);
+    border-color: var(--border-subtle);
+}
+
+/* File list items: in space theme they're already dark — invert for bright */
+:root[data-theme="bright"] [style*="background: var(--bg-dark)"] {
+    background: var(--bg-card-hover) !important;
+    border-color: var(--border-subtle) !important;
+}
+
+/* Theme toggle on the login screen: floating top-right, slightly bigger
+   so it's hard to miss.  The inline button is in the same .theme-toggle
+   class, so the rest of the styling (border, hover, etc.) is inherited. */
+.theme-toggle-floating {
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    width: 48px;
+    height: 48px;
+    font-size: 1.4rem;
+    z-index: 1000;
+    box-shadow: 0 4px 16px rgba(74, 144, 255, 0.35);
+}
+:root[data-theme="bright"] .theme-toggle-floating {
+    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.25);
+}
+
+/* In bright theme, the login screen button should be visible against the
+   light gradient background. */
+:root[data-theme="bright"] .theme-toggle-floating {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border-color: var(--accent-blue);
 }
