@@ -14,6 +14,7 @@ import sys
 import json
 import hashlib
 import datetime
+from datetime import timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from pathlib import Path
@@ -70,6 +71,63 @@ import time
 import signal
 import subprocess
 
+# Module load timestamp — used by /api/health to report uptime
+API_START_TS = time.time()
+
+# -----------------------------------------------------------------------------
+# MiniMax usage cache (1-minute TTL, per Arcurus 2026-06-04)
+# Used by the Moderation → Last Run sub-tab widget so the LLM usage bar
+# doesn't hammer the MiniMax token plan API on every 10s poll.
+# -----------------------------------------------------------------------------
+_MINIMAX_CACHE = {"ts": 0.0, "payload": None}
+_MINIMAX_TTL_SECONDS = 60
+
+def _minimax_cache_get():
+    if _MINIMAX_CACHE["payload"] is None:
+        return None
+    if (time.time() - _MINIMAX_CACHE["ts"]) > _MINIMAX_TTL_SECONDS:
+        return None
+    out = dict(_MINIMAX_CACHE["payload"])
+    out["cached"] = True
+    return out
+
+def _minimax_cache_set(payload):
+    _MINIMAX_CACHE["ts"] = time.time()
+    _MINIMAX_CACHE["payload"] = payload
+
+# -----------------------------------------------------------------------------
+# OpenClaw gateway config cache (added 2026-06-04 per lunar todo 8b635506)
+# The /v1/chat/completions proxy needs the gateway's URL and bearer password.
+# Reading the config on every call would be wasteful, so we cache it.
+# -----------------------------------------------------------------------------
+_OPENCLAW_GATEWAY_CACHE = {"ts": 0.0, "url": None, "password": None}
+_OPENCLAW_GATEWAY_TTL_SECONDS = 300
+
+def _get_openclaw_gateway():
+    """Return (url, password) for the OpenClaw gateway, or (url, None) if
+    the password is not in the config (the endpoint will return 503).
+    Cached for 5 minutes."""
+    now = time.time()
+    if (_OPENCLAW_GATEWAY_CACHE["url"] is not None
+            and (now - _OPENCLAW_GATEWAY_CACHE["ts"]) < _OPENCLAW_GATEWAY_TTL_SECONDS):
+        return _OPENCLAW_GATEWAY_CACHE["url"], _OPENCLAW_GATEWAY_CACHE["password"]
+    cfg_path = os.path.expanduser("~/.openclaw/openclaw.json")
+    url, pw = "http://localhost:18789", None
+    try:
+        with open(cfg_path) as f:
+            cfg = json.load(f)
+        gw = cfg.get("gateway", {}) or {}
+        port = gw.get("port", 18789)
+        url = f"http://localhost:{port}"
+        auth = gw.get("auth", {}) or {}
+        pw = auth.get("password")
+    except Exception:
+        pass
+    _OPENCLAW_GATEWAY_CACHE["ts"] = now
+    _OPENCLAW_GATEWAY_CACHE["url"] = url
+    _OPENCLAW_GATEWAY_CACHE["password"] = pw
+    return url, pw
+
 def get_pid_file(pid_path):
     """Read PID from a file, return None if not found"""
     if os.path.exists(pid_path):
@@ -120,6 +178,11 @@ def get_pid_for_command(cmd1, cmd2=None):
 PORT = int(os.getenv('SELENA_PORT', '8765'))
 WEB_PASSWORD = os.getenv('WEB_PASSWORD', 'change_me')
 API_PASSWORD = os.getenv('WEB_PASSWORD', 'change_me')
+# Static service token for service-to-service /api/llm-usage/record calls
+# (Open World Rust server, scheduled_actions.py, etc.).  Long-lived so the
+# service can keep a single token in its env.  If unset, the record
+# endpoint falls back to user-bearer auth only.
+LLM_RECORD_TOKEN = os.getenv('LLM_RECORD_TOKEN', '').strip()
 SELENA_ROOT = os.path.expanduser('~/openclaw/workspace/selena-project')
 DATA_DIR = os.path.join(SELENA_ROOT, 'data')
 
@@ -400,12 +463,38 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
     
     def do_GET(self):
-        """Handle GET requests"""
+        """Handle GET requests - delegates to _dispatch_routes for the
+        method-agnostic route table. (Kept for BaseHTTPRequestHandler
+        dispatch compatibility; the real work is in _dispatch_routes.)
+        """
         parsed = urlparse(self.path)
         path = parsed.path
-        
+        self._dispatch_routes(path, 'GET')
+
+    def _dispatch_routes(self, path, command):
+        """Single route dispatch. Called from do_GET (and from the
+        do_POST/do_PUT/do_PATCH/do_DELETE methods defined later in the
+        class). The route table is checked in order; each block guards
+        on `self.command == '<verb>'` so a POST route only matches POST
+        requests, etc.
+
+        Why this exists: prior to 2026-06-04 the pending-action POST/
+        PATCH/DELETE routes had been copy-pasted into the do_GET method
+        body by mistake, which meant they never fired for non-GET
+        requests and the user saw "Clear failed: Unexpected token '<'"
+        (the server was returning 501 with an HTML page from the default
+        BaseHTTPRequestHandler handler). Consolidating the route table
+        in one method eliminates that class of bug.
+        """
+        self.command = command  # route bodies use self.command for the verb check
+        # Re-parse the URL so blocks that need the query string (parsed.query)
+        # can use it. (Originally the do_GET method defined `parsed` once;
+        # when the body moved into _dispatch_routes we have to do it here.)
+        parsed = urlparse(self.path)
         # Serve images from web/images/ directory
         if path.startswith('/images/'):
+            web_dir = os.path.join(SELENA_ROOT, 'web')
+            # Remove leading slash and map to web/images/ directory
             web_dir = os.path.join(SELENA_ROOT, 'web')
             # Remove leading slash and map to web/images/ directory
             file_path = path.lstrip('/')
@@ -453,8 +542,27 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.send_json({'success': False, 'error': 'Invalid password'}, 401)
             return
         
+        # Public health check (no auth) — used by selenaastra.com/ outward-facing site
+        # to show "selena is online" status dot. Must be fast and side-effect-free.
+        # NOTE (2026-06-04 per Arcurus): this is the ONLY public API besides
+        # /api/login. Every other /api/* endpoint must call self.authenticate().
+        if path == '/api/health':
+            self.send_json({
+                'ok': True,
+                'service': 'selena-api',
+                'uptime_s': int(time.time() - API_START_TS)
+            })
+            return
+
         # Protected endpoints
         if path == '/api/logout':
+            # Auth required (added 2026-06-04 per Arcurus). Without auth, an
+            # unauth'd caller could attempt to invalidate arbitrary tokens;
+            # the in-memory check would silently no-op for unknown tokens,
+            # but the principle is still that logout is a sensitive op.
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
             auth_header = self.headers.get('Authorization', '')
             if auth_header.startswith('Bearer '):
                 token = auth_header[7:]
@@ -462,7 +570,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     del active_tokens[token]
             self.send_json({'success': True})
             return
-        
+
         if path == '/api/status':
             if not self.authenticate():
                 self.send_json({'error': 'Unauthorized'}, 401)
@@ -759,7 +867,15 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
 
         if path == '/api/llm-usage/record':
-            if not self.authenticate():
+            # Accept either a user session (Bearer / cookie) OR the static
+            # service token.  Service token is what the Open World Rust
+            # server and scheduled_actions.py use.
+            authed = self.authenticate()
+            if not authed and LLM_RECORD_TOKEN:
+                hdr = self.headers.get('Authorization', '')
+                if hdr.startswith('Bearer '):
+                    authed = (hdr[7:] == LLM_RECORD_TOKEN)
+            if not authed:
                 self.send_json({'error': 'Unauthorized'}, 401)
                 return
             qs = parse_qs(urlparse(self.path).query)
@@ -768,13 +884,21 @@ class RequestHandler(BaseHTTPRequestHandler):
             project = qs.get('project', [''])[0]
             ti = qs.get('tokens_in', [None])[0]
             to = qs.get('tokens_out', [None])[0]
+            rt = qs.get('reasoning_tokens', [None])[0]
+            ci = qs.get('chars_in', [None])[0]
+            co = qs.get('chars_out', [None])[0]
+            cr = qs.get('chars_reasoning', [None])[0]
             if not provider or not model:
                 self.send_json({'error': 'provider and model required'}, 400)
                 return
             t = _get_llm_tracker()
             t.record(provider, model, project=project,
                      tokens_in=int(ti) if ti else None,
-                     tokens_out=int(to) if to else None)
+                     tokens_out=int(to) if to else None,
+                     reasoning_tokens=int(rt) if rt else None,
+                     chars_in=int(ci) if ci else None,
+                     chars_out=int(co) if co else None,
+                     chars_reasoning=int(cr) if cr else None)
             self.send_json({'success': True})
             return
 
@@ -1428,12 +1552,37 @@ class RequestHandler(BaseHTTPRequestHandler):
                     sensitive = query['sensitive'][0].lower() == 'true'
                 include_deleted = 'include_deleted' in query and query['include_deleted'][0].lower() == 'true'
                 search = query.get('search', [None])[0]
-                todos = todo_manager.get_all_todos(status=status, sort_by=sort_by, sensitive=sensitive, include_deleted=include_deleted, search=search)
+                agent_owner = query.get('agent_owner', [None])[0] or None
+                project = query.get('project', [None])[0] or None
+                todos = todo_manager.get_all_todos(
+                    status=status, sort_by=sort_by, sensitive=sensitive,
+                    include_deleted=include_deleted, search=search,
+                    agent_owner=agent_owner, project=project
+                )
                 summary = todo_manager.get_summary(sensitive=sensitive)
-                log_api('LOAD_TODOS', f'status={status}, sort={sort_by}, sensitive={sensitive}, count={len(todos)}')
+                log_api('LOAD_TODOS', f'status={status}, sort={sort_by}, sensitive={sensitive}, agent={agent_owner}, project={project}, count={len(todos)}')
                 self.send_json({'todos': todos, 'summary': summary})
             except Exception as e:
                 log_error(f'/api/todos failed: {str(e)}', 'GET /api/todos')
+                self.send_json({'error': f'Internal error: {str(e)}'}, 500)
+            return
+
+        if path == '/api/todos/filter-options':
+            # Returns distinct agent_owners + projects (with counts) so the
+            # web UI can populate filter dropdowns dynamically.
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                query = parse_qs(parsed.query)
+                sensitive = None
+                if 'sensitive' in query:
+                    sensitive = query['sensitive'][0].lower() == 'true'
+                include_deleted = 'include_deleted' in query and query['include_deleted'][0].lower() == 'true'
+                opts = todo_manager.get_filter_options(sensitive=sensitive, include_deleted=include_deleted)
+                self.send_json(opts)
+            except Exception as e:
+                log_error(f'/api/todos/filter-options failed: {str(e)}', 'GET /api/todos/filter-options')
                 self.send_json({'error': f'Internal error: {str(e)}'}, 500)
             return
         
@@ -1616,7 +1765,22 @@ class RequestHandler(BaseHTTPRequestHandler):
             else:
                 self.send_json({'success': False, 'error': 'Todo not found'}, 404)
             return
-        
+
+        # /api/todos/reload — force the in-memory todo list to re-read from
+        # data/todos.json. Useful after manual file edits (vim, scripts,
+        # backup restore).  Added 2026-06-05 per selena-project-worker to
+        # address loose-end todo 31e876a4 ("API server in-memory state can
+        # desync from data/todos.json"). Supports GET and POST.
+        if path == '/api/todos/reload':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            was_stale = todo_manager.is_stale()
+            result = todo_manager.reload()
+            log_api('TODO_RELOAD', f'regular={result["regular"]} sensitive={result["sensitive"]} stale={result["stale"]}')
+            self.send_json({'success': True, 'reloaded': result, 'was_stale': was_stale})
+            return
+
         if path == '/api/todos/mark-blocked':
             if not self.authenticate():
                 self.send_json({'error': 'Unauthorized'}, 401)
@@ -1669,7 +1833,686 @@ class RequestHandler(BaseHTTPRequestHandler):
             else:
                 self.send_json({'success': False, 'error': 'No backups available'}, 404)
             return
-        
+
+        # ===== Discord Lookup (new-user scanner + moderation cron trigger) =====
+        # Phase 2 (per Arcurus 2026-06-04). All endpoints auth-required.
+        # Mutating endpoints (scan, trigger, settings) call the CLI under
+        # selena-project/scripts/discord_lookup.py — never import the
+        # module directly so the CLI surface stays the single source of truth.
+
+        if path == '/api/discord-lookup/status':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                out = subprocess.run(
+                    ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'), 'status'],
+                    capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                )
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                self.send_json(json.loads(out.stdout))
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        if path == '/api/discord-lookup/settings' and self.command == 'GET':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                out = subprocess.run(
+                    ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'), 'settings', 'get'],
+                    capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                )
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}'}, 500)
+                    return
+                self.send_json(json.loads(out.stdout))
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        if path == '/api/discord-lookup/settings' and self.command == 'PATCH':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                raw = self.rfile.read(length).decode('utf-8') if length else '{}'
+                body = json.loads(raw) if raw else {}
+            except (ValueError, json.JSONDecodeError) as e:
+                self.send_json({'error': f'invalid JSON body: {e}'}, 400)
+                return
+            if not isinstance(body, dict) or not body:
+                self.send_json({'error': 'body must be a non-empty JSON object of {key: value}'}, 400)
+                return
+            # Apply each key/val via the CLI (single source of truth)
+            # Special: channels_add and channels_remove_index operate on the channels list
+            results = []
+            for k, v in body.items():
+                if k == 'channels_add':
+                    # Read current channels, append, write back
+                    get_out = subprocess.run(
+                        ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                         'settings', 'get'],
+                        capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                    )
+                    if get_out.returncode != 0:
+                        results.append({'key': k, 'ok': False, 'stderr': 'failed to read current channels'})
+                        continue
+                    cur = json.loads(get_out.stdout).get('channels', [])
+                    if v in cur:
+                        results.append({'key': k, 'ok': True, 'stdout': 'already present (no-op)'})
+                        continue
+                    cur.append(v)
+                    out = subprocess.run(
+                        ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                         'settings', 'set', '--key', 'channels', '--value', json.dumps(cur)],
+                        capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                    )
+                    results.append({'key': k, 'ok': out.returncode == 0,
+                                    'stdout': out.stdout.strip()[:200],
+                                    'stderr': out.stderr.strip()[:200] if out.returncode != 0 else None})
+                    continue
+                if k == 'channels_remove_index':
+                    get_out = subprocess.run(
+                        ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                         'settings', 'get'],
+                        capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                    )
+                    if get_out.returncode != 0:
+                        results.append({'key': k, 'ok': False, 'stderr': 'failed to read current channels'})
+                        continue
+                    cur = json.loads(get_out.stdout).get('channels', [])
+                    try:
+                        idx = int(v)
+                    except (ValueError, TypeError):
+                        results.append({'key': k, 'ok': False, 'stderr': 'value must be int index'})
+                        continue
+                    if idx < 0 or idx >= len(cur):
+                        results.append({'key': k, 'ok': False, 'stderr': f'index {idx} out of range (len={len(cur)})'})
+                        continue
+                    removed = cur.pop(idx)
+                    out = subprocess.run(
+                        ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                         'settings', 'set', '--key', 'channels', '--value', json.dumps(cur)],
+                        capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                    )
+                    results.append({'key': k, 'ok': out.returncode == 0,
+                                    'stdout': f'removed {removed}',
+                                    'stderr': out.stderr.strip()[:200] if out.returncode != 0 else None})
+                    continue
+                if isinstance(v, (list, dict)):
+                    val_str = json.dumps(v)
+                elif isinstance(v, bool):
+                    val_str = 'true' if v else 'false'
+                else:
+                    val_str = str(v)
+                out = subprocess.run(
+                    ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                     'settings', 'set', '--key', k, '--value', val_str],
+                    capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                )
+                results.append({'key': k, 'ok': out.returncode == 0, 'stdout': out.stdout.strip()[:200],
+                                'stderr': out.stderr.strip()[:200] if out.returncode != 0 else None})
+            log_api('DISCORD_LOOKUP_SETTINGS', f'updated {len(body)} key(s)')
+            self.send_json({'success': all(r['ok'] for r in results), 'results': results})
+            return
+
+        if path == '/api/discord-lookup/triggers':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            try:
+                limit = int(qs.get('limit', ['20'])[0])
+            except ValueError:
+                limit = 20
+            limit = max(1, min(limit, 500))
+            try:
+                out = subprocess.run(
+                    ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                     'triggers', '--limit', str(limit)],
+                    capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                )
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}'}, 500)
+                    return
+                self.send_json({'count': len(json.loads(out.stdout)), 'entries': json.loads(out.stdout)})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        if path == '/api/discord-lookup/users':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            try:
+                limit = int(qs.get('limit', ['50'])[0])
+            except ValueError:
+                limit = 50
+            sort = qs.get('sort', ['last_seen'])[0]
+            if sort not in ('messages', 'last_seen', 'first_seen'):
+                sort = 'last_seen'
+            limit = max(1, min(limit, 500))
+            try:
+                out = subprocess.run(
+                    ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                     'users', '--limit', str(limit), '--sort', sort],
+                    capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                )
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}'}, 500)
+                    return
+                self.send_json({'count': len(json.loads(out.stdout)), 'users': json.loads(out.stdout)})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        if path == '/api/discord-lookup/scan' and self.command == 'POST':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            # Manual scan — uses the CLI's --manual flag for the audit log
+            try:
+                out = subprocess.run(
+                    ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                     'scan', '--manual'],
+                    capture_output=True, text=True, timeout=120, cwd=str(SELENA_ROOT)
+                )
+                log_api('DISCORD_LOOKUP_SCAN_MANUAL', f'exit={out.returncode}')
+                if out.returncode != 0 and not out.stdout:
+                    self.send_json({'error': f'CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                # The CLI exits 1 on error decision, 0 otherwise. Both are valid.
+                self.send_json(json.loads(out.stdout) if out.stdout else {'error': 'no stdout'})
+            except subprocess.TimeoutExpired:
+                self.send_json({'error': 'scan timed out after 120s'}, 504)
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        if path == '/api/discord-lookup/trigger-cron' and self.command == 'POST':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            # Force-trigger the moderation cron (bypasses debounce).
+            # Useful for forcing a re-evaluation when new user activity
+            # is reported by humans (Lenny/Arcurus) outside the scanner.
+            try:
+                job_id = '1b0f1a2b-5677-4e8e-9699-17c29e55014c'
+                out = subprocess.run(
+                    ['openclaw', 'cron', 'run', job_id],
+                    capture_output=True, text=True, timeout=30
+                )
+                log_api('DISCORD_LOOKUP_FORCE_TRIGGER', f'exit={out.returncode}')
+                if out.returncode != 0:
+                    self.send_json({'error': f'openclaw cron run exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                # Update last_wake_at in state
+                state_path = Path(SELENA_ROOT) / 'data' / 'moderation_state' / 'discord_lookup_state.json'
+                if state_path.exists():
+                    st = json.loads(state_path.read_text())
+                    st['last_wake_at'] = datetime.datetime.now(timezone.utc).isoformat()
+                    st['wake_count'] = st.get('wake_count', 0) + 1
+                    state_path.write_text(json.dumps(st, indent=2, ensure_ascii=False))
+                self.send_json({'success': True, 'stdout': out.stdout.strip()})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # MiniMax % used (for Last Run sub-tab widget, with 1-min server-side cache)
+        if path == '/api/discord-lookup/llm-minimax':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                cached = _minimax_cache_get()
+                if cached is not None:
+                    self.send_json(cached)
+                    return
+                t = _get_llm_tracker()
+                # Trigger a (non-forced) sync, then read
+                try:
+                    t.sync_quotas(force=False)
+                except Exception:
+                    pass
+                status = t.status() or {}
+                providers = status.get('providers', {}) or {}
+                # Tracker key is 'minimax' (not 'minimax-portal'). Pull both
+                # the per-model and the flat top-level window data.
+                minimax = providers.get('minimax') or {}
+                quota = minimax.get('quota', {}) or {}
+                models = quota.get('models', {}) or {}
+                windows = []
+                # Flatten: for each model, each window
+                for model_name, model_data in (models or {}).items():
+                    if not isinstance(model_data, dict):
+                        continue
+                    for win_key in ('window_5h', 'weekly', 'window_24h', 'window_1h'):
+                        w = model_data.get(win_key)
+                        if not isinstance(w, dict):
+                            continue
+                        rp = w.get('remaining_percent')
+                        windows.append({
+                            'model': model_name,
+                            'name': win_key,
+                            'remaining_percent': rp,
+                            'used_percent': (100 - rp) if isinstance(rp, (int, float)) else None,
+                            'status': w.get('status'),
+                            'resets_in_s': w.get('resets_in_s'),
+                        })
+                payload = {
+                    'cached': False,
+                    'fetched_at': datetime.datetime.now(timezone.utc).isoformat(),
+                    'provider': 'minimax',
+                    'windows': windows,
+                    'summary': status.get('summary'),
+                }
+                _minimax_cache_set(payload)
+                self.send_json(payload)
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # Moderation archive (for Banned/Timeout sub-tab). Reads
+        # selena-project/data/moderation_actions_archive.jsonl directly.
+        if path == '/api/moderation/archive':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            try:
+                limit = int(qs.get('limit', ['100'])[0])
+            except ValueError:
+                limit = 100
+            limit = max(1, min(limit, 1000))
+            action_filter_raw = qs.get('action_filter', [''])[0]
+            if not action_filter_raw:
+                # Default: both bans and timeouts (covers legacy and new action names)
+                action_filter = {'ban', 'ban_user', 'timeout', 'timeout_user'}
+            else:
+                action_filter = set(a.strip() for a in action_filter_raw.split(',') if a.strip())
+            archive_path = Path(SELENA_ROOT) / 'data' / 'moderation_actions_archive.jsonl'
+            if not archive_path.exists():
+                self.send_json({'count': 0, 'entries': []})
+                return
+            try:
+                entries = []
+                with open(archive_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            e = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if action_filter and e.get('action') not in action_filter:
+                            continue
+                        entries.append(e)
+                # Sort by ts desc (newest first)
+                entries.sort(key=lambda e: e.get('ts', ''), reverse=True)
+                self.send_json({'count': len(entries), 'entries': entries[:limit]})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # Pending actions list (dry-run / unexecuted moderation actions).
+        if path == '/api/discord-lookup/pending' and self.command == 'GET':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                out = subprocess.run(
+                    ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'), 'pending', 'list'],
+                    capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                )
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                self.send_json(json.loads(out.stdout))
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # Add a pending action (does NOT execute). Body: {target_user_id, target_username, action, duration?, reason, source?, created_by?}
+        if path == '/api/discord-lookup/pending' and self.command == 'POST':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                raw = self.rfile.read(length).decode('utf-8') if length else '{}'
+                body = json.loads(raw) if raw else {}
+            except (ValueError, json.JSONDecodeError) as e:
+                self.send_json({'error': f'invalid JSON body: {e}'}, 400)
+                return
+            required = ['target_user_id', 'action', 'reason']
+            for k in required:
+                if not body.get(k):
+                    self.send_json({'error': f'{k} required'}, 400)
+                    return
+            if body['action'] == 'timeout_user' and not body.get('duration'):
+                self.send_json({'error': 'duration required for timeout_user'}, 400)
+                return
+            if body['action'] not in ('ban_user', 'timeout_user'):
+                self.send_json({'error': "action must be 'ban_user' or 'timeout_user'"}, 400)
+                return
+            cmd = [
+                'python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                'pending', 'add',
+                '--target-user-id', str(body['target_user_id']),
+                '--action', body['action'],
+                '--reason', str(body['reason']),
+            ]
+            if body.get('target_username'):
+                cmd += ['--target-username', str(body['target_username'])]
+            if body.get('duration'):
+                cmd += ['--duration', str(body['duration'])]
+            if body.get('source'):
+                cmd += ['--source', str(body['source'])]
+            if body.get('created_by'):
+                cmd += ['--created-by', str(body['created_by'])]
+            try:
+                out = subprocess.run(cmd, capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT))
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                self.send_json(json.loads(out.stdout))
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # Edit a pending action (reason only). Body: {reason}
+        # Path: /api/discord-lookup/pending/<id>
+        if path.startswith('/api/discord-lookup/pending/') and self.command == 'PATCH':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            pending_id = path[len('/api/discord-lookup/pending/'):]
+            if not pending_id:
+                self.send_json({'error': 'id required in path'}, 400)
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                raw = self.rfile.read(length).decode('utf-8') if length else '{}'
+                body = json.loads(raw) if raw else {}
+            except (ValueError, json.JSONDecodeError) as e:
+                self.send_json({'error': f'invalid JSON body: {e}'}, 400)
+                return
+            if not body.get('reason'):
+                self.send_json({'error': 'reason required'}, 400)
+                return
+            try:
+                out = subprocess.run(
+                    ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                     'pending', 'edit', '--id', pending_id, '--reason', str(body['reason'])],
+                    capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                )
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                self.send_json(json.loads(out.stdout))
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # Delete a pending action (does NOT execute). Path: /api/discord-lookup/pending/<id>
+        # NOTE: actual DELETE handler lives in do_DELETE() (added 2026-06-04).
+        # The do_POST fallback was removed because BaseHTTPRequestHandler
+        # was returning 501 for DELETE — dispatch by method is the only
+        # way Python's http.server routes verbs.
+
+        # Apply a single pending action. POST /api/discord-lookup/pending/<id>/apply
+        if path.startswith('/api/discord-lookup/pending/') and path.endswith('/apply') and self.command == 'POST':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            pending_id = path[len('/api/discord-lookup/pending/'):-len('/apply')]
+            if not pending_id:
+                self.send_json({'error': 'id required in path'}, 400)
+                return
+            try:
+                out = subprocess.run(
+                    ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                     'pending', 'apply', '--id', pending_id],
+                    capture_output=True, text=True, timeout=180, cwd=str(SELENA_ROOT)
+                )
+                log_api('PENDING_APPLY', f'id={pending_id} exit={out.returncode}')
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                self.send_json(json.loads(out.stdout))
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # Urgent lane: list /api/discord-lookup/pending-urgent
+        if path == '/api/discord-lookup/pending-urgent' and self.command == 'GET':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                out = subprocess.run(
+                    ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'), 'pending', 'urgent-list'],
+                    capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                )
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                self.send_json(json.loads(out.stdout))
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # Urgent lane: add (does NOT execute — use cron for that)
+        if path == '/api/discord-lookup/pending-urgent' and self.command == 'POST':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                raw = self.rfile.read(length).decode('utf-8') if length else '{}'
+                body = json.loads(raw) if raw else {}
+            except (ValueError, json.JSONDecodeError) as e:
+                self.send_json({'error': f'invalid JSON body: {e}'}, 400)
+                return
+            required = ['target_user_id', 'action', 'reason']
+            for k in required:
+                if not body.get(k):
+                    self.send_json({'error': f'{k} required'}, 400)
+                    return
+            cmd = [
+                'python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                'pending', 'urgent-add',
+                '--target-user-id', str(body['target_user_id']),
+                '--action', body['action'],
+                '--reason', str(body['reason']),
+            ]
+            for opt, key in (('--target-username', 'target_username'),
+                             ('--duration', 'duration'),
+                             ('--source', 'source'),
+                             ('--created-by', 'created_by')):
+                if body.get(key):
+                    cmd += [opt, str(body[key])]
+            try:
+                out = subprocess.run(cmd, capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT))
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                self.send_json(json.loads(out.stdout))
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # Urgent lane: clear one entry by id. DELETE /api/discord-lookup/pending-urgent/<id>
+        # NOTE: actual DELETE handler lives in do_DELETE() (added 2026-06-04).
+
+        # Apply ALL pending actions. POST /api/discord-lookup/pending/apply-all
+        if path == '/api/discord-lookup/pending/apply-all' and self.command == 'POST':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                out = subprocess.run(
+                    ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                     'pending', 'apply', '--all'],
+                    capture_output=True, text=True, timeout=600, cwd=str(SELENA_ROOT)
+                )
+                log_api('PENDING_APPLY_ALL', f'exit={out.returncode}')
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                self.send_json(json.loads(out.stdout))
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # Action count for the moderation pipeline diagram (2026-06-04 per Arcurus).
+        # Lightweight endpoint that just counts entries in
+        # data/moderation_actions_archive.jsonl so the "execute" box on
+        # the pipeline diagram can show "X done" without fetching the
+        # whole archive.
+        #
+        # 2026-06-05 update: the "done" counter on the pipeline diagram
+        # should match what the Banned/Timeout sub-tab shows, NOT the
+        # raw total of all action records. The archive includes many
+        # housekeeping actions (delete_message, send_to_review,
+        # process_nudge, monitor, post_in_channel, etc.) that aren't
+        # visible in the Banned/Timeout list. So we return BOTH the
+        # raw total AND a banned_timeout_total that matches the sub-tab
+        # filter. The JS uses banned_timeout_total for the displayed
+        # counter and shows the breakdown in the hover tooltip.
+        if path == '/api/moderation/actions/count' and self.command == 'GET':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                archive_path = os.path.join(SELENA_ROOT, 'data', 'moderation_actions_archive.jsonl')
+                total = 0
+                banned_timeout_total = 0
+                today = 0
+                last_24h = 0
+                bans = 0
+                timeouts = 0
+                other = 0
+                errors = 0
+                # Matches the Banned/Timeout sub-tab filter in modLoadBanned()
+                BANNED_TIMEOUT_ACTIONS = {'ban_user', 'ban', 'timeout_user', 'timeout'}
+                if os.path.exists(archive_path):
+                    now = datetime.datetime.now(timezone.utc)
+                    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                    last_24h_start = now - datetime.timedelta(hours=24)
+                    with open(archive_path, encoding='utf-8') as f:
+                        for line in f:
+                            if not line.strip():
+                                continue
+                            try:
+                                e = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+                            total += 1
+                            act = e.get('action', '')
+                            if act in BANNED_TIMEOUT_ACTIONS:
+                                banned_timeout_total += 1
+                                if act in ('ban_user', 'ban'):
+                                    bans += 1
+                                elif act in ('timeout_user', 'timeout'):
+                                    timeouts += 1
+                            else:
+                                other += 1
+                            if not e.get('result_ok', True):
+                                errors += 1
+                            ts = e.get('ts')
+                            if ts:
+                                try:
+                                    t = datetime.datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                                    if t >= today_start:
+                                        today += 1
+                                    if t >= last_24h_start:
+                                        last_24h += 1
+                                except (ValueError, TypeError):
+                                    pass
+                self.send_json({
+                    'total': total,                    # ALL action records
+                    'banned_timeout_total': banned_timeout_total,  # what the Banned/Timeout sub-tab shows
+                    'today': today,
+                    'last_24h': last_24h,
+                    'bans': bans,
+                    'timeouts': timeouts,
+                    'other': other,
+                    'errors': errors,
+                })
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # Drift check: diff the cron prompt's policy block against policies.md
+        if path == '/api/moderation/drift-check':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                out = subprocess.run(
+                    ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'), 'drift-check'],
+                    capture_output=True, text=True, timeout=30, cwd=str(SELENA_ROOT)
+                )
+                if out.returncode not in (0, 1):
+                    self.send_json({'error': f'drift-check CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                self.send_json(json.loads(out.stdout))
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # Moderation policies (read-only display of moderation_policies.md)
+        if path == '/api/moderation/policies':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            policies_path = Path(SELENA_ROOT) / 'data' / 'moderation_policies.md'
+            if not policies_path.exists():
+                self.send_json({'error': 'policies file not found', 'path': str(policies_path)})
+                return
+            try:
+                stat = policies_path.stat()
+                content = policies_path.read_text(encoding='utf-8')
+                self.send_json({
+                    'path': str(policies_path.relative_to(SELENA_ROOT)),
+                    'last_updated': datetime.datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                    'length': len(content),
+                    'content': content,
+                })
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # Moderation architecture doc (docs/moderation.md)
+        if path == '/api/moderation/docs':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            docs_path = Path(SELENA_ROOT) / 'docs' / 'moderation.md'
+            if not docs_path.exists():
+                self.send_json({'error': 'docs file not found', 'path': str(docs_path)})
+                return
+            try:
+                stat = docs_path.stat()
+                content = docs_path.read_text(encoding='utf-8')
+                self.send_json({
+                    'path': str(docs_path.relative_to(SELENA_ROOT)),
+                    'last_updated': datetime.datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                    'length': len(content),
+                    'content': content,
+                })
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
         # Knowledge Base endpoints
         if path == '/api/knowledge':
             if not self.authenticate():
@@ -1747,7 +2590,12 @@ class RequestHandler(BaseHTTPRequestHandler):
         
         # Projects endpoints
         if path == '/api/projects':
-            # No auth required - projects are public info
+            # Auth required (added 2026-06-04 per Arcurus). The previous
+            # "no auth required" comment predated the password rule; project
+            # metadata is internal info and should be auth-gated.
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
             # Load projects from file
             projects_file = os.path.join(SELENA_ROOT, 'docs', 'projects.md')
             projects = []
@@ -2062,7 +2910,16 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
 
         # Public health check (no auth) — used by the watchdog via check_method: http
+        # NOTE (2026-06-04 per Arcurus): the watchdog actually does an in-process
+        # check via a special case in service_manager.check_health() and does NOT
+        # call this endpoint. The canonical CLI is
+        #   `python3 scripts/discord_lookup.py discord-health`
+        # which returns 0/1/2. This HTTP endpoint is kept for external monitors
+        # and now requires auth per the "all APIs require a password" rule.
         if path == '/api/discord/health':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
             n = get_default_notifier()
             st = n.status()
             healthy = bool(st.get('enabled'))
@@ -2134,7 +2991,6 @@ class RequestHandler(BaseHTTPRequestHandler):
                     
                     # Also check if port 8081 is still in use and kill that process
                     try:
-                        import subprocess
                         # Find process using port 8081
                         check = subprocess.run(['fuser', '8081/tcp'], capture_output=True, text=True)
                         if check.stdout.strip():
@@ -2275,7 +3131,14 @@ class RequestHandler(BaseHTTPRequestHandler):
             web_path = os.path.join(SELENA_ROOT, 'web', 'index.html')
             if os.path.exists(web_path):
                 with open(web_path, 'r') as f:
-                    self.send_html(f.read())
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'text/html; charset=utf-8')
+                    self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+                    self.send_header('Pragma', 'no-cache')
+                    self.send_header('Expires', '0')
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(f.read().encode('utf-8'))
             else:
                 self.send_html('<html><body><h1>Web interface not found</h1></body></html>', 404)
             return
@@ -2331,7 +3194,91 @@ class RequestHandler(BaseHTTPRequestHandler):
         """Handle POST requests - currently supports /api/todos/add"""
         parsed = urlparse(self.path)
         path = parsed.path
-        
+
+        # Discord Lookup — manual scan (Run Now button)
+        if path == '/api/discord-lookup/scan':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                out = subprocess.run(
+                    ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                     'scan', '--manual'],
+                    capture_output=True, text=True, timeout=120, cwd=str(SELENA_ROOT)
+                )
+                log_api('DISCORD_LOOKUP_SCAN_MANUAL', f'exit={out.returncode}')
+                if out.returncode != 0 and not out.stdout:
+                    self.send_json({'error': f'CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                # The CLI exits 1 on error decision, 0 otherwise. Both are valid.
+                self.send_json(json.loads(out.stdout) if out.stdout else {'error': 'no stdout'})
+            except subprocess.TimeoutExpired:
+                self.send_json({'error': 'scan timed out after 120s'}, 504)
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # Discord Lookup — force-trigger moderation cron (bypasses debounce)
+        if path == '/api/discord-lookup/trigger-cron':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                job_id = '1b0f1a2b-5677-4e8e-9699-17c29e55014c'
+                out = subprocess.run(
+                    ['openclaw', 'cron', 'run', job_id],
+                    capture_output=True, text=True, timeout=30
+                )
+                log_api('DISCORD_LOOKUP_FORCE_TRIGGER', f'exit={out.returncode}')
+                if out.returncode != 0:
+                    self.send_json({'error': f'openclaw cron run exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                # Update last_wake_at in state
+                state_path = Path(SELENA_ROOT) / 'data' / 'moderation_state' / 'discord_lookup_state.json'
+                if state_path.exists():
+                    st = json.loads(state_path.read_text())
+                    st['last_wake_at'] = datetime.datetime.now(timezone.utc).isoformat()
+                    st['wake_count'] = st.get('wake_count', 0) + 1
+                    state_path.write_text(json.dumps(st, indent=2, ensure_ascii=False))
+                self.send_json({'success': True, 'stdout': out.stdout.strip()})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # Discord Lookup — settings update via POST (used when PATCH isn't available)
+        if path == '/api/discord-lookup/settings':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                raw = self.rfile.read(length).decode('utf-8') if length else '{}'
+                body = json.loads(raw) if raw else {}
+            except (ValueError, json.JSONDecodeError) as e:
+                self.send_json({'error': f'invalid JSON body: {e}'}, 400)
+                return
+            if not isinstance(body, dict) or not body:
+                self.send_json({'error': 'body must be a non-empty JSON object of {key: value}'}, 400)
+                return
+            results = []
+            for k, v in body.items():
+                if isinstance(v, (list, dict)):
+                    val_str = json.dumps(v)
+                elif isinstance(v, bool):
+                    val_str = 'true' if v else 'false'
+                else:
+                    val_str = str(v)
+                out = subprocess.run(
+                    ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                     'settings', 'set', '--key', k, '--value', val_str],
+                    capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                )
+                results.append({'key': k, 'ok': out.returncode == 0, 'stdout': out.stdout.strip()[:200],
+                                'stderr': out.stderr.strip()[:200] if out.returncode != 0 else None})
+            log_api('DISCORD_LOOKUP_SETTINGS', f'updated {len(body)} key(s)')
+            self.send_json({'success': all(r['ok'] for r in results), 'results': results})
+            return
+
         # Handle CORS preflight
         if path == '/api/todos/add':
             if not self.authenticate():
@@ -2406,12 +3353,181 @@ class RequestHandler(BaseHTTPRequestHandler):
             })
             return
 
-        # 404 for unsupported POST endpoints
-        self.send_json({'error': 'Not found'}, 404)
+        if path == '/api/llm-usage/record':
+            # Accept either a user session (Bearer / cookie) OR the static
+            # service token.  Service token is what the Open World Rust
+            # server and scheduled_actions.py use.
+            authed = self.authenticate()
+            if not authed and LLM_RECORD_TOKEN:
+                hdr = self.headers.get('Authorization', '')
+                if hdr.startswith('Bearer '):
+                    authed = (hdr[7:] == LLM_RECORD_TOKEN)
+            if not authed:
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            provider = qs.get('provider', [''])[0]
+            model = qs.get('model', [''])[0]
+            project = qs.get('project', [''])[0]
+            ti = qs.get('tokens_in', [None])[0]
+            to = qs.get('tokens_out', [None])[0]
+            rt = qs.get('reasoning_tokens', [None])[0]
+            ci = qs.get('chars_in', [None])[0]
+            co = qs.get('chars_out', [None])[0]
+            cr = qs.get('chars_reasoning', [None])[0]
+            if not provider or not model:
+                self.send_json({'error': 'provider and model required'}, 400)
+                return
+            t = _get_llm_tracker()
+            t.record(provider, model, project=project,
+                     tokens_in=int(ti) if ti else None,
+                     tokens_out=int(to) if to else None,
+                     reasoning_tokens=int(rt) if rt else None,
+                     chars_in=int(ci) if ci else None,
+                     chars_out=int(co) if co else None,
+                     chars_reasoning=int(cr) if cr else None)
+            self.send_json({'success': True})
+            return
+
+        # ----- OpenAI-compatible chat completions proxy -----
+        # Added 2026-06-04 per lunar todo 8b635506: selena-project-lunar needs
+        # an internal LLM endpoint so the orchestrator / reflection pipeline
+        # can call MiniMax-M3 (or any openclaw/* agent) without each subsystem
+        # having to know the OpenClaw gateway password. This proxy:
+        #   - authenticates the caller with selena-project's own auth
+        #   - forwards the body to http://localhost:18789/v1/chat/completions
+        #     with the gateway's password from ~/.openclaw/openclaw.json
+        #   - records the call in llm_call_tracker so budget tracking sees it
+        #   - returns the gateway's response as-is (OpenAI chat-completions shape)
+        if path == '/v1/chat/completions':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                raw = b''
+                if content_length:
+                    raw = self.rfile.read(content_length)
+                body = json.loads(raw.decode('utf-8')) if raw else {}
+            except (ValueError, json.JSONDecodeError) as e:
+                self.send_json({'error': f'invalid JSON body: {e}'}, 400)
+                return
+            if not isinstance(body, dict):
+                self.send_json({'error': 'body must be a JSON object'}, 400)
+                return
+            if not body.get('messages'):
+                self.send_json({'error': 'messages is required'}, 400)
+                return
+            # Default model → openclaw (gateway routes to minimax-portal/M3).
+            if 'model' not in body or not body['model']:
+                body['model'] = 'openclaw'
+            # Read gateway password (cached after first read).
+            gw_url, gw_pw = _get_openclaw_gateway()
+            if not gw_pw:
+                self.send_json({'error': 'OpenClaw gateway password not found in ~/.openclaw/openclaw.json'}, 503)
+                return
+            import urllib.request
+            import urllib.error
+            payload = json.dumps(body).encode('utf-8')
+            req = urllib.request.Request(
+                f"{gw_url}/v1/chat/completions",
+                data=payload,
+                method='POST',
+                headers={
+                    'Content-Type': 'application/json',
+                    'Authorization': f'Bearer {gw_pw}',
+                },
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    resp_body = resp.read()
+                    resp_status = resp.status
+            except urllib.error.HTTPError as e:
+                # Forward the gateway's error body so the caller sees the real reason.
+                err_body = e.read().decode('utf-8', errors='replace')[:1000]
+                try:
+                    self.send_json(json.loads(err_body), e.code)
+                except Exception:
+                    self.send_json({'error': f'gateway HTTP {e.code}', 'detail': err_body}, e.code)
+                return
+            except Exception as e:
+                self.send_json({'error': f'gateway request failed: {e}'}, 502)
+                return
+            # Parse the gateway response so we can pull the real usage field
+            # (tokens) and the assistant text (for char counts).  This proxy
+            # is the choke point for every lunar-side LLM call (reflection
+            # pipeline, coding worker, etc.), so capturing here is what
+            # makes per-project spend visible to the cost tracker.
+            try:
+                parsed = json.loads(resp_body.decode('utf-8'))
+            except Exception:
+                parsed = {'raw': resp_body.decode('utf-8', errors='replace')[:2000]}
+            # ---- Best-effort budget tracking with real usage + char counts
+            # Don't fail the call if the tracker errors; the response is
+            # the user-facing thing and we already paid the token cost.
+            try:
+                usage = (parsed.get('usage') or {}) if isinstance(parsed, dict) else {}
+                tokens_in = usage.get('prompt_tokens')
+                tokens_out = usage.get('completion_tokens')
+                ctd = usage.get('completion_tokens_details') or {}
+                reasoning_tokens = ctd.get('reasoning_tokens')
+                # Char counts: sum of message contents in + assistant content
+                # out + reasoning out (if present). Cheap (pure-python),
+                # zero-cost, runs only on the proxy path.
+                def _count_msg_chars(msgs):
+                    n = 0
+                    for m in (msgs or []):
+                        c = m.get('content') if isinstance(m, dict) else None
+                        if isinstance(c, str):
+                            n += len(c)
+                        elif isinstance(c, list):
+                            for part in c:
+                                if isinstance(part, dict):
+                                    n += len(part.get('text') or '')
+                    return n
+                chars_in = _count_msg_chars(body.get('messages'))
+                choice0 = ((parsed.get('choices') or [{}])[0]
+                           if isinstance(parsed, dict) else {})
+                msg0 = choice0.get('message') or {}
+                assistant_text = msg0.get('content') or ''
+                if not isinstance(assistant_text, str):
+                    assistant_text = ''
+                reasoning_text = msg0.get('reasoning_content') or ''
+                if not isinstance(reasoning_text, str):
+                    reasoning_text = ''
+                chars_out = len(assistant_text)
+                chars_reasoning = len(reasoning_text)
+                tracker = _get_llm_tracker()
+                tracker.record(
+                    'minimax-portal',
+                    body.get('model', 'openclaw'),
+                    project='project-lunar',
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
+                    reasoning_tokens=reasoning_tokens,
+                    chars_in=chars_in,
+                    chars_out=chars_out,
+                    chars_reasoning=chars_reasoning,
+                )
+            except Exception:
+                pass
+            self.send_json(parsed, resp_status)
+            log_api('GATEWAY_CHAT_COMPLETIONS', f'model={body.get("model")} status={resp_status}')
+            return
+
+        # Fall through to the unified _dispatch_routes table. Handles
+        # routes shared across methods (notably the pending-action POST
+        # routes added 2026-06-04) and returns its own 404 if nothing
+        # matches. This chaining fixes the bug where POST routes had
+        # been pasted into the do_GET body and never fired for non-GET
+        # requests, causing the user to see "Clear failed: Unexpected
+        # token '<'" (server returned 501 + HTML).
+        self._dispatch_routes(path, 'POST')
 
     def do_PUT(self):
         """Handle PUT requests - supports /api/todos/update"""
         parsed = urlparse(self.path)
+        path = parsed.path
         path = parsed.path
         
         # Handle CORS preflight
@@ -2457,7 +3573,112 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
         
         # 404 for unsupported PUT endpoints
-        self.send_json({'error': 'Not found'}, 404)
+        self._dispatch_routes(path, 'PUT')
+
+    def do_DELETE(self):
+        """Handle DELETE requests. As of 2026-06-04 the only DELETE routes
+        are the pending-action delete/clear endpoints. Falls through to 404
+        for anything else.
+        """
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        # ── CORS preflight ──
+        if self.command == 'OPTIONS':
+            self._send_cors_preflight()
+            return
+
+        # ── Pending action delete (normal lane) ──
+        # Path: /api/discord-lookup/pending/<id>
+        if path.startswith('/api/discord-lookup/pending/') and self.command == 'DELETE':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            pending_id = path[len('/api/discord-lookup/pending/'):]
+            if not pending_id:
+                self.send_json({'error': 'id required in path'}, 400)
+                return
+            try:
+                out = subprocess.run(
+                    ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                     'pending', 'delete', '--id', pending_id],
+                    capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                )
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                self.send_json(json.loads(out.stdout))
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # ── Urgent action clear (urgent lane) ──
+        # Path: /api/discord-lookup/pending-urgent/<id>
+        if path.startswith('/api/discord-lookup/pending-urgent/') and self.command == 'DELETE':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            urgent_id = path[len('/api/discord-lookup/pending-urgent/'):]
+            if not urgent_id:
+                self.send_json({'error': 'id required in path'}, 400)
+                return
+            try:
+                out = subprocess.run(
+                    ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                     'pending', 'urgent-clear', '--id', urgent_id],
+                    capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                )
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                self.send_json(json.loads(out.stdout))
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # 404 for unsupported DELETE endpoints
+        self._dispatch_routes(path, 'DELETE')
+
+    def do_PATCH(self):
+        """Handle PATCH requests — Discord Lookup settings update."""
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        if path == '/api/discord-lookup/settings':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                raw = self.rfile.read(length).decode('utf-8') if length else '{}'
+                body = json.loads(raw) if raw else {}
+            except (ValueError, json.JSONDecodeError) as e:
+                self.send_json({'error': f'invalid JSON body: {e}'}, 400)
+                return
+            if not isinstance(body, dict) or not body:
+                self.send_json({'error': 'body must be a non-empty JSON object of {key: value}'}, 400)
+                return
+            results = []
+            for k, v in body.items():
+                if isinstance(v, (list, dict)):
+                    val_str = json.dumps(v)
+                elif isinstance(v, bool):
+                    val_str = 'true' if v else 'false'
+                else:
+                    val_str = str(v)
+                out = subprocess.run(
+                    ['python3', str(Path(SELENA_ROOT) / 'scripts' / 'discord_lookup.py'),
+                     'settings', 'set', '--key', k, '--value', val_str],
+                    capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                )
+                results.append({'key': k, 'ok': out.returncode == 0, 'stdout': out.stdout.strip()[:200],
+                                'stderr': out.stderr.strip()[:200] if out.returncode != 0 else None})
+            log_api('DISCORD_LOOKUP_SETTINGS', f'updated {len(body)} key(s) via PATCH')
+            self.send_json({'success': all(r['ok'] for r in results), 'results': results})
+            return
+
+        # 404 for unsupported PATCH endpoints
+        self._dispatch_routes(path, 'PATCH')
 
 
 def main():

@@ -57,6 +57,52 @@ class TodoManager:
         os.makedirs(DATA_DIR, exist_ok=True)
         self.todos = self._load_todos()
         self.sensitive_todos = self._load_sensitive_todos()
+        # Track file mtime + size so callers can detect external edits without
+        # reading the file. Updated on every load and save. (added 2026-06-05
+        # per selena-project-worker to address loose-end todo 31e876a4.)
+        self._todos_signature = self._file_signature(TODO_FILE)
+        self._sensitive_signature = self._file_signature(SENSITIVE_TODO_FILE)
+
+    @staticmethod
+    def _file_signature(path: str) -> tuple:
+        """Return (mtime_ns, size) for `path`, or (0, 0) if missing/unreadable.
+        Cheap stat() call — used to detect external file edits.
+        """
+        try:
+            st = os.stat(path)
+            return (st.st_mtime_ns, st.st_size)
+        except OSError:
+            return (0, 0)
+
+    def is_stale(self) -> bool:
+        """True if the on-disk file has changed since the last load/save.
+        Cheap check (two stat() calls) — callers can use this to decide
+        whether to call reload() before a read-heavy operation.
+        """
+        return (self._file_signature(TODO_FILE) != self._todos_signature
+                or self._file_signature(SENSITIVE_TODO_FILE) != self._sensitive_signature)
+
+    def reload(self) -> dict:
+        """Re-read todos from disk into memory. Returns a small summary
+        dict so callers (and tests) can confirm what changed. Safe to
+        call any time — does not touch disk writes, only reads.
+
+        Use this after manually editing data/todos.json (or after a
+        backup restore, or any time an external process mutated the
+        file). The next save() will pick up the freshly-loaded state.
+
+        Returns: {"regular": int, "sensitive": int, "stale": bool}
+        """
+        was_stale = self.is_stale()
+        self.todos = self._load_todos()
+        self.sensitive_todos = self._load_sensitive_todos()
+        self._todos_signature = self._file_signature(TODO_FILE)
+        self._sensitive_signature = self._file_signature(SENSITIVE_TODO_FILE)
+        return {
+            "regular": len(self.todos),
+            "sensitive": len(self.sensitive_todos),
+            "stale": was_stale,
+        }
 
     def _load_todos(self) -> list:
         """Load non-sensitive todos from file."""
@@ -152,12 +198,16 @@ class TodoManager:
         self._backup_todos(self.todos, "todos.json")
         with open(TODO_FILE, 'w') as f:
             json.dump(self.todos, f, indent=2)
+        # Refresh signature so is_stale() stays accurate after our own writes
+        # (added 2026-06-05 per selena-project-worker — see reload()).
+        self._todos_signature = self._file_signature(TODO_FILE)
 
     def _save_sensitive_todos(self):
         """Save sensitive todos to file (creates backup first)."""
         self._backup_todos(self.sensitive_todos, "todos.env")
         with open(SENSITIVE_TODO_FILE, 'w') as f:
             json.dump(self.sensitive_todos, f, indent=2)
+        self._sensitive_signature = self._file_signature(SENSITIVE_TODO_FILE)
 
     def _now(self) -> str:
         """Get current ISO timestamp."""
@@ -211,7 +261,8 @@ class TodoManager:
                  agent_id: Optional[str] = None,
                  project: Optional[str] = None,
                  agent_owner: Optional[str] = None,
-                 what_happened: Optional[str] = None) -> dict:
+                 what_happened: Optional[str] = None,
+                 dedup: bool = False) -> dict:
         """
         Add a new todo.
 
@@ -236,10 +287,29 @@ class TodoManager:
                 when an agent/worker marks the todo as `completed` or `done` —
                 captures the actual outcome so reviewers don't have to read the
                 full session transcript. (2026-06-03 per Arcurus.)
+            dedup: When True (default False for backward compat), first run
+                find_open_by_signature(short_desc, creator_id) and return the
+                existing open/in_progress todo if one matches instead of
+                creating a new record. Saves a save_todo_list() call and an
+                API round-trip when the caller would have caught the duplicate
+                anyway. Recommended for crons and any bulk-add path. Added
+                2026-06-05 per selena-project-worker (implements
+                heartbeat.md §3c recommendation).
 
         Returns:
-            The created todo dict
+            The created todo dict. If dedup=True and a matching open todo
+            already exists, returns that existing todo (a fresh copy with
+            no new id, no new created_at).
         """
+        # Defensive dedup (added 2026-06-05): if dedup=True and a matching
+        # open todo exists, return it instead of creating a duplicate.
+        # API handlers (do_GET /api/todos/mark-done and do_POST /api/todos/add)
+        # already do this at the API layer; this moves the check into the
+        # manager so non-API callers (crons, scripts) get the same protection.
+        if dedup and creator_id and short_desc:
+            existing = self.find_open_by_signature(short_desc, creator_id)
+            if existing:
+                return existing
         todo = {
             "id": str(uuid.uuid4())[:8],
             "short_desc": short_desc,

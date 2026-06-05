@@ -1,6 +1,6 @@
 # Selena v2 - API Documentation
 
-*Last Updated: 2026-04-19*
+*Last Updated: 2026-06-04*
 
 ## Base URL
 ```
@@ -40,7 +40,9 @@ Login to get an auth token.
 ### Get LLM Call Status
 **GET** `/api/llm-calls`
 
-Get current LLM call usage and limit.
+Get current LLM call usage and limit. Legacy endpoint that reads
+`data/llm_calls.json` directly — fast, but provider-agnostic. Prefer
+`/api/llm-usage` for new code.
 
 **Response:**
 ```json
@@ -52,6 +54,102 @@ Get current LLM call usage and limit.
   "reset_info": "Token plan refreshes every 5 hours"
 }
 ```
+
+### Get Rich LLM Usage
+**GET** `/api/llm-usage`
+
+Multi-provider status: MiniMax token-plan quota per model, xAI / OpenRouter
+local-only counters, per-provider 5h window, per-project allocation, polling
+health, and any budget warnings. Backed by `code/llm_call_tracker.py`.
+
+**Query parameters:**
+- `sync=1` — force-refresh quotas from provider APIs before responding (slow,
+  may rate-limit; default is to use the in-memory cache).
+
+**Response (excerpt — see `llm_call_tracker.py:status()` for the full shape):**
+```json
+{
+  "schema_version": 2,
+  "window_hours": 5,
+  "limits": { "hard_per_5h": 4500, "target_per_5h": 4000, "buffer_per_5h": 500 },
+  "local": { "calls_5h": 0, "calls_1h": 0, "per_provider_5h": {}, "per_project_5h": {} },
+  "providers": {
+    "minimax": { "kind": "token_plan", "quota": { "ok": true, "models": { "general": { "window_5h": { "remaining_percent": 76 } }, "video": { "window_5h": { "remaining_percent": 100 } } } } },
+    "xai":     { "kind": "oauth",      "quota": { "ok": false, "source": "local_only", "error": "no XAI_API_KEY in env" } }
+  },
+  "allocations": {
+    "open-world-selena": { "allocated_5h": 900,  "used_5h": 0, "remaining_5h": 900 },
+    "openlife":          { "allocated_5h": 2700, "used_5h": 0, "remaining_5h": 2700 },
+    "selena":            { "allocated_5h": 450,  "used_5h": 0, "remaining_5h": 450 },
+    "buffer":            { "allocated_5h": 450,  "used_5h": 0, "remaining_5h": 450 }
+  },
+  "warnings": []
+}
+```
+
+### Force-Refresh Quotas
+**GET** `/api/llm-usage/sync`
+
+Always hits the provider APIs (MiniMax `/v1/token_plan/remains`, etc.) and
+returns the refreshed view. Use sparingly.
+
+### Get Time-Series Buckets
+**GET** `/api/llm-usage/timeseries?hours=24`
+
+Hourly buckets per provider plus a `total` line, for the web-UI chart.
+`hours` is clamped to `[1, 168]` (1 hour to 1 week).
+
+### Pre-Action Budget Check
+**GET** `/api/llm-usage/budget?project=open-world-selena&additional=10`
+
+Returns `ok: true|false` plus `remaining_5h_for_project`,
+`global_remaining_5h`, and any active `warnings`. **Default project** is
+`open-world-selena` (callers SHOULD pass `project=` explicitly).
+
+### Pre-Action Gate
+**GET** `/api/llm-usage/check?project=<p>&additional=<n>` (alias: `/api/llm-usage/gate`)
+
+Per Arcurus 2026-06-03: "postpone autonomous / resource-intensive tasks until
+the next refresh." Use this in any cron / sub-agent that burns > ~10 LLM
+calls before doing the work. Returns `{ should_proceed, reason, retry_after_s, ... }`.
+
+### Block Until Budget Allows
+**GET** `/api/llm-usage/wait?project=<p>&additional=<n>&max-wait-s=1800`
+
+Same as `check`, but blocks (polling, no LLM calls) until the budget allows
+the action or `max-wait-s` elapses. Returns `waited_s`, `proceeded`, and the
+underlying `check` payload.
+
+### Budget Alert State
+**GET** `/api/llm-usage/alert-state`
+
+Read-only snapshot of the per-provider alert state (last fire time, current
+level, etc.). For use in dashboards.
+
+**GET** `/api/llm-usage/alert-test` — run the alert evaluator once and
+return whether an alert fired.
+
+**GET** `/api/llm-usage/alert-reset` — clear alert state for all providers.
+
+### Record an LLM Call
+**GET** `/api/llm-usage/record?provider=minimax&model=MiniMax-M3&project=selena-project&tokens_in=1200&tokens_out=400`
+
+Used by the gateway / notifier to add a call to the local sliding-window
+counter. `tokens_in` / `tokens_out` are optional.
+
+### Pause / Resume a Provider
+**GET** `/api/llm-usage/pause?provider=xai&seconds=1800&reason=quota_exhausted`
+
+Stop polling a provider for `seconds` (max 86400). Useful when you know
+credits are out and don't want the tracker to hammer the API.
+
+**GET** `/api/llm-usage/resume?provider=xai` — clear the pause.
+
+### Increment Legacy Counter
+**GET** `/api/llm-calls/increment`
+
+Bumps the `data/llm_calls.json` counter by 1. Backward-compat shim for
+older callers; prefer `/api/llm-usage/record`.
 
 ---
 
@@ -242,6 +340,28 @@ Mark a todo as done.
   "todo": { ... updated todo ... }
 }
 ```
+
+### Reload Todos from Disk
+**GET** `/api/todos/reload` or **POST** `/api/todos/reload`
+
+Force the in-memory todo list to re-read from `data/todos.json` and `data/todos.env`.
+Useful after manual file edits (vim, scripts, backup restore) — the API server
+caches its todos in memory at boot and won't see external file changes otherwise.
+
+**Response:**
+```json
+{
+  "success": true,
+  "reloaded": { "regular": 621, "sensitive": 0, "stale": true },
+  "was_stale": true
+}
+```
+
+- `regular` / `sensitive` — number of todos loaded from each file
+- `stale` — whether the on-disk file had changed since the last load
+- `was_stale` — same as `reloaded.stale`, kept at the top level for convenience
+
+_(Added 2026-06-05 per selena-project-worker to address loose-end todo `31e876a4`.)_
 
 ### Mark Todo as Blocked
 **POST** `/api/todos/mark-blocked?id=ID&block_reason=REASON&waiting_for=TODO_ID`
@@ -638,6 +758,164 @@ Delete a knowledge entry.
   "success": true
 }
 ```
+
+---
+
+## Cost Tracker
+
+Daily / weekly LLM-cost reports. Backed by `code/cost_tracker.py`.
+
+### Get Cost Report (JSON)
+**GET** `/api/cost-tracker?weekly=0&date=2026-06-04`
+
+Build a structured cost report for the given day (default = today) or, with
+`weekly=1`, the current week. Returns `{ header, sections, data }`.
+
+### Get Cost Report (Markdown)
+**GET** `/api/cost-tracker/markdown?weekly=0&date=2026-06-04`
+
+Same data, rendered as the Markdown that gets posted to `#cost-tracker`.
+
+### Post Cost Report to Discord
+**GET** `/api/cost-tracker/post?channel=<id>&date=2026-06-04&weekly=0`
+
+Manually push the report to the given channel (default = the cost-tracker
+channel from `~/.openclaw/openclaw.json`). Returns the rendered payload,
+truncated to Discord's 2000-char limit.
+
+---
+
+## OpenClaw Usage Reconciler (cron-direct calls)
+
+The cron `agentTurn` jobs (selena-project-worker, selena-open-world-worker,
+selena-slow-heartbeat, etc.) run through the OpenClaw gateway and were
+invisible to the cost tracker until 2026-06-05. The reconciler reads
+`openclaw status --usage --json` and appends a synthesized event for every
+session with non-null `totalTokens` that we haven't seen before, tagged
+`project = "openclaw-direct"`. State is kept in
+`data/reconcile_openclaw_state.json` (capped at 5,000 sessionIds).
+
+CLI:  `python3 code/reconcile_openclaw_usage.py {poll,stats,reset-state,peek}`
+
+Scheduled via systemd user timer (cheaper than an OpenClaw `agentTurn` cron
+because no LLM call is involved):
+```
+~/.config/systemd/user/openclaw-usage-reconcile.service
+~/.config/systemd/user/openclaw-usage-reconcile.timer   # OnUnitActiveSec=5min
+ExecStart=~/openclaw/workspace/selena-project/scripts/reconcile_openclaw_usage.sh
+```
+Enable with: `systemctl --user enable --now openclaw-usage-reconcile.timer`.
+Logs: `data/reconcile_openclaw.log` (last 200 lines, trimmed on each run).
+
+The `openclaw-direct` allocation in `PROJECT_ALLOCATIONS`
+(`code/llm_call_tracker.py`) is 0.05 (225 calls / 5h). Reduce other projects
+if the cron calls exceed the cap.
+
+---
+
+## Discord Notifier
+
+Per Arcurus 2026-06-03, every cron that posts to Discord SHOULD go through
+these endpoints (or the `post-to-discord.sh` CLI) instead of OpenClaw's
+delivery pipeline — the cron `announce` mode is broken with "Unsupported
+channel" errors. All sends are logged to `data/discord_send_log.jsonl` with
+`project` / `agent` / `task` tags for downstream stats.
+
+### Notifier Status
+**GET** `/api/discord/status`
+
+Returns whether the notifier is enabled, the bot's username, the default
+channel id, and a recent-send summary.
+
+### Send a Message
+**GET or POST** `/api/discord/send?channel=<id>&project=<p>&agent=<a>&task=<t>`
+
+Send `text` to a channel. The text body can be passed as the `text=` query
+parameter (GET) or as the raw request body (POST). `channel` is optional;
+when omitted, falls back to the configured default. Returns
+`{ success, channel_id, length, ... }`.
+
+### Send Stats
+**GET** `/api/discord/stats`
+
+Aggregate counts from the send log: total sends, success rate, top
+projects, top agents, last 24h / 7d / 30d.
+
+### Recent Sends
+**GET** `/api/discord/recent?limit=20`
+
+Tail the send log. `limit` is clamped to `[1, 1000]`. Useful for
+debugging "did the cron actually post?" questions.
+
+---
+
+## Cron Job Tracker
+
+Mirror of the `code/cron_tracker.py` CLI. **All endpoints require auth.**
+Mutating endpoints (`enable`, `disable`, `model`, `context`) call `log_api`
+on every change.
+
+### List Jobs
+**GET** `/api/cron/list`
+
+Returns every job from `~/.openclaw/cron/jobs.json` with its full metadata
+(name, schedule, payload model, wake mode, delivery, last run, etc.).
+
+### Job Status
+**GET** `/api/cron/status?ref=<name|id>`
+
+Summary for one job. `ref` can be the job's `id`, `name`, or any unique
+substring. 404 if not uniquely matched.
+
+### Enable / Disable
+**GET** `/api/cron/enable?ref=<ref>`
+
+**GET** `/api/cron/disable?ref=<ref>&reason=...`
+
+Flip a job's `enabled` flag. Disabling also accepts a `reason` that gets
+written to the job's metadata for later auditing.
+
+### Set Model / Context
+**GET** `/api/cron/model?ref=<ref>&model=minimax-portal/MiniMax-M3`
+
+**GET** `/api/cron/context?ref=<ref>&max_tokens=8000`
+
+Override the model or the maximum context length for a job. `max_tokens`
+must be a positive integer.
+
+### Read Instructions
+**GET** `/api/cron/instructions?ref=<ref>`
+
+Returns the `payload.message` (or `payload.text`) of a job — the system
+prompt the agent sees when it wakes. Useful when you need to read the
+current cron prompt without going through the gateway.
+
+---
+
+## World Backup
+
+Daily snapshot of `open-world-selena/world_data/save.owbl` into
+`selena-project/data/backups/save-daily-YYYYMMDD.owbl`, with 30-day rotation
+and a Discord warning if the new backup suddenly loses > 50% of the previous
+size (catches silent wipe / corruption). Backed by `code/world_backup.py`.
+
+### Backup Status
+**GET** `/api/world/backup/status`
+
+Returns `count`, `newest`, `oldest`, `total_bytes`, `retention_days=30`,
+`warn_ratio=0.5`.
+
+### List Backups
+**GET** `/api/world/backup/list`
+
+Full list of backups with per-file `{ date_iso, path, size_bytes, age_days }`.
+
+### Take a Backup Now
+**GET** `/api/world/backup/run?channel=<id>&dry_run=0`
+
+Run the daily backup immediately. `dry_run=1` returns what *would* happen
+without touching the filesystem. `channel=<id>` overrides the warning
+target.
 
 ---
 
