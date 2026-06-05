@@ -146,6 +146,24 @@
         </a>
       </div>
 
+      <!--
+        hero-moon variants (reversible):
+          v1 (original SVG, 2026-06-04) — see hero-moon-v1 below
+          v2 (still image, 2026-06-05) — <img src="assets/selene.png" class="moon-img" />
+          v3 (animated video circle, 2026-06-05) — current
+        To revert: replace the <video> block with the v2 <img> or the v1 <svg> below.
+      -->
+      <div class="hero-moon" aria-hidden="true">
+        <div class="moon-disc">
+          <video class="moon-video" src="assets/selene-hero.mp4" autoplay loop muted playsinline preload="auto" aria-hidden="true"></video>
+        </div>
+      </div>
+      <!--
+      <div class="hero-moon" aria-hidden="true">
+        <img src="assets/selene.png" alt="" class="moon-img" />
+      </div>
+      -->
+      <!--
       <div class="hero-moon" aria-hidden="true">
         <svg viewBox="0 0 200 200" class="moon-svg">
           <defs>
@@ -171,6 +189,7 @@
           <circle cx="108" cy="140" r="2" fill="#9b8254" opacity="0.2" />
         </svg>
       </div>
+      -->
     </section>
 
     <!-- ───── 2. letter ───── -->
@@ -293,6 +312,7 @@
         the moon is real (or close enough) · for arcurus ·
         2026
       </p>
+      <p class="copyright">© 2026 selena astra · all rights reserved</p>
     </section>
   </main>
 
