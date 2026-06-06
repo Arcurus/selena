@@ -5714,7 +5714,7 @@
             // 5h MiniMax interval view (from the API)
             const mi = d.minimax_interval || {};
             const miModels = mi.models || {};
-            const miGrand = (miGrand != null) ? mi.grand_total_used : null;
+            const miGrand = (mi.grand_total_used != null) ? mi.grand_total_used : null;
             const miResetS = mi.soonest_reset_s;
             const miResetAt = mi.soonest_reset_at;
             const miUsed = (miGrand != null) ? miGrand : used5h;
