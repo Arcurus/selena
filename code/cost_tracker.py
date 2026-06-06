@@ -207,9 +207,24 @@ def _build_openclaw_section(target_date: str) -> Optional[Dict[str, Any]]:
     eur = s["estCostUsd"] * EUR_PER_USD
     lines: List[str] = [
         f"Sessions: **{s['events']}** (distinct: {s['distinct_sessions']})",
-        f"Tokens in/out: **{s['tokensIn']:,}** / **{s['tokensOut']:,}** (cache reads: {s['cacheRead']:,})",
+        f"Tokens in/out: **{s['tokensIn']:,}** / **{s['tokensOut']:,}** (cache reads: {s['cacheRead']:,} — hit ratio **{s.get('cacheHitRatio', 0)*100:.1f}%**)",
         f"Est. spend (token-priced): **${s['estCostUsd']:.4f}** (~€{eur:.4f})",
     ]
+    # Fallback attribution: how many sessions used the configured
+    # primary model vs fell back. Important for catching gateway
+    # health issues.
+    fb = s.get("fallback_count", 0)
+    pr = s.get("primary_count", 0)
+    if fb > 0 or pr > 0:
+        total = fb + pr
+        fb_pct = (fb / total * 100) if total else 0
+        lines.append(f"Model selection: **{pr}** primary, **{fb}** fallback ({fb_pct:.0f}% fallback rate)")
+    if s.get("per_model_cache_hit_ratio"):
+        # Show top 3 models' hit ratios so it's clear which model
+        # is benefiting from prompt caching.
+        hrh = s["per_model_cache_hit_ratio"]
+        top = ", ".join(f"`{m}`: {r*100:.1f}%" for m, r in list(hrh.items())[:3])
+        lines.append(f"Cache hit ratio per model: {top}")
     if s["per_kind"]:
         kind_str = ", ".join(f"{k}: {n}" for k, n in list(s["per_kind"].items())[:6])
         lines.append(f"Kinds: {kind_str}")

@@ -544,10 +544,37 @@ def _process_one(
         # ingest). fileMtime alone is unreliable (it can change from
         # filesystem metadata updates without the session actually
         # being touched), so we only re-record on real progression.
-        if prior.get("updatedAt", -1) >= updated_at:
+        # Also: if the prior record is missing the v3 fields
+        # (isFallback / cacheHitRatio / configuredModel), the schema
+        # was upgraded after the row was written, so re-emit to
+        # upgrade it. Default to False so older state entries
+        # (pre-v3) get re-recorded.
+        prior_has_v3 = bool(prior.get("has_v3_fields", False))
+        if prior.get("updatedAt", -1) >= updated_at and prior_has_v3:
             return sid, "skipped"
 
     # If prior was a "no-tokens" placeholder, allow update
+    # Capture model-selection context from sessions.json (if present)
+    # so we can attribute "primary" vs "fallback-N" and the gateway's
+    # reason when one is recorded. These fields are null for sessions
+    # that ran on the primary model.
+    configured_model = sess.get("configuredModel") or None
+    selected_model = sess.get("selectedModel") or None
+    model_selection_reason = sess.get("modelSelectionReason") or None
+    is_fallback = bool(
+        configured_model and selected_model
+        and configured_model != selected_model
+    )
+
+    # Cache hit ratio: cacheRead / (cacheRead + non-cached input).
+    # Useful as a model-efficiency metric — a high hit ratio means
+    # the system prompt + conversation context is being reused
+    # instead of re-billed as input.
+    cache_read = parsed["cacheRead"]
+    tokens_in = parsed["tokensIn"]
+    total_input = cache_read + tokens_in
+    cache_hit_ratio = (cache_read / total_input) if total_input > 0 else 0.0
+
     rec = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "sessionId": sid,
@@ -557,13 +584,18 @@ def _process_one(
         "agentId": agent_id,
         "model": model,
         "provider": provider,
+        "configuredModel": configured_model,
+        "selectedModel": selected_model,
+        "modelSelectionReason": model_selection_reason,
+        "isFallback": is_fallback,
         "startedAt": parsed["startedAt"],
         "updatedAt": updated_at,
         "runtimeMs": parsed["runtimeMs"],
-        "tokensIn": parsed["tokensIn"],
+        "tokensIn": tokens_in,
         "tokensOut": parsed["tokensOut"],
-        "cacheRead": parsed["cacheRead"],
+        "cacheRead": cache_read,
         "cacheWrite": parsed["cacheWrite"],
+        "cacheHitRatio": round(cache_hit_ratio, 4),
         "turnCount": parsed["turnCount"],
         "estCostUsd": round(parsed["costUsd"], 6),
         "source": "openclaw-usage-tracker-v2",
@@ -577,6 +609,7 @@ def _process_one(
         "model": model,
         "updatedAt": updated_at,
         "fileMtime": file_mtime_ms,
+        "has_v3_fields": True,
     }
     return sid, status
 
@@ -696,21 +729,30 @@ def _filter_events(
 
 
 def _build_stats(events: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Build a stats blob from filtered events."""
+    """Build a stats blob from filtered events. Includes per-model
+    cache-hit ratios and a fallback breakdown so the daily report /
+    web UI can flag sessions where the gateway chose a fallback model."""
     per_model: Counter = Counter()
     per_provider: Counter = Counter()
     per_kind: Counter = Counter()
     per_agent: Counter = Counter()
     per_cron: Counter = Counter()
     per_channel: Counter = Counter()
+    per_selection_reason: Counter = Counter()
+    fallback_count = 0
+    primary_count = 0
     tokens_in = 0
     tokens_out = 0
     cache_read = 0
     cost_total = 0.0
     distinct_sessions: set = set()
     last_event_ts: Optional[str] = None
+    # Per-model: aggregate cache hit metrics so we can show hit ratio
+    # per model. Key: model name; value: {cacheRead, tokensIn, count}.
+    per_model_cache: Dict[str, Dict[str, int]] = {}
     for e in events:
-        per_model[e.get("model") or "unknown"] += 1
+        model = e.get("model") or "unknown"
+        per_model[model] += 1
         per_provider[e.get("provider") or "unknown"] += 1
         per_kind[e.get("kind") or "unknown"] += 1
         per_agent[e.get("agentId") or "unknown"] += 1
@@ -720,6 +762,24 @@ def _build_stats(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         ch = e.get("channel")
         if ch:
             per_channel[ch] += 1
+        # Fallback attribution: isFallback boolean + reason text
+        if e.get("isFallback"):
+            fallback_count += 1
+        else:
+            primary_count += 1
+        reason = e.get("modelSelectionReason") or ("(primary)" if not e.get("isFallback") else "(unspecified)")
+        per_selection_reason[reason] += 1
+        # Per-model cache aggregation
+        cm = per_model_cache.setdefault(model, {"cacheRead": 0, "tokensIn": 0, "count": 0})
+        try:
+            cm["cacheRead"] += int(e.get("cacheRead") or 0)
+        except (TypeError, ValueError):
+            pass
+        try:
+            cm["tokensIn"] += int(e.get("tokensIn") or 0)
+        except (TypeError, ValueError):
+            pass
+        cm["count"] += 1
         try:
             tokens_in += int(e.get("tokensIn") or 0)
         except (TypeError, ValueError):
@@ -742,19 +802,33 @@ def _build_stats(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         ts = e.get("ts")
         if ts and (not last_event_ts or ts > last_event_ts):
             last_event_ts = ts
+    # Compute overall + per-model cache hit ratios
+    total_input_for_ratio = tokens_in + cache_read
+    overall_cache_hit_ratio = (
+        cache_read / total_input_for_ratio if total_input_for_ratio > 0 else 0.0
+    )
+    per_model_hit_ratio = {}
+    for m, d in per_model_cache.items():
+        tot = d["tokensIn"] + d["cacheRead"]
+        per_model_hit_ratio[m] = round(d["cacheRead"] / tot, 4) if tot > 0 else 0.0
     return {
         "events": len(events),
         "distinct_sessions": len(distinct_sessions),
         "tokensIn": tokens_in,
         "tokensOut": tokens_out,
         "cacheRead": cache_read,
+        "cacheHitRatio": round(overall_cache_hit_ratio, 4),
         "estCostUsd": round(cost_total, 6),
         "per_model": dict(per_model.most_common()),
+        "per_model_cache_hit_ratio": per_model_hit_ratio,
         "per_provider": dict(per_provider.most_common()),
         "per_kind": dict(per_kind.most_common()),
         "per_agent": dict(per_agent.most_common()),
         "per_cron": dict(per_cron.most_common(20)),
         "per_channel": dict(per_channel.most_common(20)),
+        "per_selection_reason": dict(per_selection_reason.most_common()),
+        "fallback_count": fallback_count,
+        "primary_count": primary_count,
         "last_event_ts": last_event_ts,
     }
 

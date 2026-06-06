@@ -535,16 +535,22 @@
                 <!-- KPI cards -->
                 <div class="cost-summary" id="llmUsageKpis"></div>
 
-                <!-- Bar chart: 5h calls by provider (incl. target line) -->
+                <!-- Bar chart: 5h USAGE by PROVIDER (incl. target line) -->
                 <div class="graph-container" style="margin-top: 20px;">
-                    <h3>📊 Calls by Provider (last 5h)</h3>
+                    <h3>📊 Usage per Provider (last 5h, calls)</h3>
                     <canvas id="llmUsageBarChart" class="graph-canvas" style="width:100%; height:240px;"></canvas>
+                </div>
+
+                <!-- Bar chart: 5h USAGE by PROJECT -->
+                <div class="graph-container" style="margin-top: 20px;">
+                    <h3>📊 Usage per Project (last 5h, calls)</h3>
+                    <canvas id="llmUsageProjectBarChart" class="graph-canvas" style="width:100%; height:240px;"></canvas>
                 </div>
 
                 <!-- Line chart: calls over time, per provider + total -->
                 <div class="graph-container" style="margin-top: 20px;">
                     <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap: wrap;">
-                        <h3 style="margin:0;">📈 Calls Over Time</h3>
+                        <h3 style="margin:0;">📈 Calls Over Time — by Provider</h3>
                         <button class="save-btn" onclick="loadLLMTimeseries(1)"  style="width:auto;padding:4px 12px;font-size:0.8rem;">1h</button>
                         <button class="save-btn" onclick="loadLLMTimeseries(6)"  style="width:auto;padding:4px 12px;font-size:0.8rem;">6h</button>
                         <button class="save-btn" onclick="loadLLMTimeseries(24)" style="width:auto;padding:4px 12px;font-size:0.8rem;">24h</button>
@@ -561,9 +567,9 @@
                     <div id="llmUsageProviders"></div>
                 </div>
 
-                <!-- Per-project allocation -->
+                <!-- Per-project allocation (budget share, not raw usage) -->
                 <div class="services-panel" style="margin-top: 20px;">
-                    <h3>🎯 Per-Project Allocation (5h window)</h3>
+                    <h3>🎯 Per-Project Budget Allocation (5h window)</h3>
                     <div id="llmUsageAllocations"></div>
                 </div>
             </div>
@@ -5777,8 +5783,18 @@
                     </div>`;
             });
 
-            // Bar chart (5h usage per provider)
-            drawLLMBarChart(providers, target);
+            // Bar chart: Usage per PROVIDER (last 5h). Use
+            // `local.per_provider_5h` which has the actual call counts
+            // (the `providers` dict mixes quota + local and is missing
+            // call counts for the minimax provider).
+            const perProv5h = (loc && loc.per_provider_5h) || {};
+            drawLLMBarChart(perProv5h, target);
+
+            // Bar chart: Usage per PROJECT (last 5h). Uses
+            // `local.per_project_5h` which is the authoritative per-project
+            // call counter.
+            const perProj5h = (loc && loc.per_project_5h) || {};
+            drawLLMProjectBarChart(perProj5h);
 
             // Provider quota cards
             const provEl = document.getElementById('llmUsageProviders');
@@ -5828,7 +5844,10 @@
             allocEl.innerHTML = allocRows || '<p style="color:var(--text-secondary);">no allocations</p>';
         }
 
-        function drawLLMBarChart(providers, target) {
+        function drawLLMBarChart(perProviderCounts, target) {
+            // perProviderCounts is a simple {name: callCount} map (the
+            // shape of `local.per_provider_5h`). target is the daily
+            // 5h call target for the dashed reference line.
             const canvas = document.getElementById('llmUsageBarChart');
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
@@ -5836,14 +5855,14 @@
             const h = canvas.height = 240;
             ctx.clearRect(0, 0, w, h);
 
-            const entries = Object.entries(providers);
+            const entries = Object.entries(perProviderCounts || {});
             if (entries.length === 0) {
                 ctx.fillStyle = '#888';
                 ctx.fillText('No data yet', w/2 - 40, h/2);
                 return;
             }
 
-            const maxVal = Math.max(target, ...entries.map(([,p]) => p.local_5h_calls || 0));
+            const maxVal = Math.max(target || 0, ...entries.map(([, v]) => v || 0), 1);
             const barW = Math.max(40, Math.floor((w - 80) / entries.length));
             const gap = Math.floor((w - 80 - barW * entries.length) / (entries.length + 1));
             const baseY = h - 40;
@@ -5855,29 +5874,80 @@
             ctx.stroke();
 
             // Target line
-            const targetY = baseY - ((target / maxVal) * (baseY - 30));
-            ctx.strokeStyle = '#ffcc00';
-            ctx.setLineDash([4, 2]);
-            ctx.beginPath();
-            ctx.moveTo(40, targetY);
-            ctx.lineTo(w - 40, targetY);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.fillStyle = '#ffcc00';
-            ctx.fillText('target', w - 70, targetY - 4);
+            if (target && target > 0) {
+                const targetY = baseY - ((target / maxVal) * (baseY - 30));
+                ctx.strokeStyle = '#ffcc00';
+                ctx.setLineDash([4, 2]);
+                ctx.beginPath();
+                ctx.moveTo(40, targetY);
+                ctx.lineTo(w - 40, targetY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.fillStyle = '#ffcc00';
+                ctx.fillText('target', w - 70, targetY - 4);
+            }
 
-            entries.forEach(([name, p], i) => {
+            // Color by provider (minimax-portal -> blue, xai -> orange,
+            // openrouter -> green, others -> grey).
+            const colorFor = (name) => {
+                if (name === 'minimax-portal' || name === 'minimax') return '#4a90e2';
+                if (name === 'xai') return '#ff8c42';
+                if (name === 'openrouter') return '#66bb6a';
+                return '#a06cd5';
+            };
+
+            entries.forEach(([name, val], i) => {
                 const x = 40 + gap + i * (barW + gap);
-                const val = p.local_5h_calls || 0;
-                const barH = (val / maxVal) * (baseY - 30);
+                const v = val || 0;
+                const barH = (v / maxVal) * (baseY - 30);
                 const y = baseY - barH;
 
-                ctx.fillStyle = (name === 'minimax') ? '#4a90e2' : (name === 'xai') ? '#ff8c42' : '#66bb6a';
+                ctx.fillStyle = colorFor(name);
                 ctx.fillRect(x, y, barW - 8, barH);
 
                 ctx.fillStyle = '#ccc';
                 ctx.fillText(name, x + 4, baseY + 14);
-                ctx.fillText(val, x + 4, y - 4);
+                ctx.fillText(v, x + 4, y - 4);
+            });
+        }
+
+        function drawLLMProjectBarChart(perProjectCounts) {
+            // perProjectCounts is a simple {project: callCount} map (the
+            // shape of `local.per_project_5h`). Horizontal bars.
+            const canvas = document.getElementById('llmUsageProjectBarChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width = canvas.offsetWidth || 800;
+            const h = canvas.height = 240;
+            ctx.clearRect(0, 0, w, h);
+
+            const entries = Object.entries(perProjectCounts || {}).sort((a, b) => b[1] - a[1]);
+            if (entries.length === 0) {
+                ctx.fillStyle = '#888';
+                ctx.fillText('No project usage yet', w/2 - 60, h/2);
+                return;
+            }
+
+            const maxVal = Math.max(1, ...entries.map(([, v]) => v || 0));
+            const rowH = Math.min(28, Math.floor((h - 20) / entries.length));
+            const labelW = 160;
+            const valueW = 50;
+            const barAreaW = w - labelW - valueW - 20;
+            ctx.font = '12px sans-serif';
+            entries.forEach(([name, val], i) => {
+                const y = 10 + i * rowH;
+                ctx.fillStyle = '#ccc';
+                ctx.fillText(name, 4, y + rowH/2 + 4);
+                const v = val || 0;
+                const barW = (v / maxVal) * barAreaW;
+                // Distinct color per project so the legend can be
+                // eyeballed against the "Per-Project Budget Allocation"
+                // cards below.
+                const palette = ['#4a90e2','#ff8c42','#66bb6a','#a06cd5','#ffd54f','#26a69a','#ec407a','#7e57c2'];
+                ctx.fillStyle = palette[i % palette.length];
+                ctx.fillRect(labelW, y + 4, barW, rowH - 8);
+                ctx.fillStyle = '#ccc';
+                ctx.fillText(String(v), labelW + barW + 6, y + rowH/2 + 4);
             });
         }
 
