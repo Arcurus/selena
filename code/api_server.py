@@ -12,6 +12,7 @@ Usage:
 import os
 import sys
 import json
+import argparse
 import hashlib
 import datetime
 from datetime import timezone
@@ -41,6 +42,16 @@ from priority_reflector import reflector, PriorityTask, PriorityReflector
 from self_evolution import evolution_loop
 from llm_call_tracker import get_tracker as _get_llm_tracker
 from cost_tracker import build_daily_report as _ct_build_daily, build_weekly_report as _ct_build_weekly_report, render_markdown as _ct_render, post_to_discord as _ct_post
+# OpenClaw session-usage tracker (proper input/output split, all sessions).
+# Lives in code/openclaw_usage.py; this import fails soft so the rest of
+# the API server keeps working if the file isn't there yet.
+try:
+    import openclaw_usage as _openclaw_usage
+except Exception as _imp_err:  # noqa: BLE001
+    _openclaw_usage = None
+    _OPENCLAW_USAGE_IMPORT_ERROR = str(_imp_err)
+else:
+    _OPENCLAW_USAGE_IMPORT_ERROR = None
 from todo_manager import todo_manager
 from knowledge_base import knowledge_base as kb
 from workspace_scanner import scanner, scan_workspace, get_last_scan, get_scan_history
@@ -183,6 +194,25 @@ API_PASSWORD = os.getenv('WEB_PASSWORD', 'change_me')
 # service can keep a single token in its env.  If unset, the record
 # endpoint falls back to user-bearer auth only.
 LLM_RECORD_TOKEN = os.getenv('LLM_RECORD_TOKEN', '').strip()
+
+# Per-agent default channels for /api/discord/send (added 2026-06-06 per
+# Arcurus todo 395bb4b0).  When a caller (e.g. the slow-heartbeat cron)
+# omits the `channel` query param, the API falls back to these instead
+# of the notifier's #selena-project default.  This keeps silent-misroute
+# posts out of #selena-project and routes them to the right lane.
+# Override via env: AGENT_DEFAULT_CHANNELS="agent1=chan1,agent2=chan2".
+AGENT_DEFAULT_CHANNELS = {
+    'slow-heartbeat': '1494781163498246144',  # #heartbeats
+}
+_env_agent_channels = os.getenv('AGENT_DEFAULT_CHANNELS', '').strip()
+if _env_agent_channels:
+    for pair in _env_agent_channels.split(','):
+        if '=' in pair:
+            k, v = pair.split('=', 1)
+            k = k.strip()
+            v = v.strip()
+            if k and v:
+                AGENT_DEFAULT_CHANNELS[k] = v
 SELENA_ROOT = os.path.expanduser('~/openclaw/workspace/selena-project')
 DATA_DIR = os.path.join(SELENA_ROOT, 'data')
 
@@ -784,6 +814,140 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.send_json(t.sync_quotas(force=True))
             return
 
+        # ---- OpenClaw session-usage tracker ----
+        # Proper per-turn input/output/cacheRead/cacheWrite token split
+        # parsed from per-session .jsonl transcripts. The CLI
+        # `python3 code/openclaw_usage.py {backfill,sync,status}` writes
+        # to data/openclaw_usage.jsonl; we serve slices of that log here.
+        if path.startswith('/api/openclaw-usage'):
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            if _openclaw_usage is None:
+                self.send_json({
+                    'error': 'openclaw_usage module not importable',
+                    'import_error': _OPENCLAW_USAGE_IMPORT_ERROR,
+                }, 500)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            sub = path[len('/api/openclaw-usage'):].strip('/')
+            if sub in ('', 'stats'):
+                # Today / 5h / 24h / all-time summary
+                from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+                now = _dt.now(_tz.utc)
+                events = list(_openclaw_usage._iter_events())
+                def _stats_for(since, until=None):
+                    filt = _openclaw_usage._filter_events(events, since=since, until=until)
+                    return _openclaw_usage._build_stats(filt)
+                out = {
+                    'now': now.isoformat(),
+                    'log_file': _openclaw_usage.EVENT_LOG,
+                    'today': _stats_for(now.replace(hour=0, minute=0, second=0, microsecond=0)),
+                    'last_5h': _stats_for(now - _td(hours=5)),
+                    'last_24h': _stats_for(now - _td(hours=24)),
+                    'all_time': _stats_for(_dt(1970, 1, 1, tzinfo=_tz.utc)),
+                }
+                self.send_json(out)
+                return
+            if sub == 'timeseries':
+                try:
+                    hours = int(qs.get('hours', ['24'])[0])
+                except (TypeError, ValueError):
+                    hours = 24
+                dimension = qs.get('dimension', ['model'])[0]
+                if dimension not in ('model', 'provider', 'kind', 'agent', 'project', 'cron'):
+                    dimension = 'model'
+                hours = max(1, min(hours, 168))
+                from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+                now = _dt.now(_tz.utc)
+                events = _openclaw_usage._filter_events(
+                    _openclaw_usage._iter_events(),
+                    since=now - _td(hours=hours),
+                )
+                out = _openclaw_usage._bucketize(events, hours, dimension=dimension)
+                self.send_json(out)
+                return
+            if sub == 'sessions':
+                # Most recent sessions (paged)
+                try:
+                    limit = int(qs.get('limit', ['50'])[0])
+                except (TypeError, ValueError):
+                    limit = 50
+                try:
+                    offset = int(qs.get('offset', ['0'])[0])
+                except (TypeError, ValueError):
+                    offset = 0
+                limit = max(1, min(limit, 500))
+                offset = max(0, offset)
+                events = list(_openclaw_usage._iter_events())
+                # Sort by updatedAt desc; missing goes to end
+                def _k(e):
+                    ua = e.get('updatedAt')
+                    if isinstance(ua, (int, float)):
+                        return ua
+                    if isinstance(ua, str):
+                        try:
+                            return _dt.fromisoformat(ua.replace('Z', '+00:00')).timestamp() * 1000
+                        except (ValueError, AttributeError):
+                            return 0
+                    return 0
+                events.sort(key=_k, reverse=True)
+                page = events[offset:offset + limit]
+                self.send_json({
+                    'total': len(events),
+                    'limit': limit,
+                    'offset': offset,
+                    'sessions': page,
+                })
+                return
+            if sub == 'cron-jobs':
+                # Resolve cron-job IDs to friendly names via openclaw cron list
+                try:
+                    import subprocess as _sp
+                    proc = _sp.run(
+                        ['openclaw', 'cron', 'list', '--json'],
+                        capture_output=True, text=True, timeout=10,
+                    )
+                    if proc.returncode == 0:
+                        try:
+                            jobs = json.loads(proc.stdout)
+                        except json.JSONDecodeError:
+                            jobs = []
+                    else:
+                        jobs = []
+                except Exception as e:  # noqa: BLE001
+                    jobs = []
+                id_to_name = {}
+                items = jobs.get('jobs') if isinstance(jobs, dict) else jobs
+                if isinstance(items, list):
+                    for j in items:
+                        if isinstance(j, dict):
+                            jid = j.get('id') or j.get('jobId')
+                            nm = j.get('name') or '?'
+                            if jid:
+                                id_to_name[jid] = nm
+                self.send_json({'jobs': id_to_name})
+                return
+            if sub == 'sync':
+                # Force a sync (reads sessions.json + per-session .jsonl)
+                counts = _openclaw_usage.cmd_sync(argparse.Namespace())
+                self.send_json({'ok': True, 'counts': counts})
+                return
+            # Unknown sub
+            self.send_json({'error': f'unknown sub: {sub}'}, 404)
+            return
+
+        if path == '/api/llm-usage/sync':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            t = _get_llm_tracker()
+            self.send_json(t.sync_quotas(force=True))
+            return
+            t = _get_llm_tracker()
+            self.send_json(t.sync_quotas(force=True))
+            return
+
         # Time-series buckets for the web-UI line chart.  Hourly buckets,
         # per-provider counts + total.  Window: 1h..168h (1 week).
         if path == '/api/llm-usage/timeseries':
@@ -808,6 +972,23 @@ class RequestHandler(BaseHTTPRequestHandler):
             additional = int(qs.get('additional', ['1'])[0])
             t = _get_llm_tracker()
             self.send_json(t.check_budget(project, additional))
+            return
+
+        # Per-project drill-down (todo 8c269253, added 2026-06-06).
+        # Returns all-time (or last N days) totals per project, with
+        # model/provider breakdown and last-call timestamp.  Backed by
+        # the JSONL event log so it survives deque rollover.
+        if path == '/api/llm-usage/per-project':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            try:
+                days = int(qs.get('days', ['7'])[0])
+            except (TypeError, ValueError):
+                days = 7
+            t = _get_llm_tracker()
+            self.send_json(t.per_project_breakdown(days=days))
             return
 
         # Pre-action gate (per Arcurus 2026-06-03: "postpone autonomous
@@ -1060,6 +1241,14 @@ class RequestHandler(BaseHTTPRequestHandler):
             project = qs.get('project', [''])[0]
             agent = qs.get('agent', [''])[0]
             task = qs.get('task', [''])[0]
+            # Per-agent channel default (todo 395bb4b0): if the caller
+            # forgot to pass `channel=` and the agent has a known default
+            # (e.g. slow-heartbeat -> #heartbeats), use it instead of
+            # silently falling back to the notifier's #selena-project
+            # default.  This prevents recurring misroutes from cron jobs
+            # that build the curl without an explicit channel.
+            if not channel_id and agent and agent in AGENT_DEFAULT_CHANNELS:
+                channel_id = AGENT_DEFAULT_CHANNELS[agent]
             # text is the raw body (POST) or 'text' query param (GET)
             text = ''
             if self.command == 'POST':
@@ -1832,6 +2021,174 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.send_json({'success': True, 'message': 'Restored from latest backup'})
             else:
                 self.send_json({'success': False, 'error': 'No backups available'}, 404)
+            return
+
+        # ===== Failure reporter endpoints (todo 5d1ae721) =====
+        # All require auth. Read-only endpoints (list/summary) accept
+        # query-string filters that mirror failure_reporter.py CLI flags.
+        # Mutating endpoints (acknowledge/resolve/report) call the CLI
+        # under selena-project/code/failure_reporter.py — never import
+        # the module directly so the CLI surface stays the single source
+        # of truth (same pattern as discord-lookup endpoints above).
+        # Storage: data/failures.jsonl.
+
+        _failure_cli = [str(Path(SELENA_ROOT) / 'code' / 'failure_reporter.py')]
+
+        if path == '/api/failures' and self.command == 'GET':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                cmd = _failure_cli + ['list', '--format', 'json']
+                qs = parse_qs(parsed.query)
+                if 'limit' in qs:
+                    try:
+                        cmd += ['--limit', str(max(0, min(int(qs['limit'][0]), 1000)))]
+                    except ValueError:
+                        pass
+                if qs.get('status', [''])[0]:
+                    cmd += ['--status', qs['status'][0]]
+                if qs.get('severity', [''])[0]:
+                    cmd += ['--severity', qs['severity'][0]]
+                if qs.get('agent', [''])[0]:
+                    cmd += ['--agent', qs['agent'][0]]
+                if qs.get('since', [''])[0]:
+                    cmd += ['--since', qs['since'][0]]
+                out = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                )
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                payload = json.loads(out.stdout)
+                self.send_json({
+                    'count': payload.get('count', 0),
+                    'rows': payload.get('rows', []),
+                })
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        if path == '/api/failures/summary' and self.command == 'GET':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            try:
+                cmd = _failure_cli + ['summary']
+                qs = parse_qs(parsed.query)
+                if qs.get('status', [''])[0]:
+                    cmd += ['--status', qs['status'][0]]
+                if qs.get('since', [''])[0]:
+                    cmd += ['--since', qs['since'][0]]
+                out = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                )
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                self.send_json(json.loads(out.stdout))
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        if path.startswith('/api/failures/') and path.endswith('/acknowledge') and self.command == 'POST':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            failure_id = path[len('/api/failures/'):-len('/acknowledge')]
+            if not failure_id:
+                self.send_json({'error': 'failure_id required'}, 400)
+                return
+            qs = parse_qs(parsed.query)
+            by = qs.get('by', [''])[0] or 'selena-project-worker'
+            try:
+                out = subprocess.run(
+                    _failure_cli + ['acknowledge', failure_id, '--by', by],
+                    capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                )
+                if out.returncode == 1:
+                    self.send_json({'error': f'failure {failure_id!r} not found'}, 404)
+                    return
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                log_api('FAILURE_ACK', f'id={failure_id} by={by}')
+                self.send_json(json.loads(out.stdout))
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        if path.startswith('/api/failures/') and path.endswith('/resolve') and self.command == 'POST':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            failure_id = path[len('/api/failures/'):-len('/resolve')]
+            if not failure_id:
+                self.send_json({'error': 'failure_id required'}, 400)
+                return
+            qs = parse_qs(parsed.query)
+            note = qs.get('note', [''])[0]
+            by = qs.get('by', [''])[0]
+            try:
+                cmd = _failure_cli + ['resolve', failure_id]
+                if note:
+                    cmd += ['--note', note]
+                if by:
+                    cmd += ['--by', by]
+                out = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                )
+                if out.returncode == 1:
+                    self.send_json({'error': f'failure {failure_id!r} not found'}, 404)
+                    return
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                log_api('FAILURE_RESOLVE', f'id={failure_id} by={by or "?"}')
+                self.send_json(json.loads(out.stdout))
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        if path == '/api/failures/report' and self.command == 'POST':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(parsed.query)
+            agent = qs.get('agent', [''])[0]
+            severity = qs.get('severity', [''])[0]
+            context = qs.get('context', [''])[0]
+            message = qs.get('message', [''])[0]
+            if not (agent and severity and context and message):
+                self.send_json({
+                    'error': 'agent, severity, context, message are all required',
+                    'received': {
+                        'agent': bool(agent), 'severity': bool(severity),
+                        'context': bool(context), 'message': bool(message),
+                    },
+                }, 400)
+                return
+            try:
+                cmd = _failure_cli + [
+                    'report', '--agent', agent, '--severity', severity,
+                    '--context', context, '--message', message,
+                ]
+                if qs.get('project', [''])[0]:
+                    cmd += ['--project', qs['project'][0]]
+                if qs.get('details', [''])[0]:
+                    cmd += ['--details', qs['details'][0]]
+                if qs.get('notify_channel', [''])[0]:
+                    cmd += ['--notify-channel', qs['notify_channel'][0]]
+                out = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=15, cwd=str(SELENA_ROOT)
+                )
+                if out.returncode != 0:
+                    self.send_json({'error': f'CLI exit {out.returncode}', 'stderr': out.stderr[-500:]}, 500)
+                    return
+                log_api('FAILURE_REPORT', f'agent={agent} severity={severity} context={context}')
+                self.send_json(json.loads(out.stdout))
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
             return
 
         # ===== Discord Lookup (new-user scanner + moderation cron trigger) =====
@@ -3280,11 +3637,46 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
 
         # Handle CORS preflight
+
+        # ── POST /api/todos/{id}/done ──
+        # REST-style mark-done endpoint. Added 2026-06-05 per
+        # selena-project-worker to address loose-end todo f2a6f57b
+        # ("Selena v2 API todo endpoint HTTP methods are non-REST"):
+        # the legacy GET /api/todos/mark-done is kept for backward
+        # compat, but new callers should use POST /api/todos/{id}/done.
+        # Body (optional): {"what_happened": "..."} — same field as the
+        # legacy endpoint, passed through to todo_manager.mark_done.
+        if path.startswith('/api/todos/') and path.endswith('/done') and path.count('/') == 4:
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            todo_id = path[len('/api/todos/'):-len('/done')]
+            if not todo_id:
+                self.send_json({'success': False, 'error': 'id required in path'}, 400)
+                return
+            # Optional body for what_happened; tolerate empty/no body.
+            what_happened = None
+            try:
+                content_length = int(self.headers.get('Content-Length', '0'))
+                if content_length:
+                    raw = self.rfile.read(content_length).decode('utf-8') or '{}'
+                    body = json.loads(raw)
+                    if isinstance(body, dict):
+                        what_happened = body.get('what_happened')
+            except (ValueError, json.JSONDecodeError):
+                what_happened = None
+            todo = todo_manager.mark_done(todo_id, what_happened=what_happened)
+            if todo:
+                self.send_json({'success': True, 'todo': todo, 'endpoint': 'POST /api/todos/{id}/done'})
+            else:
+                self.send_json({'success': False, 'error': 'Todo not found'}, 404)
+            return
+
         if path == '/api/todos/add':
             if not self.authenticate():
                 self.send_json({'error': 'Unauthorized'}, 401)
                 return
-            
+
             # Read JSON body
             content_length = int(self.headers.get('Content-Length', 0))
             if content_length == 0:
