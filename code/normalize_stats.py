@@ -60,6 +60,12 @@ from typing import Any, Dict, List, Optional, Tuple
 HERE = os.path.dirname(os.path.abspath(__file__))
 SELENA_ROOT = os.path.abspath(os.path.join(HERE, ".."))
 
+# Open-world server URL (used by the API client and as
+# the default host for the internal-properties fetcher).
+# This MUST be defined BEFORE fetch_internal_properties
+# (which references it as a default-argument value).
+DEFAULT_HOST = "http://localhost:8081"
+
 # ---------------------------------------------------------------------------
 # Cap constants — MUST mirror the Rust constants in src/main.rs
 # ---------------------------------------------------------------------------
@@ -75,15 +81,116 @@ def compute_cap(power: int) -> int:
 
 
 def stats_sum(props_int: Dict[str, int]) -> int:
-    """Signed sum of all integer properties (power counts)."""
-    return sum(int(v) for v in props_int.values())
+    """Signed sum of all integer properties (power counts).
+
+    Excludes internal / operator-only properties (e.g.
+    `last_processed_other_tick`) so the marker (or any
+    other bookkeeping int) does NOT inflate the over-cap
+    calculation.  See `fetch_internal_properties` for
+    the source list.
+    """
+    excluded = fetch_internal_properties()
+    excluded_ints = set(excluded.get("int", []))
+    return sum(int(v) for k, v in props_int.items() if k not in excluded_ints)
+
+
+# ---------------------------------------------------------------------------
+# Internal properties + system entities
+# ---------------------------------------------------------------------------
+#
+# Per Arcurus 2026-06-07 (#openworld): "best make a list
+# that we can then update if we add new, so all the code
+# that touches properties knows to ignore them.  ...
+# if we add more we just need it ad to the list and not
+# change code again."
+#
+# The Rust binary is the canonical source of truth for
+# the internal-properties list (see
+# `open-world-selena/src/world_data/internal_properties.rs`).
+# This script fetches the list on EVERY call (no cache)
+# so adding a new property to the Rust const is picked
+# up the next time the script runs, without a code
+# change here.  Per Arcurus 2026-06-07: "if we add new
+# there" — the script reads the list fresh on every call.
+#
+# We also skip SYSTEM entities (World Clock, anything
+# tagged `meta`) entirely.  These are bookkeeping
+# entities, not real narrative actors; including them
+# in the stats-cap analysis would either be a no-op
+# (their `day` counter is huge) or a hazard (the
+# normalize step would scale it DOWN, which would be
+# catastrophic).  Mirror of the Rust `is_system_entity()`
+# check: type == "abstract" OR "meta" in tags.
+
+INTERNAL_PROPS_FALLBACK = {
+    "int": ["last_processed_other_tick"],
+    "float": [],
+    "string": [],
+}
+
+
+def fetch_internal_properties(host: str = DEFAULT_HOST) -> Dict[str, list]:
+    """GET /api/internal-properties on the open-world server.
+
+    Always re-fetches (no cache) so adding a new property
+    to the Rust const is picked up the next time the
+    script runs.  The local API call is microseconds, so
+    the re-fetch cost is negligible.
+
+    If the fetch fails (e.g. server down), falls back to
+    a hardcoded `INTERNAL_PROPS_FALLBACK` and prints a
+    warning.  This is a safety net only — the Rust binary
+    is the canonical source of truth and may have
+    additional internal properties that the fallback
+    will not exclude.
+    """
+    try:
+        body = _api_get(host, "/api/internal-properties")
+        data = body.get("data") or {}
+        return {
+            "int": list(data.get("int", [])),
+            "float": list(data.get("float", [])),
+            "string": list(data.get("string", [])),
+        }
+    except Exception as e:
+        print(
+            f"  WARNING: failed to fetch /api/internal-properties from "
+            f"{host} ({e!r}); using hardcoded fallback (only "
+            f"'last_processed_other_tick' will be excluded).  This is a "
+            f"safety net only — the Rust binary is the canonical source "
+            f"of truth and may have additional internal properties that "
+            f"this script will not exclude.",
+            file=sys.stderr,
+        )
+        return dict(INTERNAL_PROPS_FALLBACK)  # shallow copy so callers can't mutate the const
+
+
+def is_system_entity(entity: Dict[str, Any]) -> bool:
+    """True if `entity` is a system / bookkeeping entity
+    (World Clock, anything tagged `meta`).  These should
+    be excluded from the stats-cap analysis entirely.
+
+    Mirror of `WorldEntity::is_system_entity()` in
+    `open-world-selena/src/world_data/WorldEntity.rs`.
+    The condition is:
+
+        entity_type == "abstract" OR "meta" in entity.tags
+
+    Per Arcurus 2026-06-07 (#openworld): "also exclude
+    abstract entitites like the world clock."
+    """
+    if entity.get("entity_type") == "abstract":
+        return True
+    tags = entity.get("tags") or []
+    if "meta" in tags:
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------------
 # API client
 # ---------------------------------------------------------------------------
 
-DEFAULT_HOST = "http://localhost:8081"
 # The open-world server's verify_auth_cookie checks for this
 # literal cookie name=value pair.  No /api/login is involved; the
 # service is trusted on localhost.
@@ -173,11 +280,60 @@ def load_all_entities(host: str) -> List[Dict[str, Any]]:
 
 
 def analyze_entity(entity: Dict[str, Any]) -> Dict[str, Any]:
-    """Compute cap, sum, overage, and the post-normalize new values."""
+    """Compute cap, sum, overage, and the post-normalize new values.
+
+    Excludes:
+      - SYSTEM entities (entity_type == "abstract" or
+        "meta" in tags): the entity is marked with a
+        `system: True` flag in the returned dict, and
+        the cap / sum are NOT computed.  These are
+        bookkeeping entities (World Clock etc.) that
+        should never be touched by normalization.
+        Per Arcurus 2026-06-07 (#openworld): "also
+        exclude abstract entitites like the world
+        clock."
+      - Internal / operator-only properties
+        (e.g. `last_processed_other_tick`) from BOTH
+        the sum calculation AND the new_values scaling.
+        Without this guard, normalizing an over-cap
+        entity would silently scale DOWN the marker
+        (or any other bookkeeping int), which would
+        force reprocessing of all unprocessed actions
+        for that entity on the next LLM call — a
+        catastrophic regression.  Per Arcurus
+        2026-06-07 (#openworld).
+    """
+    if is_system_entity(entity):
+        return {
+            "id": entity.get("id"),
+            "name": entity.get("name"),
+            "entity_type": entity.get("entity_type"),
+            "system": True,
+            "skip_reason": "abstract or meta-tagged (system entity, skipped from stats analysis)",
+            "power": 0,
+            "cap": 0,
+            "sum": 0,
+            "overage": 0,
+            "over_cap": False,
+            "scale": 1.0,
+            "current": {},
+            "new": {},
+            "excluded_from_sum": [],
+        }
     props_int = entity.get("properties_int") or {}
     # Make sure all values are int (the API might return some as floats if
     # serialized weirdly through serde).
     clean_int: Dict[str, int] = {k: int(v) for k, v in props_int.items()}
+    excluded = fetch_internal_properties()
+    excluded_ints = set(excluded.get("int", []))
+    # The sum excludes internal properties (so the
+    # marker doesn't inflate the over-cap count).
+    # The new_values dict preserves internal
+    # properties UNCHANGED (so the marker never
+    # regresses when we apply normalization).
+    clean_int_for_sum: Dict[str, int] = {
+        k: v for k, v in clean_int.items() if k not in excluded_ints
+    }
     power = int(clean_int.get("power", 0))
     cap = compute_cap(power)
     total = stats_sum(clean_int)
@@ -186,8 +342,29 @@ def analyze_entity(entity: Dict[str, Any]) -> Dict[str, Any]:
     scale = (cap / total) if (over_cap and total != 0) else 1.0
     new_values: Dict[str, int] = {}
     if over_cap and total != 0:
+        for k, v in clean_int_for_sum.items():
+            # `power` is the entity's "tier" and drives the
+            # cap formula itself
+            # (`cap = max(1, power*5) + 100`).  Per Arcurus
+            # 2026-06-07 (#openworld): "our script had a
+            # problem that it also reduced the power.  can
+            # you ignore for the next run (if we ever
+            # trigger one) that power is downscaled.  ...
+            # please also restore also their power they had
+            # before the downscaling."
+            # So power is carried through UNCHANGED.
+            if k == "power":
+                new_values[k] = v
+            else:
+                new_values[k] = int(round(v * scale))
+        # Carry over internal properties unchanged.  The
+        # PUT endpoint will receive {key: existing_value}
+        # for each, which is a no-op (matches the current
+        # value) but is explicit and future-proof if the
+        # PUT endpoint ever decides to validate.
         for k, v in clean_int.items():
-            new_values[k] = int(round(v * scale))
+            if k in excluded_ints:
+                new_values[k] = v
     return {
         "id": entity.get("id"),
         "name": entity.get("name"),
@@ -200,6 +377,7 @@ def analyze_entity(entity: Dict[str, Any]) -> Dict[str, Any]:
         "scale": scale,
         "current": clean_int,
         "new": new_values,
+        "excluded_from_sum": list(excluded_ints),
     }
 
 
@@ -207,10 +385,26 @@ def filter_analyzed(
     analyzed: List[Dict[str, Any]],
     only_over: bool,
     entity_type: Optional[str],
+    exclude_id: Optional[str] = None,
+    exclude_type: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     out = analyzed
+    # Always skip system entities (marked with
+    # system: True by analyze_entity).  Defense in
+    # depth: load_all_entities already passes
+    # include_system=false to the API, but if a future
+    # caller passes a list that includes system
+    # entities, this filter still catches them.
+    out = [a for a in out if not a.get("system", False)]
     if entity_type:
         out = [a for a in out if a["entity_type"] == entity_type]
+    if exclude_type:
+        # Support comma-separated list of types to exclude
+        # (e.g. --exclude-type abstract,meta_tagged).
+        excluded_types = {t.strip() for t in exclude_type.split(",") if t.strip()}
+        out = [a for a in out if a["entity_type"] not in excluded_types]
+    if exclude_id:
+        out = [a for a in out if a["id"] != exclude_id]
     if only_over:
         out = [a for a in out if a["over_cap"]]
     return out
@@ -272,7 +466,13 @@ def apply_normalization(
 def cmd_status(args, host: str) -> int:
     entities = load_all_entities(host)
     analyzed = [analyze_entity(e) for e in entities]
-    analyzed = filter_analyzed(analyzed, args.only_over, args.type)
+    analyzed = filter_analyzed(
+        analyzed,
+        args.only_over,
+        args.type,
+        exclude_id=args.exclude_id,
+        exclude_type=args.exclude_type,
+    )
     if args.format == "json":
         # Strip the giant `current` map for the JSON output unless verbose
         out = []
@@ -296,7 +496,13 @@ def cmd_status(args, host: str) -> int:
 def cmd_preview(args, host: str) -> int:
     entities = load_all_entities(host)
     analyzed = [analyze_entity(e) for e in entities]
-    analyzed = filter_analyzed(analyzed, only_over=True, entity_type=args.type)
+    analyzed = filter_analyzed(
+        analyzed,
+        only_over=True,
+        entity_type=args.type,
+        exclude_id=args.exclude_id,
+        exclude_type=args.exclude_type,
+    )
     if not analyzed:
         print("  (no entities over their cap — nothing to normalize)")
         return 0
@@ -322,7 +528,13 @@ def cmd_normalize(args, host: str) -> int:
         return cmd_preview(args, host)
     entities = load_all_entities(host)
     analyzed = [analyze_entity(e) for e in entities]
-    over = filter_analyzed(analyzed, only_over=True, entity_type=args.type)
+    over = filter_analyzed(
+        analyzed,
+        only_over=True,
+        entity_type=args.type,
+        exclude_id=args.exclude_id,
+        exclude_type=args.exclude_type,
+    )
     if not over:
         print("  (no entities over their cap — nothing to normalize)")
         return 0
@@ -393,6 +605,179 @@ def cmd_apply(args, host: str) -> int:
     return 0
 
 
+def cmd_properties(args, host: str) -> int:
+    """List every int/float property used in the world, with
+    sum total and average (sum / count of entities that have
+    the property).  This is the introspection the operator
+    uses to (a) spot which properties are common enough to
+    document for the LLM, and (b) see the magnitude
+    distribution at a glance.
+
+    Excludes the world clock by default (it's a system
+    entity with very large time-counters that would skew
+    the averages and aren't interesting for the LLM).  Pass
+    `--include-system` to include it.
+
+    Properties are split into int and float blocks.  Within
+    each block, the sort is by `entity_count` descending
+    (most-common first), so the LLM-relevant properties
+    surface at the top.  `sum` and `avg` use absolute
+    magnitude (we care about how big the values get, not
+    signed bookkeeping).
+    """
+    entities = load_all_entities(host)
+    if not args.include_system:
+        # Skip the world clock (system entity with giant
+        # time counters that aren't LLM-relevant).
+        entities = [e for e in entities if e.get("entity_type") != "abstract"]
+
+    int_props: Dict[str, List[int]] = {}
+    int_entities: Dict[str, set] = {}
+    float_props: Dict[str, List[float]] = {}
+    float_entities: Dict[str, set] = {}
+
+    for e in entities:
+        eid = e.get("id")
+        for k, v in (e.get("properties_int") or {}).items():
+            int_props.setdefault(k, []).append(int(v))
+            int_entities.setdefault(k, set()).add(eid)
+        for k, v in (e.get("properties_float") or {}).items():
+            float_props.setdefault(k, []).append(float(v))
+            float_entities.setdefault(k, set()).add(eid)
+
+    # Internal / operator-only properties are excluded
+    # from the LLM-facing listings.  They have their own
+    # block at the bottom so the operator can still see
+    # them (e.g. the marker values across entities)
+    # without them being mixed into the LLM-meaningful
+    # block.  Per Arcurus 2026-06-07 (#openworld).
+    excluded = fetch_internal_properties(host)
+    excluded_ints = set(excluded.get("int", []))
+    excluded_floats = set(excluded.get("float", []))
+
+    if args.type:
+        entities = [e for e in entities if e.get("entity_type") == args.type]
+
+    n_entities = len(entities)
+    print(f"  Total entities: {n_entities}")
+    print(f"  Distinct int properties: {len(int_props)}")
+    print(f"  Distinct float properties: {len(float_props)}")
+    print()
+
+    def render_block(label: str, props: Dict[str, list], ents: Dict[str, set], kind: str) -> None:
+        if not props:
+            return
+        # Filter out internal / operator-only properties
+        # from the LLM-visible block.  They get their own
+        # block at the end.
+        if kind == "int":
+            excluded = excluded_ints
+        else:
+            excluded = excluded_floats
+        visible_props = {k: v for k, v in props.items() if k not in excluded}
+        if not visible_props:
+            return
+        print(f"=== {label} ({len(visible_props)} properties) ===")
+        # Sort by entity_count desc, then name asc
+        sorted_keys = sorted(
+            visible_props.keys(),
+            key=lambda k: (-len(ents[k]), k),
+        )
+        # Column widths
+        name_w = max(len(k) for k in sorted_keys + [label.rstrip(' (int)')])
+        name_w = min(28, max(name_w, 10))
+        header = (
+            f"  {'PROPERTY'.ljust(name_w)}  {'COUNT':>5}  "
+            f"{'SUM':>14}  {'AVG':>14}  {'MIN':>10}  {'MAX':>10}"
+        )
+        print(header)
+        print("  " + "-" * (len(header) - 2))
+        for k in sorted_keys:
+            vals = visible_props[k]
+            count = len(vals)
+            s = sum(vals)
+            avg = s / count if count else 0
+            mn = min(vals)
+            mx = max(vals)
+            # Format sum/avg with thousands separator, but keep
+            # small values tight.
+            def fmt(v: float) -> str:
+                if abs(v) >= 10000:
+                    return f"{v:,.0f}"
+                if abs(v) >= 100:
+                    return f"{v:,.1f}"
+                if abs(v) >= 1:
+                    return f"{v:.2f}"
+                return f"{v:.3f}"
+            print(
+                f"  {k.ljust(name_w)}  {count:>5}  "
+                f"{fmt(s):>14}  {fmt(avg):>14}  "
+                f"{fmt(mn):>10}  {fmt(mx):>10}"
+            )
+        print()
+
+    if args.format == "json":
+        out = {
+            "entity_count": n_entities,
+            "int": [
+                {
+                    "name": k,
+                    "count": len(int_props[k]),
+                    "sum": sum(int_props[k]),
+                    "avg": (sum(int_props[k]) / len(int_props[k])) if int_props[k] else 0,
+                    "min": min(int_props[k]),
+                    "max": max(int_props[k]),
+                }
+                for k in sorted(int_props.keys(), key=lambda k: (-len(int_entities[k]), k))
+                if k not in excluded_ints
+            ],
+            "float": [
+                {
+                    "name": k,
+                    "count": len(float_props[k]),
+                    "sum": sum(float_props[k]),
+                    "avg": (sum(float_props[k]) / len(float_props[k])) if float_props[k] else 0,
+                    "min": min(float_props[k]),
+                    "max": max(float_props[k]),
+                }
+                for k in sorted(float_props.keys(), key=lambda k: (-len(float_entities[k]), k))
+                if k not in excluded_floats
+            ],
+            "internal_int": sorted(excluded_ints),
+            "internal_float": sorted(excluded_floats),
+        }
+        print(json.dumps(out, indent=2, default=str))
+    else:
+        render_block("int properties (LLM-visible)", int_props, int_entities, "int")
+        render_block("float properties (LLM-visible)", float_props, float_entities, "float")
+        # Internal / operator-only properties.  Shown in
+        # their own block at the end so the operator can
+        # still see them (e.g. marker values across
+        # entities) without them being mixed into the
+        # LLM-meaningful block.  Per Arcurus 2026-06-07
+        # (#openworld).
+        if excluded_ints or excluded_floats:
+            print("  === internal / operator-only properties (LLM-invisible) ===")
+            for k in sorted(excluded_ints):
+                if k in int_props:
+                    vals = int_props[k]
+                    count = len(vals)
+                    s = sum(vals)
+                    print(f"  - {k} (int): present on {count} entities, sum={s}, range=[{min(vals)}..{max(vals)}]")
+                else:
+                    print(f"  - {k} (int): defined but no entity currently has it set")
+            for k in sorted(excluded_floats):
+                if k in float_props:
+                    vals = float_props[k]
+                    count = len(vals)
+                    s = sum(vals)
+                    print(f"  - {k} (float): present on {count} entities, sum={s:.2f}, range=[{min(vals):.2f}..{max(vals):.2f}]")
+                else:
+                    print(f"  - {k} (float): defined but no entity currently has it set")
+            print()
+    return 0
+
+
 def cmd_constants(args, host: str) -> int:
     out = {
         "STATS_CAP_POWER_MULTIPLIER": STATS_CAP_POWER_MULTIPLIER,
@@ -423,15 +808,21 @@ def main(argv: List[str]) -> int:
     p_status.add_argument("--format", choices=("text", "json"), default="text")
     p_status.add_argument("--type", help="Filter by entity_type (e.g. faction, character, location)")
     p_status.add_argument("--only-over", action="store_true", help="Show only entities over their cap")
+    p_status.add_argument("--exclude-type", default="abstract", help="Comma-separated list of entity_types to exclude (default: 'abstract', which skips the World Clock)")
+    p_status.add_argument("--exclude-id", help="Exclude a specific entity by UUID (e.g. the world clock)")
     p_status.add_argument("--verbose", action="store_true", help="Include current/new values in JSON output")
     p_status.set_defaults(func=cmd_status, only_over=False)
 
     p_preview = sub.add_parser("preview", help="Dry-run: show what normalize would change")
     p_preview.add_argument("--type", help="Filter by entity_type")
+    p_preview.add_argument("--exclude-type", default="abstract", help="Comma-separated list of entity_types to exclude (default: 'abstract')")
+    p_preview.add_argument("--exclude-id", help="Exclude a specific entity by UUID")
     p_preview.set_defaults(func=cmd_preview)
 
     p_normalize = sub.add_parser("normalize", help="Apply normalization to all entities over cap")
     p_normalize.add_argument("--type", help="Filter by entity_type")
+    p_normalize.add_argument("--exclude-type", default="abstract", help="Comma-separated list of entity_types to exclude (default: 'abstract', which skips the World Clock)")
+    p_normalize.add_argument("--exclude-id", help="Exclude a specific entity by UUID (e.g. the world clock)")
     p_normalize.add_argument("--yes", action="store_true", help="Skip confirmation prompt")
     p_normalize.set_defaults(func=cmd_normalize)
 
@@ -443,6 +834,12 @@ def main(argv: List[str]) -> int:
 
     p_const = sub.add_parser("constants", help="Print the cap formula constants (sanity check)")
     p_const.set_defaults(func=cmd_constants)
+
+    p_props = sub.add_parser("properties", help="List every int/float property with sum total and average (sum/entities)")
+    p_props.add_argument("--type", help="Filter by entity_type (e.g. faction, character, location)")
+    p_props.add_argument("--include-system", action="store_true", help="Include system entities (world clock); excluded by default")
+    p_props.add_argument("--format", choices=("text", "json"), default="text")
+    p_props.set_defaults(func=cmd_properties)
 
     args = parser.parse_args(argv[1:])
 
