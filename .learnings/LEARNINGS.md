@@ -107,3 +107,16 @@ mmx music generate \
 So the trigger's "8 open" is fully explained by the loose-end noise + 1 cross-project leak. The P6 loose-end todos are by design not actionable in this scope; the orchestrator fix (todo `6931d51e`) is still in `lunar` scope and is not being worked on this hour. Recommended action: keep reporting honestly with the same one-liner pattern; do not invent work. The 30-min debounce still gives 1–2 reports per hour which is fine for visibility.
 
 **The 4th todo type that's NOT in todo.md:** the orchestrator's loose-ends cron also has `1f5fb7f1` etc. all pre-marked `status=blocked` with `block_reason` set. So they are technically "open" by the trigger's counting logic (which counts `open + in_progress + blocked`?) but explicitly NOT work for this worker. Worth checking the trigger's exact counter logic to confirm.
+
+## 2026-06-08: app_llm_cost_tracker.py v2 API is partially spec'd in tests
+
+**What happened:** Discovered 61 unit tests in `tests/test_app_llm_cost_tracker.py` all fail with `AttributeError` because the test file expects a v2 API (`WindowedCounter`, `BackoffState`, `ProviderAlertManager`, `AlertManager`, `should_proceed()` gate logic, `_send_discord_alert` helper, constants `HARD_LIMIT_PER_5H`/`WINDOW_HOURS`/`PROVIDERS`/`PROJECT_ALLOCATIONS`) that does not exist in the current `app_llm_cost_tracker.py` (which is a simpler v1: just `LLMCallTracker` with `log_calls`/`get_provider_status`/`check_budget`).
+
+**What to do differently:**
+- When the test file's docstring lists what it covers and the implementation is much smaller, the tests are **forward-spec'd** for a planned rewrite — the implementation is behind.
+- The fastest way to unblock a class of tests is to add the **smallest missing piece** as a static method (e.g. `_classify_error` only needs a status-code map + message fallback + MiniMax body parsing). Don't try to implement the whole v2 in one hourly run.
+- `class LLMCallTracker:` constants re-export pattern: `class._ERR_AUTH = _ERR_AUTH` lets the test reference `LLMCallTracker._ERR_AUTH` while the module-level `_classify_error` is the actual implementation. Useful when tests import the class for namespacing.
+- The Todo `a0fbff01` (P5) tracks the remaining 54 failing tests — it will need a multi-hour rewrite or a v1-to-v2 migration PR.
+- The `_classify_error` priority: explicit HTTP status code → MiniMax `base_resp.status_code` 1028/1030/2061 (no_credits) → message-pattern fallback → default to `_ERR_TRANSIENT` (safer than `_ERR_AUTH` because transient = retryable).
+
+**Verification:** After implementing `_classify_error`, the full test suite went from 61 errors → 54 errors (the 7 `TestMinimaxParser` tests all pass). Confirmed via `python3 -c "import unittest; ..."` direct import. Commit `3be2c46`.
