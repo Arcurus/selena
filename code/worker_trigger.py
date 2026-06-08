@@ -47,6 +47,8 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -542,6 +544,117 @@ def _channel_recently_active(channel_id: str, minutes: int = None) -> Optional[s
 
 
 # ---------------------------------------------------------------------------
+# Channel-last-message check (Discord REST API)
+# ---------------------------------------------------------------------------
+# Per Arcurus 2026-06-08 #openworld: 'yes ship it. it should
+# not fire if it saw a message in its working channel in
+# the last 30 mins.'  This is the BROADER check than
+# _channel_recently_active (which uses openclaw_usage.jsonl,
+# a session-event proxy).  This one uses the Discord REST
+# API to read the actual last message in the channel,
+# which catches raw Arcurus messages that don't trigger a
+# Selena session.
+#
+# Cost: one HTTP call per project per trigger cycle.  The
+# cron schedules fire once per day per worker, so 3 calls
+# per day.  Even if the trigger is called frequently
+# (e.g. a manual `check`), the result is cached for
+# _CHANNEL_LAST_MESSAGE_CACHE_S seconds to avoid hammering
+# the API.
+#
+# Graceful degradation: if the token can't be read, the
+# API call fails, or the response is empty/malformed, the
+# function returns None (no skip) and the trigger
+# proceeds.  Better to occasionally fire when the channel
+# is active than to silently stop firing the workers.
+
+_CHANNEL_LAST_MESSAGE_CACHE: Dict[str, Tuple[Optional[str], datetime]] = {}
+_CHANNEL_LAST_MESSAGE_CACHE_S = 60
+_DISCORD_BOT_TOKEN_CACHE: Optional[str] = None
+_DISCORD_BOT_TOKEN_RESOLVED = False
+
+
+def _read_discord_bot_token() -> Optional[str]:
+    """Resolve the Discord bot token from $DISCORD_BOT_TOKEN or
+    ~/.openclaw/openclaw.json.  Cached for the lifetime of
+    the process (a token change requires a restart of the
+    trigger service, which is fine).
+    """
+    global _DISCORD_BOT_TOKEN_CACHE, _DISCORD_BOT_TOKEN_RESOLVED
+    if _DISCORD_BOT_TOKEN_RESOLVED:
+        return _DISCORD_BOT_TOKEN_CACHE
+    # 1. env var
+    tok = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
+    if not tok:
+        # 2. openclaw config
+        try:
+            cfg_path = os.path.expanduser("~/.openclaw/openclaw.json")
+            if os.path.exists(cfg_path):
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                tok = (
+                    cfg.get("channels", {})
+                    .get("discord", {})
+                    .get("token", "")
+                    .strip()
+                )
+        except Exception as e:
+            _log(f"[channel-last-message] _read_discord_bot_token: openclaw.json parse failed: {e}")
+    _DISCORD_BOT_TOKEN_CACHE = tok or None
+    _DISCORD_BOT_TOKEN_RESOLVED = True
+    return _DISCORD_BOT_TOKEN_CACHE
+
+
+def _channel_last_message_at(channel_id: str) -> Optional[str]:
+    """Return the ISO timestamp of the most recent message in
+    the Discord channel, or None if the API call failed /
+    channel empty / no token / response malformed.
+
+    Caches the result for _CHANNEL_LAST_MESSAGE_CACHE_S
+    seconds per channel to avoid hammering the Discord API
+    when the trigger is called repeatedly (e.g. via `check`).
+    """
+    if not channel_id:
+        return None
+    cid = str(channel_id)
+    now = datetime.now(timezone.utc)
+    cached = _CHANNEL_LAST_MESSAGE_CACHE.get(cid)
+    if cached is not None and (now - cached[1]).total_seconds() < _CHANNEL_LAST_MESSAGE_CACHE_S:
+        return cached[0]
+    token = _read_discord_bot_token()
+    if not token:
+        # Cache the None for the cache window so we don't retry on every call
+        _CHANNEL_LAST_MESSAGE_CACHE[cid] = (None, now)
+        return None
+    url = f"https://discord.com/api/v10/channels/{channel_id}/messages?limit=1"
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": f"Bot {token}",
+            "User-Agent": "selena-worker-trigger/1.0 (channel-last-message check)",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError, TimeoutError, OSError) as e:
+        _log(f"[channel-last-message] _channel_last_message_at({channel_id}): API call failed: {e}")
+        _CHANNEL_LAST_MESSAGE_CACHE[cid] = (None, now)
+        return None
+    if not isinstance(data, list) or not data:
+        _CHANNEL_LAST_MESSAGE_CACHE[cid] = (None, now)
+        return None
+    # Discord returns in descending timestamp order, so the
+    # first item is the most recent.
+    ts = data[0].get("timestamp")
+    if not isinstance(ts, str):
+        _CHANNEL_LAST_MESSAGE_CACHE[cid] = (None, now)
+        return None
+    _CHANNEL_LAST_MESSAGE_CACHE[cid] = (ts, now)
+    return ts
+
+
+# ---------------------------------------------------------------------------
 # Build the context that gets passed to the worker
 # ---------------------------------------------------------------------------
 
@@ -771,6 +884,40 @@ def _trigger_one(
             )
             ch_state["last_skip_reason"] = result["reason"]
             return result
+
+    # 4c. Channel-last-message guard (added 2026-06-08 per
+    #     Arcurus #openworld: 'yes ship it. it should not
+    #     fire if it saw a message in its working channel
+    #     in the last 30 mins.').  Broader than 4b: 4b
+    #     uses openclaw_usage.jsonl (session events only),
+    #     this one queries the Discord REST API for the
+    #     actual last message in the channel, so it also
+    #     catches raw Arcurus messages that don't trigger
+    #     a Selena session.  Uses the same
+    #     CHANNEL_RECENTLY_ACTIVE_MINUTES = 30 window.
+    #     Catches the recent project-lunar fire bug: the
+    #     channel was active (Arcurus message at 16:38
+    #     UTC) but 4b returned None because no session
+    #     event existed for that channel, so the worker
+    #     fired redundantly.  After this fix, that fire
+    #     would have been skipped.
+    if not force:
+        last_msg = _channel_last_message_at(channel_id)
+        if last_msg:
+            try:
+                msg_dt = datetime.fromisoformat(last_msg.replace("Z", "+00:00"))
+            except ValueError:
+                msg_dt = None
+            if msg_dt is not None and (
+                datetime.now(timezone.utc) - msg_dt
+            ) < timedelta(minutes=CHANNEL_RECENTLY_ACTIVE_MINUTES):
+                result["skipped"] = "channel-last-message-recent"
+                result["reason"] = (
+                    f"any message in this channel less than {CHANNEL_RECENTLY_ACTIVE_MINUTES} min ago "
+                    f"(last at {last_msg})"
+                )
+                ch_state["last_skip_reason"] = result["reason"]
+                return result
 
     # 5. Worker just answered in this channel? (debounce — per Arcurus
     #    2026-06-07 #cost-tracker: "Skip if worker (or any post from
