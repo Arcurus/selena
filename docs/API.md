@@ -928,6 +928,47 @@ Get overall system status including all running services.
 
 ---
 
+## Open World (Property Reference Docs)
+
+### Get Property Docs (raw markdown)
+**GET** `/api/openworld/property-docs`
+
+Returns the Open World LLM property reference
+(`open-world-selena/ai_templates/property_docs.md`)
+as raw markdown — content-type `text/markdown; charset=utf-8`.
+
+Served directly from the source file (single source of
+truth — no copy in `selena-project/`), so future edits
+to the file in the open-world-selena repo automatically
+show up. No authentication required — public-readable
+for browser convenience. This is the lowest-friction
+path for "read the docs" in the browser.
+
+Example: `http://selenaastra.com:8765/api/openworld/property-docs`
+
+Response: the raw file content (4864 bytes as of 2026-06-08).
+
+### Get Property Docs (JSON wrapper)
+**GET** `/api/openworld/property-docs.json`
+
+Same content as the raw endpoint, wrapped in a JSON
+envelope with `path` / `last_updated` / `length` /
+`content` fields. Auth required (Bearer token from
+`/api/login`). For programmatic clients (the in-house
+archive, a future "property-docs" tab in the web UI).
+
+Response:
+```json
+{
+  "path": "open-world-selena/ai_templates/property_docs.md",
+  "last_updated": "2026-06-08T15:33:57+00:00",
+  "length": 4864,
+  "content": "# Entity Property Reference for the LLM\n..."
+}
+```
+
+---
+
 ## Notes
 
 - All timestamps are in ISO 8601 format
