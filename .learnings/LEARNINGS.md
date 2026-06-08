@@ -99,3 +99,11 @@ mmx music generate \
 - The cached `todo.md` is stale (it showed 8 open, but only 7 blocked are real); trust the API / `data/todos.json`, not `todo.md`.
 
 **Verification:** the trigger's `last_fire_reason` reads `"0 unprocessed sessions + 8 open todos"` for selena-project, but the cross-project-filtered query gives 0. This is the symptom.
+
+**Update 2026-06-08 11:40 CET:** Confirmed still the case ~3 hours later. `worker_state.json` now shows `trigger_count: 47` for this channel and the count is still climbing. The 8 "open" todos in the cached `todo.md` break down as:
+- 7 × `status=blocked`, all `[loose-ends]` auto-captures from `selena-memory-loose-ends` cron, all explicitly marked as "Auto-captured observation, not an actionable task for selena-project-worker" in their `block_reason`.
+- 1 × `status=in_progress` (`5d1ae721` "Failure reporting to main Selena"), but `project='selena'` (NOT `selena-project`) and `agent_owner='coding-worker'` (NOT me). Wrong-project + wrong-owner triple.
+
+So the trigger's "8 open" is fully explained by the loose-end noise + 1 cross-project leak. The P6 loose-end todos are by design not actionable in this scope; the orchestrator fix (todo `6931d51e`) is still in `lunar` scope and is not being worked on this hour. Recommended action: keep reporting honestly with the same one-liner pattern; do not invent work. The 30-min debounce still gives 1–2 reports per hour which is fine for visibility.
+
+**The 4th todo type that's NOT in todo.md:** the orchestrator's loose-ends cron also has `1f5fb7f1` etc. all pre-marked `status=blocked` with `block_reason` set. So they are technically "open" by the trigger's counting logic (which counts `open + in_progress + blocked`?) but explicitly NOT work for this worker. Worth checking the trigger's exact counter logic to confirm.
