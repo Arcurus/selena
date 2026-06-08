@@ -3091,6 +3091,13 @@
                 document.getElementById('todoList').innerHTML = searchIndicator + todos.map(todo => {
                     const projectTag = todo.project ? `<span class="status-badge" style="background: var(--bg-dark); color: var(--accent-cyan); border: 1px solid var(--accent-cyan); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">📁 ${escapeHtml(todo.project)}</span>` : '';
                     const ownerTag = todo.agent_owner ? `<span class="status-badge" style="background: var(--bg-dark); color: var(--accent-neon); border: 1px solid var(--accent-neon); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">🤖 ${escapeHtml(todo.agent_owner)}</span>` : '';
+                    // irreversible badge (added 2026-06-08 per Arcurus #openworld):
+                    // a red-themed pill on every card with `irreversible=True`.
+                    // The block_reason (if present) is also surfaced as a
+                    // separate line below the badges.  Operators can
+                    // see at a glance which todos are gated on Arcurus
+                    // and what the worker is waiting for.
+                    const irreversibleBadge = todo.irreversible ? `<span class="status-badge" style="background: rgba(239, 68, 68, 0.18); color: var(--danger, #ef4444); border: 1px solid var(--danger, #ef4444); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;" title="Worker must NOT execute this todo without Arcurus confirmation. Either set by add_todo (manual) or by the danger prefilter, or self-assessed by a worker mid-step.">⚠ IRREVERSIBLE</span>` : '';
                     return `
                     <div class="todo-card" style="border-color: ${getPriorityColor(todo.priority)};">
                         <div style="display: flex; justify-content: space-between; align-items: start;">
@@ -3101,10 +3108,12 @@
                                     ${projectTag}
                                     ${ownerTag}
                                     ${todo.deleted_at ? `<span style="color: var(--accent-red); font-size: 0.75rem;">🗑️ ${getTimeUntilPurge(todo.deleted_at)}</span>` : ''}
+                                    ${irreversibleBadge}
                                     ${todo.block_reason ? `<span style="color: var(--danger); font-size: 0.8rem;">🚫 ${todo.block_reason}</span>` : ''}
                                 </div>
                                 <h4 style="margin-bottom: 5px; ${todo.deleted_at ? 'text-decoration: line-through; opacity: 0.7;' : ''}">${todo.short_desc}</h4>
                                 ${todo.long_desc ? `<p style="color: var(--text-secondary); font-size: 0.85rem;">${todo.long_desc}</p>` : ''}
+                                ${todo.irreversible || todo.block_reason ? `<div style="margin-top: 6px; padding: 6px 10px; background: rgba(239, 68, 68, 0.10); border-left: 3px solid var(--danger, #ef4444); border-radius: 4px; font-size: 0.85rem; color: var(--text-primary);"><b style="color: var(--danger, #ef4444);">⚠ ${todo.irreversible ? 'IRREVERSIBLE — ' : ''}blocked:</b> ${todo.block_reason ? escapeHtml(todo.block_reason) : '<i>(no reason given)</i>'}${todo.waiting_for ? `<br><span style="font-size: 0.8rem; color: var(--text-secondary);">⏳ waiting for: ${escapeHtml(todo.waiting_for)}</span>` : ''}</div>` : ''}
                                 ${todo.what_happened ? `<div style="margin-top: 6px; padding: 6px 10px; background: rgba(110, 231, 183, 0.08); border-left: 3px solid var(--success); border-radius: 4px; font-size: 0.8rem; color: var(--text-primary);"><b style="color: var(--success);">✓ what happened:</b> ${escapeHtml(todo.what_happened)}</div>` : ''}
                                 <div style="margin-top: 8px; font-size: 0.75rem; color: var(--text-secondary);">
                                     ID: ${todo.id} | Created: ${new Date(todo.created_at).toLocaleString()}${todo.creator_id ? ` | Creator: ${escapeHtml(todo.creator_id)}` : ''}${todo.completed_at ? ` | <span style="color: var(--success);">✓ Completed: ${new Date(todo.completed_at).toLocaleString()}</span>` : ''}

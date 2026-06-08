@@ -1827,6 +1827,15 @@ class RequestHandler(BaseHTTPRequestHandler):
                             except (TypeError, ValueError): pass
                         if 'sensitive' in body:
                             sensitive = bool(body['sensitive'])
+                        # Body field wins over query string.  Use the
+                        # sentinel (None) when absent so the prefilter
+                        # can still fire; the body has to explicitly
+                        # contain 'irreversible' (even as false) to
+                        # bypass the prefilter.
+                        if 'irreversible' in body:
+                            irreversible = bool(body['irreversible'])
+                        if 'block_reason' in body and body['block_reason'] is not None:
+                            block_reason = body['block_reason']
                     except Exception as e:
                         log_error(f'POST /api/todos/add bad json: {e}', 'add')
             if not short_desc:
@@ -1842,7 +1851,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     log_api('TODO_DUP_SKIP', f'skipped duplicate add for {creator_id}: {short_desc[:60]}')
                     self.send_json({'success': True, 'todo': existing, 'deduped': True})
                     return
-            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner, what_happened)
+            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner, what_happened, irreversible, block_reason)
             self.send_json({'success': True, 'todo': todo})
             return
         
@@ -1871,6 +1880,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             if 'project' in query: updates['project'] = query['project'][0] if query['project'][0] else None
             if 'agent_owner' in query: updates['agent_owner'] = query['agent_owner'][0] if query['agent_owner'][0] else None
             if 'what_happened' in query: updates['what_happened'] = query['what_happened'][0] if query['what_happened'][0] else None
+            if 'irreversible' in query: updates['irreversible'] = query['irreversible'][0].lower() == 'true'
             if 'block_reason' in query: updates['block_reason'] = query['block_reason'][0] if query['block_reason'][0] else None
             if 'waiting_for' in query: updates['waiting_for'] = query['waiting_for'][0] if query['waiting_for'][0] else None
             # completed_at: explicit value wins over the auto-rule. Empty string
@@ -3703,6 +3713,15 @@ class RequestHandler(BaseHTTPRequestHandler):
             project = data.get('project')
             agent_owner = data.get('agent_owner')
             what_happened = data.get('what_happened')
+            # NEW (2026-06-08): irreversible / block_reason per
+            # Arcurus #openworld.  The 1st /api/todos/add endpoint
+            # (at line 1845) also reads these from query/body and
+            # forwards them to add_todo — this 2nd endpoint (the
+            # POST /api/todos/add that wraps mark_done + add in one
+            # path) needs the same forwarding or add_todo raises
+            # NameError on the new args.
+            irreversible = (None if "irreversible" not in data else bool(data["irreversible"]))
+            block_reason = data.get('block_reason')
 
             if not short_desc:
                 self.send_json({'success': False, 'error': 'short_desc required'}, 400)
@@ -3718,7 +3737,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     self.send_json({'success': True, 'todo': existing, 'deduped': True})
                     return
 
-            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner, what_happened)
+            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner, what_happened, irreversible, block_reason)
             self.send_json({'success': True, 'todo': todo})
             return
 
@@ -3948,6 +3967,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             if 'project' in query: updates['project'] = query['project'][0] if query['project'][0] else None
             if 'agent_owner' in query: updates['agent_owner'] = query['agent_owner'][0] if query['agent_owner'][0] else None
             if 'what_happened' in query: updates['what_happened'] = query['what_happened'][0] if query['what_happened'][0] else None
+            if 'irreversible' in query: updates['irreversible'] = query['irreversible'][0].lower() == 'true'
             if 'block_reason' in query: updates['block_reason'] = query['block_reason'][0] if query['block_reason'][0] else None
             if 'waiting_for' in query: updates['waiting_for'] = query['waiting_for'][0] if query['waiting_for'][0] else None
             # completed_at: explicit value wins over the auto-rule. Empty string

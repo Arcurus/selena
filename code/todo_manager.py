@@ -43,6 +43,110 @@ BACKUP_DIR = os.path.join(DATA_DIR, "backups")
 MAX_BACKUPS = 5  # Keep last N backups
 
 
+# ---------------------------------------------------------------------------
+# Danger prefilter (added 2026-06-08 per Arcurus #openworld)
+# ---------------------------------------------------------------------------
+#
+# `_apply_danger_prefilter` is a tiny regex pass that runs at
+# TodoManager.add_todo() time. If the long_desc or short_desc
+# contains one of the patterns in DANGER_PATTERNS, the new todo is
+# auto-flagged as `irreversible=True` with a short block_reason that
+# quotes the matched pattern.  Workers (all 3) MUST then NOT execute
+# the todo without Arcurus's confirmation.
+#
+# Per Arcurus 2026-06-08: "a regex could give a hint and preset it,
+# but in the end the llm must decide."  So this is HINT, not
+# AUTHORITY.  Workers also self-assess at the start of step 4 and
+# can flip `irreversible=True` on a todo the prefilter missed.
+# False positives are OK (an extra confirmation step is cheap).
+# False negatives are OK (worker self-assess catches them).
+#
+# Patterns are intentionally simple \b...\b regexes on the description
+# text.  We do NOT try to parse commands, ASTs, or filenames; this is
+# a smoke-detector, not a firewall.
+DANGER_PATTERNS = [
+    # Filesystem destruction (more specific patterns first so the
+    # exact label is what fires — e.g. "rm -rf" labels more
+    # precisely than "recursive/forced rm")
+    (r"\brm\s+-rf?\b", "rm -rf"),
+    (r"\brm\s+(-[a-z]*f[a-z]*|-[a-z]*r[a-z]*|-fr|--force|--recursive)\b",
+     "recursive/forced rm"),
+    (r"\btruncate\s+--size\s+0\b", "truncate file to 0"),
+    (r"\btruncate\b", "truncate"),
+    (r"\bshred\b", "shred"),
+    (r">\s*/dev/sd[a-z]\b", "overwrite raw block device"),
+    (r">\s*/dev/null.*<\s*/", "swap stdin with /dev/null via redirect"),
+    # Database / cloud destruction (allow optional "the" / "all" between
+    # the verb and the noun so natural prose like "drop the table"
+    # still matches)
+    (r"\bdrop\s+(the\s+)?(database|table|schema|index|view|function|trigger|role|user)\b",
+     "DROP database object"),
+    (r"\btruncate\s+(the\s+)?(table|only)\b", "TRUNCATE table"),
+    (r"\btruncate\s+history", "truncate entity history"),
+    (r"\bdelete\s+from\s+\w+\s*(where\s+1\s*=\s*1|;)\b",
+     "DELETE FROM (no where / 1=1)"),
+    (r"\bwipe\b", "wipe"),
+    (r"\bpurge\b", "purge"),
+    (r"\bvacuum\s+full\b", "vacuum full (rewrites table, locks it)"),
+    (r"\baws\s+s3\s+rm\s+--recursive\b", "aws s3 rm recursive"),
+    (r"\baws\s+rds\s+delete-db", "aws rds delete-db"),
+    (r"\bterraform\s+destroy\b", "terraform destroy"),
+    (r"\bkubectl\s+delete\s+(the\s+)?namespace\b", "kubectl delete namespace"),
+    (r"\bkubectl\s+delete\s+--all\b", "kubectl delete --all"),
+    # Process / system destruction
+    (r"\bkill\s+-9\b", "kill -9"),
+    (r"\bkillall\b", "killall"),
+    (r"\bpkill\s+-9\b", "pkill -9"),
+    (r"\bshutdown\b", "shutdown"),
+    (r"\breboot\b", "reboot"),
+    (r"\bpoweroff\b", "poweroff"),
+    (r"\binit\s+0\b", "init 0"),
+    (r"\bhalt\b", "halt"),
+    (r"\bformat\s+/dev/", "format a raw device"),
+    (r"\bmkfs\b", "mkfs (make filesystem)"),
+    (r"\bdd\s+if=.*of=/dev/", "dd to a raw device"),
+    # Git destruction (allow no colon between origin and main,
+    # e.g. "git push -f origin main" — still a force-push to the
+    # main branch, just without the explicit refspec)
+    (r"\bgit\s+push\s+(-f|--force(-with-lease)?)\s+origin\s+(:?main|master)\b",
+     "force-push to main/master"),
+    (r"\bgit\s+reset\s+--hard\s+origin", "hard reset to origin"),
+    (r"\bgit\s+clean\s+-fdx", "git clean -fdx (delete untracked + ignored)"),
+    # Service / config destruction
+    (r"\bsystemctl\s+(stop|disable|mask)\s+(selena|openclaw|open-world)",
+     "stop/disable a core service"),
+    (r"\bchmod\s+(-R\s+)?0?0?0?7\b", "chmod 777 (world-writable)"),
+    (r"\bchown\s+-R\s+root\b", "chown -R root"),
+    # Open-World specific (the project this was added for)
+    (r"\bentity\.delete\b", "delete an entity"),
+    (r"\bworld\.reset\b", "reset the world"),
+    (r"\bpurge_all_entities\b", "purge all entities"),
+]
+
+# Pre-compile once at module load for speed (called on every add_todo).
+import re as _re
+_DANGER_REGEX = [( _re.compile(pat, _re.IGNORECASE), label) for (pat, label) in DANGER_PATTERNS]
+
+
+def _apply_danger_prefilter(long_desc: str, short_desc: str = "") -> Optional[str]:
+    """Return a short human-readable reason if either description
+    looks dangerous (matched one of the DANGER_PATTERNS), else None.
+
+    The reason is a one-line tag like 'rm -rf' or 'DROP database
+    object' suitable for prepending to a `block_reason` string.
+
+    Matching is done with word-boundary regexes, case-insensitive,
+    on the concatenated text (short_desc + ' ' + long_desc).
+    """
+    text = f"{short_desc or ''} {long_desc or ''}".strip()
+    if not text:
+        return None
+    for rx, label in _DANGER_REGEX:
+        if rx.search(text):
+            return label
+    return None
+
+
 class TodoManager:
     """
     Manages todos/loose ends for Selena v2.
@@ -262,6 +366,8 @@ class TodoManager:
                  project: Optional[str] = None,
                  agent_owner: Optional[str] = None,
                  what_happened: Optional[str] = None,
+                 irreversible: Optional[bool] = None,
+                 block_reason: Optional[str] = None,
                  dedup: bool = False) -> dict:
         """
         Add a new todo.
@@ -325,13 +431,54 @@ class TodoManager:
             "project": project,            # NEW (2026-06-03)
             "agent_owner": agent_owner,    # NEW (2026-06-03)
             "what_happened": what_happened,  # NEW (2026-06-03) — see add/update_todo docstring
-            "block_reason": None,  # Reason why blocked (if status is blocked)
+            "irreversible": (False if irreversible is None else irreversible),  # NEW (2026-06-08) — per Arcurus:
+                                            # workers must NOT execute irreversible
+                                            # todos without human confirmation.
+                                            # `irreversible=True` ⇒ todo waits for
+                                            # Arcurus.  See docs/todo-irreversible.md.
+                                            # Can be set by add_todo directly, by
+                                            # the regex prefilter
+                                            # (_apply_danger_prefilter) at add-time,
+                                            # or by a worker that self-assesses
+                                            # danger mid-step.
+            "block_reason": block_reason,  # NEW on add path (2026-06-08) — was
+                                            # already updatable via update_todo.
+                                            # Now accepted at add-time so callers
+                                            # like /api/todos/add can set both in
+                                            # one request.  Set by workers when
+                                            # they decide a todo is irreversible.
             "waiting_for": None,   # ID of todo this is waiting for
             "completed_at": None,  # Auto-set on completed/done transitions (see _apply_completed_at_rule)
             "deleted_at": None,    # Soft delete timestamp (None = not deleted)
             "created_at": self._now(),
             "updated_at": self._now()
         }
+
+        # Auto-apply danger prefilter if irreversible wasn't set explicitly.
+        # Per Arcurus 2026-06-08: 'a regex could give a hint and preset it,
+        # but in the end the llm must decide.'  The regex catches obvious
+        # destructive patterns (rm -rf, drop, wipe, kill -9, etc.) and
+        # flips `irreversible` to True with a short `block_reason` prefix
+        # so the worker will see the signal and confirm with the human.
+        # False negatives are OK (LLM self-assess picks them up later);
+        # false positives are OK (just adds a confirmation step).
+        #
+        # The sentinel `irreversible is None` (the caller's default)
+        # is what triggers the prefilter.  If the caller explicitly
+        # passes `irreversible=False`, that means "I've already
+        # assessed this, skip the smoke detector" — we trust them.
+        # If they pass `irreversible=True`, we also skip (they've
+        # already decided it's irreversible; the regex would only
+        # double up the block_reason).  Only when the caller didn't
+        # pass anything (None) does the prefilter fire.
+        if irreversible is None:
+            prefilter_reason = _apply_danger_prefilter(long_desc, short_desc)
+            if prefilter_reason:
+                todo["irreversible"] = True
+                todo["block_reason"] = (
+                    f"[regex-prefilter: {prefilter_reason}]"
+                    + (f" {block_reason}" if block_reason else "")
+                )
 
         todo_list = self._get_todo_list(sensitive)
         # todo_list IS self.todos (or self.sensitive_todos) — same list reference.
@@ -575,7 +722,7 @@ class TodoManager:
         self._apply_completed_at_rule(todo, new_status, explicit_completed_at, now)
 
         # Update allowed fields
-        allowed = ["short_desc", "long_desc", "priority", "status", "sensitive", "parent_id", "estimated_llm_calls", "creator_id", "conversation_id", "agent_id", "project", "agent_owner", "what_happened", "block_reason", "waiting_for", "deleted_at"]
+        allowed = ["short_desc", "long_desc", "priority", "status", "sensitive", "parent_id", "estimated_llm_calls", "creator_id", "conversation_id", "agent_id", "project", "agent_owner", "what_happened", "irreversible", "block_reason", "waiting_for", "deleted_at"]
         for key in allowed:
             if key in kwargs:
                 if key == "priority":
