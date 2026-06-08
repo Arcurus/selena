@@ -126,6 +126,184 @@ def _classify_error(msg: str, status_code=None, body=None):
     return _ERR_TRANSIENT
 
 
+class AlertManager:
+    """State machine for budget alerts.
+
+    Per Arcurus 2026-06-03: "just report if we encounter like 80% then
+    100% and then if its green again. important is that we find a way
+    to postpone then costly tasks."
+
+    States:
+      - "ok"       : 0..79.9%  (default, healthy)
+      - "warning"  : 80..99.9% (postpone non-critical work)
+      - "critical" : 100%+      (block non-essential work)
+
+    :class:`evaluate` returns ``None`` unless the state actually
+    transitions OR ``force=True`` is passed. The returned dict has:
+      ``{"reason": str, "new_state": str, "old_state": str, ...}``
+
+    A 5-minute anti-spam cooldown (overridable in the constructor)
+    blocks repeated transitions within that window. ``force=True``
+    bypasses both cooldown and the state-change requirement.
+    """
+
+    DEFAULT_COOLDOWN_S = 300  # 5 minutes
+
+    def __init__(self, cooldown_s: int = DEFAULT_COOLDOWN_S):
+        self.cooldown_s = cooldown_s
+        self.state = "ok"
+        self._last_fire_at: Optional[float] = None
+        self._history: List[Dict] = []
+
+    # --- threshold classification ---------------------------------------
+
+    @staticmethod
+    def state_for_pct(used_pct: float) -> str:
+        """Map a used-percentage to the corresponding alert state."""
+        if used_pct < 80:
+            return "ok"
+        if used_pct < 100:
+            return "warning"
+        return "critical"
+
+    # --- core state machine --------------------------------------------
+
+    def evaluate(
+        self,
+        used_pct: float,
+        used: int,
+        budget: int,
+        *,
+        force: bool = False,
+        **extras,
+    ) -> Optional[Dict]:
+        """Evaluate current budget usage and emit a transition record.
+
+        Returns ``None`` if there is nothing to report. Returns a dict
+        describing the transition when:
+          * the state changed (ok→warning, warning→critical, *→ok)
+          * ``force=True`` (used for tests + manual "say it anyway")
+
+        ``extras`` are passed through into the returned record (e.g.
+        ``resets_in_s``, ``resets_at``, ``project_breakdown``).
+        """
+        new_state = self.state_for_pct(used_pct)
+        now_ts = datetime.now().timestamp()
+
+        # No transition → nothing to fire, unless forced.
+        if new_state == self.state and not force:
+            return None
+
+        # Cooldown: don't fire another transition within the window.
+        if (
+            not force
+            and self._last_fire_at is not None
+            and (now_ts - self._last_fire_at) < self.cooldown_s
+        ):
+            return None
+
+        # Determine the reason for this transition.
+        if force and new_state == self.state:
+            reason = "forced"
+        elif new_state == "ok" and self.state in ("warning", "critical"):
+            reason = "recovered"
+        elif new_state == "warning" and self.state == "ok":
+            reason = "warning_threshold"
+        elif new_state == "critical" and self.state == "warning":
+            reason = "critical_threshold"
+        elif new_state == "critical" and self.state == "ok":
+            # Skipped warning, landed directly in critical.
+            reason = "critical_threshold"
+        else:
+            # Edge case: warning→ok or ok→critical etc. (shouldn't
+            # normally happen because state_for_pct is monotonic with
+            # usage). Fall back to a generic "forced" reason so the
+            # caller still gets a record when explicitly forced.
+            reason = "forced"
+
+        old_state = self.state
+        self.state = new_state
+        self._last_fire_at = now_ts
+
+        rec = {
+            "reason": reason,
+            "old_state": old_state,
+            "new_state": new_state,
+            "used_pct": used_pct,
+            "used": used,
+            "budget": budget,
+            "timestamp": datetime.now().isoformat(),
+        }
+        rec.update(extras)
+        self._history.append(rec)
+        return rec
+
+    # --- accessors ------------------------------------------------------
+
+    def history(self) -> List[Dict]:
+        """Return the list of transition records (most recent last)."""
+        return list(self._history)
+
+    def reset(self) -> None:
+        """Reset state back to "ok" and clear history."""
+        self.state = "ok"
+        self._last_fire_at = None
+        self._history = []
+
+    # --- formatting -----------------------------------------------------
+
+    @staticmethod
+    def _format_duration(seconds: int) -> str:
+        """Format a duration in seconds as ``Xh Ym`` (matches tests)."""
+        total_min = max(0, int(seconds)) // 60
+        hours, minutes = divmod(total_min, 60)
+        return f"{hours}h {minutes}m"
+
+    @staticmethod
+    def _format_alert(
+        state: str,
+        reason: str,
+        used_pct: float,
+        used: int,
+        budget: int,
+        *,
+        resets_in_s: Optional[int] = None,
+        resets_at: Optional[str] = None,
+        project_breakdown: Optional[Dict[str, int]] = None,
+    ) -> str:
+        """Render a Discord-friendly alert message.
+
+        The message is intentionally plain (no markdown escapes) so it
+        can be posted with ``discord_client.send_message`` directly.
+        Always includes:
+          * the emoji for the state (🚨 critical, ⚠️ warning, ✅ ok)
+          * the "used / budget" ratio
+          * a "postponed costly tasks" reminder when over budget
+          * a "resets in Xh Ym" line if ``resets_in_s`` is provided
+          * a per-project breakdown if ``project_breakdown`` is given
+        """
+        emoji = {
+            "critical": "🚨",
+            "warning": "⚠️",
+            "ok": "✅",
+        }.get(state, "📊")
+
+        lines: List[str] = []
+        lines.append(f"{emoji} LLM budget {state} — {used} / {budget} ({used_pct:.1f}%)")
+        if state in ("warning", "critical"):
+            lines.append("Non-critical work is postponed until the window resets.")
+        if project_breakdown:
+            breakdown = ", ".join(
+                f"{name}={calls}" for name, calls in sorted(project_breakdown.items())
+            )
+            lines.append(f"per-project: {breakdown}")
+        if resets_in_s is not None:
+            lines.append(f"resets in {AlertManager._format_duration(resets_in_s)}")
+        if resets_at:
+            lines.append(f"resets at {resets_at}")
+        return "\n".join(lines)
+
+
 class LLMCallTracker:
     # Re-export the constants on the class so callers (and tests) can
     # reference them as ``LLMCallTracker._ERR_AUTH`` etc.
