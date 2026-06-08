@@ -2880,6 +2880,56 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.send_json({'error': str(e)}, 500)
             return
 
+        # Open World: entity property reference for the LLM narrator
+        # (open-world-selena/ai_templates/property_docs.md, added
+        # 2026-06-08 per Arcurus #openworld). Served as raw text
+        # (not JSON-wrapped) so the link drops the user into a
+        # readable browser view. Reads the SOURCE file directly
+        # (single source of truth) — no copy in selena-project/.
+        if path == '/api/openworld/property-docs':
+            docs_path = Path(SELENA_ROOT).parent / 'open-world-selena' / 'ai_templates' / 'property_docs.md'
+            if not docs_path.exists():
+                self.send_json({'error': 'docs file not found', 'path': str(docs_path)}, 404)
+                return
+            try:
+                content = docs_path.read_text(encoding='utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/markdown; charset=utf-8')
+                self.send_header('Content-Length', str(len(content.encode('utf-8'))))
+                self.send_header('Cache-Control', 'no-cache')
+                self.end_headers()
+                self.wfile.write(content.encode('utf-8'))
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # Open World: entity property reference for the LLM narrator — JSON wrapper
+        # (added 2026-06-08 per Arcurus #openworld). Returns the same file
+        # wrapped in a JSON envelope with path / last_updated / length, for
+        # programmatic clients (the web UI, the in-house archive). The
+        # auth-gated mirror of /api/openworld/property-docs (which is
+        # public-readable for browser convenience).
+        if path == '/api/openworld/property-docs.json':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            docs_path = Path(SELENA_ROOT).parent / 'open-world-selena' / 'ai_templates' / 'property_docs.md'
+            if not docs_path.exists():
+                self.send_json({'error': 'docs file not found', 'path': str(docs_path)}, 404)
+                return
+            try:
+                stat = docs_path.stat()
+                content = docs_path.read_text(encoding='utf-8')
+                self.send_json({
+                    'path': str(docs_path.relative_to(Path(SELENA_ROOT).parent)),
+                    'last_updated': datetime.datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                    'length': len(content),
+                    'content': content,
+                })
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
         # Knowledge Base endpoints
         if path == '/api/knowledge':
             if not self.authenticate():
