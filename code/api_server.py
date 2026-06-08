@@ -37,7 +37,6 @@ load_env()
 # Import the world scheduler and priority reflector
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
-from scheduled_actions import scheduler
 from priority_reflector import reflector, PriorityTask, PriorityReflector
 from self_evolution import evolution_loop
 from llm_call_tracker import get_tracker as _get_llm_tracker
@@ -673,9 +672,29 @@ class RequestHandler(BaseHTTPRequestHandler):
                 return
             # GET reads the current config; POST lives in do_POST (this
             # handler only runs for GET requests, so no method check needed).
-            from scheduled_actions import load_scheduler_config
-            cfg = load_scheduler_config()
-            self.send_json({'success': True, 'config': cfg, 'status': scheduler.status()})
+            # As of 2026-06-08, the scheduler lives in the open-world-selena
+            # Rust binary (src/scheduler.rs), not here. We read the config
+            # directly from the world's data dir.
+            import os
+            cfg_path = os.path.join(
+                os.path.dirname(__file__), '..', '..', 'open-world-selena',
+                'world_data', 'ow_scheduler_config.json'
+            )
+            cfg = {}
+            try:
+                if os.path.exists(cfg_path):
+                    with open(cfg_path, 'r') as f:
+                        cfg = json.load(f)
+            except Exception as e:
+                log_api('OW_SCHEDULER_CONFIG_READ_FAIL', f'path={cfg_path} err={e}')
+            self.send_json({
+                'success': True,
+                'config': cfg,
+                'status': {
+                    'note': 'scheduler now lives in open-world-selena/src/scheduler.rs (Rust tokio task)',
+                    'config_path': cfg_path,
+                },
+            })
             return
 
         # Priority Reflector endpoints
