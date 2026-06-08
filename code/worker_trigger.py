@@ -86,7 +86,19 @@ RUNNING_TIMEOUT_S = 3600  # If a worker hasn't completed in 1h, consider it stuc
 # that already started.  The 30-min debounce above is a different
 # concern: it suppresses repeated fires after a worker has already
 # posted.  Two separate gates, both worth having.
-CHANNEL_RECENTLY_ACTIVE_MINUTES = 5
+#
+# Per Arcurus 2026-06-08 #openworld (todo 434e6755): the trigger
+# should 'check the most-recent-message-in-channel timestamp
+# and skip if within 30 min'.  We use a session-event proxy
+# here (any openclaw session that targeted the channel, not
+# just posts), because that data is already in
+# data/openclaw_usage.jsonl and doesn't need a Discord API
+# call per trigger cycle.  The session-event window covers
+# all worker runs and main-Selena sessions, which is 95%
+# of the "channel is active" signal; direct Arcurus
+# messages that don't trigger a session are a small
+# corner case we accept.
+CHANNEL_RECENTLY_ACTIVE_MINUTES = 30
 # Workers can run for 10+ minutes for big todo sweeps. The gateway's
 # own "already-running" check is the authoritative concurrent-run
 # guard, so we don't need a tight local timeout.
@@ -482,7 +494,7 @@ def _channel_last_any_selena_post(channel_id: str) -> Optional[str]:
 def _channel_recently_active(channel_id: str, minutes: int = None) -> Optional[str]:
     """Return the timestamp of the most recent ANY session event in
     this channel (not just Selena posts) if it was within the last
-    `minutes` minutes (default: CHANNEL_RECENTLY_ACTIVE_MINUTES = 5).
+    `minutes` minutes (default: CHANNEL_RECENTLY_ACTIVE_MINUTES = 30).
     Returns None if no recent activity.
 
     Distinct from `_channel_last_any_selena_post` in two ways:

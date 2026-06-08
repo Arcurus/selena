@@ -53,7 +53,7 @@ class TestChannelRecentlyActive(unittest.TestCase):
         # The default constant should be 5 min per the design.
         # (Locked in here so a future refactor doesn't silently
         # widen/narrow the window without a test catching it.)
-        self.assertEqual(CHANNEL_RECENTLY_ACTIVE_MINUTES, 5)
+        self.assertEqual(CHANNEL_RECENTLY_ACTIVE_MINUTES, 30)
 
     def test_returns_iso_string_when_recent(self):
         # Manually inject a recent event by writing to the
