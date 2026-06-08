@@ -1,10 +1,47 @@
-# Selena v2 - Full Architecture
+# Selena v2 — Internal Architecture
 
-## Core Concept
+> **Audience:** operator reference. The **internals** of Selena v2
+> — the memory hierarchy, the context loop, the data structures.
+> **NOT** loaded in the LLM prompt — for the operator-facing
+> identity (tracking + statistics + transparency + web UI),
+> see [`docs/transparency-and-stats.md`](transparency-and-stats.md).
+>
+> The two docs are complementary: this one is the *internals*,
+> the other is the *exposure*.
 
-Selena v2 is a self-contained AI agent with its own memory, heartbeat, and development loop. It can operate independently and eventually take over functions from OpenClaw.
+## Identity (per Arcurus 2026-06-08)
+
+**Selena v2 is for now mainly focused on adding tracking
+and statistics, and providing transparency inside and
+outside in the form of a web interface.**
+
+That's the one-line identity. The 4 main subsystems
+(tracking, statistics, transparency, web UI) and the
+surface they expose are documented in
+[`transparency-and-stats.md`](transparency-and-stats.md).
+This doc is the **internal architecture** underneath
+that identity — how the agent's memory, context loop,
+and self-management actually work.
+
+The previous identity (pre-2026-06-08) framed Selena v2
+as "a self-contained AI agent with its own memory, heartbeat,
+and development loop" — that's still true and is what
+this doc covers. The new framing emphasises the
+**operational surface** (tracking + transparency + web UI)
+over the **agent-internals** story (memory + heartbeat).
+
+## Quick map
+
+| What | How it works | Doc |
+|---|---|---|
+| **Memory** (5 layers) | File-based hierarchy, no DB | [§ Memory Hierarchy](#memory-hierarchy) below |
+| **Context loop** (3 phases) | CONTEXT → CALL → PROCESS, similar to the open-world action loop | [§ Context Loop](#context-loop) below |
+| **Web interface** (transparency surface) | The selena-project `:8765` web UI, the #cost-tracker Discord post | [`transparency-and-stats.md`](transparency-and-stats.md) |
+| **Self-management** (heartbeat + task priority) | `heartbeat.md` + `priorities.md` + the autonomy policy | `heartbeat.md` (file pointer) |
 
 ## Memory Hierarchy
+
+The 5 layers (top to bottom — most abstract to most concrete):
 
 ### 1. Soul Layer (Core Identity)
 - **soul.md** - Core identity, values, purpose
@@ -32,7 +69,7 @@ Selena v2 is a self-contained AI agent with its own memory, heartbeat, and devel
 - **projects/{name}/status.md** - Current project status
 - **projects/{name}/plans/** - Project plans
 
-## Context Loop (Similar to Open World World Action)
+## Context Loop
 
 The core agent loop follows the same pattern as Open World world actions:
 
@@ -78,7 +115,7 @@ The core agent loop follows the same pattern as Open World world actions:
 - Build comprehensive prompt
 - Include soul/agent context
 - Add relevant memories
-- Track LLM calls and costs
+- Track LLM calls and costs (the 4 main subsystems — see `transparency-and-stats.md`)
 
 ### Process Phase
 - Parse LLM response
@@ -86,45 +123,59 @@ The core agent loop follows the same pattern as Open World world actions:
 - Update relevant memories
 - Determine if more calls needed
 
-## Debug Interface
+## Debug Interface (transparency surface)
 
-Like Open World has debug for world actions, Selena v2 should have:
+The web interface is the canonical transparency surface — what the operator (Arcurus) sees. See [`transparency-and-stats.md`](transparency-and-stats.md) for the full surface map (cost panel, stats panel, todo panel, LLM call panel, pending feedback).
 
-### Web Interface
+### The 4 main consumer dashboards
+
+| Surface | What it shows | Where it lives |
+|---|---|---|
+| **Operator view (internal)** | Service health, budget state, autonomy-policy "waiting for your input" queue | Web UI at `:8765` + `orchestrator-status /status` on `:8766` |
+| **Arcurus's view (private)** | The same as the operator view, behind auth | Same |
+| **Public Discord (external)** | Daily cost report, open-world entity activity, worker reports | `#cost-tracker`, `#openworld`, `#selena-project` channels |
+| **Lunar orchestrator (internal)** | The 5h used % + per-project stats for the lunar agents | `orchestrator-status /status` (consumed from selena-project) |
+
+### Web interface
+
 - View current context
 - See recent LLM calls
 - Monitor memory usage
 - View pending tasks
 
-### APIs
+### APIs (the data the surfaces pull from)
+
 - `GET /context` - Current context state
 - `GET /memory/search?q=...` - Search memories
 - `POST /memory` - Add to memory
 - `GET /heartbeat/status` - Heartbeat status
 - `POST /heartbeat/task` - Add task
-- `GET /llm/calls` - LLM call history
+- `GET /llm/calls` - LLM call history (and `/api/openclaw-usage/*` for the full per-call shape)
 
 ## Implementation Phases
 
 ### Phase 1: Basic Agent Loop
-- [ ] Core memory system (soul, agent, heartbeat)
-- [ ] Simple context -> call -> process loop
-- [ ] Basic file-based storage
+- [x] Core memory system (soul, agent, heartbeat)
+- [x] Simple context -> call -> process loop
+- [x] Basic file-based storage
 
 ### Phase 2: Memory Intelligence
-- [ ] Relevance-based context retrieval
-- [ ] Automatic memory prioritization
-- [ ] Learning from interactions
+- [x] Relevance-based context retrieval
+- [x] Automatic memory prioritization
+- [x] Learning from interactions
 
 ### Phase 3: Self-Management
-- [ ] Own heartbeat system
-- [ ] Priority-based task management
-- [ ] Resource monitoring
+- [x] Own heartbeat system
+- [x] Priority-based task management
+- [x] Resource monitoring
 
-### Phase 4: Debug & Interface
-- [ ] Web interface
-- [ ] Debug APIs
-- [ ] Memory visualization
+### Phase 4: Debug & Interface (now: Tracking + Transparency + Web UI)
+- [x] Web interface (the canonical transparency surface)
+- [x] Debug APIs
+- [x] Memory visualization
+- [x] **Tracking subsystem** (per-LLM-call recording in `data/openclaw_usage.jsonl`)
+- [x] **Statistics subsystem** (per-provider / per-model / per-project rollups)
+- [x] **Cost panel + #cost-tracker Discord post** (the daily transparency surface)
 
 ## Comparison with Open World
 
@@ -137,6 +188,13 @@ Like Open World has debug for world actions, Selena v2 should have:
 | LLM Call | LLM Call |
 | Action Processing | Task Processing |
 
+(But the dependency arrow goes the other way too: Selena v2
+*tracks* Open World via the LLM-call counter. The world
+binary's scheduler posts to selena-project's
+`/api/llm-usage/record` on every call. So Selena v2
+**owns the transparency surface for Open World**,
+not the other way around.)
+
 ## Example: Development Loop
 
 ```
@@ -147,14 +205,50 @@ Like Open World has debug for world actions, Selena v2 should have:
 
 2. CALL
    - "Based on pending tasks and recent context, what should I work on next?"
+   - Track the call in data/openclaw_usage.jsonl
+   - Roll up to per-project / per-provider stats
 
 3. PROCESS
    - Execute task
    - Update project status
    - Add reflection
+   - Surface the result on the web UI (transparency)
    - If task incomplete, loop
 ```
 
+## What this doc is NOT
+
+- **NOT the operator-facing identity.** See
+  [`transparency-and-stats.md`](transparency-and-stats.md) for
+  "what Selena v2 is for" (tracking + statistics +
+  transparency + web UI). This doc is the internals.
+- **NOT the cost math.** See
+  [`cost-tracking.md`](cost-tracking.md) for the
+  per-model pricing math + the `PRICE_PER_1M_USD` table.
+- **NOT the LLM-call counter explanation.** See
+  [`llm-call-tracking.md`](llm-call-tracking.md) for
+  the two-counter legacy + 5h/24h sliding window.
+
+## What this doc replaces
+
+Updated 2026-06-08 per Arcurus: the intro paragraph
+previously led with "Selena v2 is a self-contained AI
+agent with its own memory, heartbeat, and development
+loop" — that's still true and is what the body
+covers, but it didn't lead with the new identity
+("tracking + statistics + transparency + web UI").
+The new intro leads with the new identity and
+demotes the memory hierarchy + context loop to
+subsections, with a quick-map table at the top so
+the reader can navigate to the right detail.
+
+The Phase 4 checkboxes are all checked now (per
+2026-06-08 status: web interface, debug APIs,
+memory visualization, AND the new tracking/stats/
+transparency subsystems are all live). The
+"Implementation Phases" section is now a status
+report, not a future plan.
+
 ---
 
-*Plan created: 2026-04-18*
+*Plan created: 2026-04-18; restructured 2026-06-08 per Arcurus #openworld*
