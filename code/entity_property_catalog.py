@@ -499,6 +499,60 @@ PROPERTY_INFO: Dict[str, Dict[str, str]] = {
         ),
         "is_well_known": False,
     },
+    "influence": {
+        "llm_description": (
+            "Political and social leverage — the ability to sway "
+            "decisions, broker deals, or rally others. Distinct from "
+            "`power` (which is more like military / combat strength) "
+            "and from `reputation` (which is how the world SEES the "
+            "entity). A queen can have high `influence` even if she's "
+            "personally weak; a back-room dealer can have high "
+            "`influence` even if nobody respects them."
+        ),
+        "mechanics_impact": (
+            "Worth wiring: diplomacy check multiplier (high influence = "
+            "your threats / offers carry more weight), vote outcomes, "
+            "summoning / recruitment success rates, and as a way for the "
+            "LLM to model 'soft power' separately from `power`. Could "
+            "auto-modify encounter-table politeness (low influence = "
+            "merchants dismiss you; high influence = they compete for "
+            "your attention). Could also interact with `suspicion` (a "
+            "high-influence entity can deflect or absorb suspicion more "
+            "easily than a low-influence one — the same hysteresis "
+            "dead-zone as the corruption/suspicion tag rules could apply)."
+        ),
+        "is_well_known": False,
+    },
+    "suspicion": {
+        "llm_description": (
+            "How much this entity is suspected of wrongdoing, hidden "
+            "motives, or undeclared allegiances. A high value means "
+            "the world is watching them closely — they might be followed, "
+            "investigated, or refused service. A negative value means "
+            "they're seen as above reproach (a trusted hero, a public "
+            "official, a beloved community member)."
+        ),
+        "mechanics_impact": (
+            "Wired in (per Arcurus 2026-06-08 #openworld): server-side "
+            "tag rule applies the `suspicious` tag when "
+            "`max(1, power) - suspicion < -1` (i.e. suspicion has "
+            "overwhelmed the entity's tolerance by more than 1) and "
+            "removes the tag when `max(1, power) - suspicion > 0` "
+            "(i.e. suspicion is below the entity's tolerance). The "
+            "`[-1, 0]` dead zone prevents flicker near the boundary. "
+            "The high-power entity needs MORE suspicion before the tag "
+            "sticks (a power-100 entity needs suspicion > 101 to be "
+            "tagged; a power-10 entity only needs suspicion > 11). "
+            "Worth wiring further: trust check multiplier (low "
+            "suspicion = NPC cooperates; high = NPC refuses or "
+            "actively opposes), investigation triggers (very high "
+            "suspicion could auto-trigger a trial / exile / "
+            "confrontation), and as a narrative trigger for the LLM. "
+            "Distinct from `corruption` (which is actual evil) — "
+            "`suspicion` is perception, not reality."
+        ),
+        "is_well_known": False,
+    },
 }
 
 
@@ -543,66 +597,76 @@ NEW_PROPERTY_SUGGESTIONS: List[Dict[str, Any]] = [
         ),
     },
     {
-        "name": "influence",
+        "name": "loyalty",
         "llm_description": (
-            "Political and social leverage — the ability to sway "
-            "decisions, broker deals, or rally others. Distinct from "
-            "`power` (which is more like military / combat strength) "
-            "and from `reputation` (which is how the world SEES the "
-            "entity). A queen can have high `influence` even if she's "
-            "personally weak; a back-room dealer can have high "
-            "`influence` even if nobody respects them."
+            "How firmly this entity is committed to a person, cause, "
+            "faction, or ideal. A high `loyalty` means the entity "
+            "stays, fights, and sacrifices; a low or negative value "
+            "means the entity is wavering, defecting, or actively "
+            "betraying. Distinct from `reputation` (how the world sees "
+            "the entity) and from `morale` (general fighting spirit) — "
+            "`loyalty` is specifically about commitment to a thing."
         ),
         "mechanics_impact": (
-            "Worth wiring: diplomacy check multiplier (high influence = "
-            "your threats / offers carry more weight), vote outcomes, "
-            "summoning / recruitment success rates, and as a way for the "
-            "LLM to model 'soft power' separately from `power`. Could "
-            "auto-modify encounter-table politeness (low influence = "
-            "merchants dismiss you; high influence = they compete for "
-            "your attention)."
+            "Worth wiring: defection thresholds (loyalty < 0 could "
+            "auto-trigger a faction switch), betrayal detection (a "
+            "loyalty drop > N in a single turn could trigger a warning), "
+            "command acceptance (a low-loyalty unit might refuse "
+            "suicide orders), and as a counter-weight to "
+            "`suspicion` (an entity with very high loyalty to a cause "
+            "might be suspected of zealotry even when innocent). Could "
+            "also interact with `corruption` (a loyal servant of a "
+            "corrupt master is harder to flip than a neutral one)."
         ),
         "why": (
-            "The world has `power` (might) and `reputation` (image), but "
-            "no `influence` (leverage). These are three distinct axes: "
-            "an entity can be feared (high power, low reputation, low "
-            "influence = tyrant with no friends), respected (low power, "
-            "high reputation, high influence = elder statesperson), or "
-            "loved (low power, high reputation, high influence = beloved "
-            "community leader). Adding `influence` lets the LLM model "
-            "these distinct archetypes."
+            "The world has `morale` (general fighting spirit) and "
+            "`reputation` (how the world sees the entity) but no "
+            "`loyalty` (commitment to a specific thing). The LLM "
+            "currently has to choose between modelling 'willing to "
+            "fight' (morale) and 'committed to the cause' (no good "
+            "property) — a deserter has high morale (ready to "
+            "fight) but low loyalty (won't fight for YOU), and "
+            "right now there's no way to capture that distinction. "
+            "Adding `loyalty` lets the LLM model defection, betrayal, "
+            "and steadfastness as separate narrative levers."
         ),
     },
     {
-        "name": "suspicion",
+        "name": "durability",
         "llm_description": (
-            "How much this entity is suspected of wrongdoing, hidden "
-            "motives, or undeclared allegiances. A high value means "
-            "the world is watching them closely — they might be followed, "
-            "investigated, or refused service. A negative value means "
-            "they're seen as above reproach (a trusted hero, a public "
-            "official, a beloved community member)."
+            "Resistance to physical damage — how hard this entity is "
+            "to break, shatter, or wear down. For living beings, this "
+            "is toughness (natural armor, endurance, hard-to-kill). "
+            "For places, this is structural resilience (thick walls, "
+            "reinforced construction, earthquake-resistant). For "
+            "artifacts, this is material quality (forged vs. cheap, "
+            "enchanted vs. mundane). A high `durability` entity "
+            "absorbs more punishment before being affected."
         ),
         "mechanics_impact": (
-            "Worth wiring: encounter-table modifier (high suspicion = "
-            "guards, investigators, gossip-mongers may approach), trust "
-            "check multiplier (low suspicion = NPC cooperates; high "
-            "suspicion = NPC refuses or actively opposes), and as a "
-            "narrative trigger (very high suspicion could auto-trigger a "
-            "trial, exile, or confrontation). Distinct from `corruption` "
-            "(which is actual evil) — `suspicion` is perception, not "
-            "reality."
+            "Worth wiring: incoming damage multiplier (damage_taken "
+            "is reduced by a percentage of durability), armor "
+            "penetration checks (high-durability targets might resist "
+            "low-tier attacks entirely), and decay rate (high-durability "
+            "artifacts decay slower over time). Distinct from "
+            "`magic_protection` (which is resistance to spells, not "
+            "physical damage) and from a future `health` property "
+            "(which would track current structural state, not "
+            "resistance to damage). Could be wired as a server-side "
+            "multiplier on incoming cross-entity damage effects, so "
+            "the LLM writes damage values it thinks are reasonable "
+            "and the server subtracts the durability reduction."
         ),
         "why": (
-            "The world has `corruption` (actual evil) but no "
-            "`suspicion` (perceived evil). An entity can be completely "
-            "innocent but under heavy suspicion (the wrongfully accused), "
-            "or completely corrupt but unsusppected (the hidden villain). "
-            "These are very different narrative states and the LLM "
-            "should be able to model them separately. Without "
-            "`suspicion`, the LLM conflates 'is corrupt' with 'is "
-            "perceived as corrupt', which collapses two distinct story "
-            "beating possibilities into one."
+            "The world has `magic_protection` (magical resistance) "
+            "but no `durability` (physical resistance). Combined "
+            "with a future `health` property, this gives the LLM "
+            "the standard RPG trio of (resistance, current state, "
+            "incoming damage). Without `durability`, every entity "
+            "is equally squishy regardless of whether it's a "
+            "glass-mage or an iron-golem. Adding it lets the LLM "
+            "model 'you can't hurt this thing with a normal sword' "
+            "without resorting to ad-hoc `power` writes."
         ),
     },
 ]
