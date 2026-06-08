@@ -120,3 +120,22 @@ So the trigger's "8 open" is fully explained by the loose-end noise + 1 cross-pr
 - The `_classify_error` priority: explicit HTTP status code → MiniMax `base_resp.status_code` 1028/1030/2061 (no_credits) → message-pattern fallback → default to `_ERR_TRANSIENT` (safer than `_ERR_AUTH` because transient = retryable).
 
 **Verification:** After implementing `_classify_error`, the full test suite went from 61 errors → 54 errors (the 7 `TestMinimaxParser` tests all pass). Confirmed via `python3 -c "import unittest; ..."` direct import. Commit `3be2c46`.
+
+## 2026-06-08: AlertManager + _format_alert unblock 12 more tests (now 19/61 passing)
+
+**What happened:** Implemented `AlertManager` class in `code/app_llm_cost_tracker.py` (commit b253804). All 12 `TestAlertManager` tests now pass. Combined with the prior `_classify_error` work (commit 3be2c46), test pass count went from 7/61 → 19/61 (54 errors → 42 errors).
+
+**What to do differently:**
+- The state machine spec was clear from the test docstring ("just report if we encounter like 80% then 100% and then if its green again. important is that we find a way to postpone then costly tasks"). Reading the spec from the test docstring is faster than re-deriving it from the assertions.
+- `evaluate()` has two non-obvious requirements the test enforces: (a) `force=True` bypasses BOTH the cooldown AND the no-change check, (b) when force=True with no state change, the reason is `"forced"` (not `"forced_<old>_to_<new>"`).
+- `_format_alert` is a `@staticmethod` that takes `state, reason, used_pct, used, budget, *, resets_in_s, resets_at, project_breakdown`. The test only checks substrings (`assertIn`), so the formatting is flexible — just need: emoji, "used / budget" ratio, "resets in Xh Ym", "postponed" (lowercase, after `text.lower()`), and the project breakdown in the form "name=count".
+- The format check uses `text.lower()` then looks for `"postponed"` — use adjective ("is postponed", "postponed work") not verb ("postpone"). Verb forms will fail the test.
+- The remaining 42 failing tests are in `TestBackoffStateMachine` (7), `TestWindowedCounter` (3), `TestShouldProceed` (7), `TestStatusShape` (2), `TestIntervalCounters` (~23). The Backoff tests require invasive changes to `LLMCallTracker` (new `_mark_provider_failure`/`_mark_provider_success` methods, `_poll_state` dict, threading.Event), and the WindowedCounter is a new class with similar scope. These are best left for a dedicated multi-hour v2-migration run, not bolted onto a worker cycle.
+
+**Verification:** `cd tests && python3 -m unittest test_app_llm_cost_tracker.TestAlertManager -v` → 12/12 OK. Full suite: `python3 -m unittest test_app_llm_cost_tracker` → 19/61 OK, 42 errors. No regressions in the previously-passing 7 TestMinimaxParser tests.
+
+**Next steps (for a future worker run):**
+- Implement `WindowedCounter` (3 TestWindowedCounter + ~23 TestIntervalCounters tests = ~26 tests) — self-contained class, no LLMCallTracker dependency
+- Add `_mark_provider_failure` / `_mark_provider_success` + `_poll_state` dict to LLMCallTracker (7 TestBackoffStateMachine tests) — invasive but well-spec'd
+- Implement `should_proceed()` / `wait_until_budget()` (7 TestShouldProceed tests) — needs WindowedCounter
+- Total potential: 7+19+26+7+2 = 61/61 if all done (currently 19/61)
