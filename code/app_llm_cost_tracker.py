@@ -47,10 +47,105 @@ PROJECT_ALLOCATIONS = {
 TARGET_SPEND_RATIO = 4000 / 4500
 
 
+# Error classification constants (used by _classify_error).
+# These let the rest of the system treat provider errors uniformly
+# without hard-coding status codes or message strings in many places.
+_ERR_AUTH = "auth"
+_ERR_NO_CREDITS = "no_credits"
+_ERR_RATE_LIMITED = "rate_limited"
+_ERR_TRANSIENT = "transient"
+
+# HTTP status codes → error class
+_STATUS_CODE_MAP = {
+    401: _ERR_AUTH,
+    403: _ERR_AUTH,
+    402: _ERR_NO_CREDITS,
+    408: _ERR_TRANSIENT,
+    425: _ERR_RATE_LIMITED,
+    429: _ERR_RATE_LIMITED,
+    500: _ERR_TRANSIENT,
+    502: _ERR_TRANSIENT,
+    503: _ERR_TRANSIENT,
+    504: _ERR_TRANSIENT,
+}
+
+# MiniMax wraps provider errors in a body with base_resp.status_code.
+# 1028 / 1030 / 2061 = "no_credits" in the MiniMax gateway.
+_MINIMAX_NO_CREDITS_CODES = {1028, 1030, 2061}
+
+# Message-level fallbacks (used when no status code is available, or to
+# confirm a status-code classification when the message is informative).
+_MSG_PATTERNS = (
+    (("quota exhausted", "please upgrade", "insufficient balance",
+      "out of credits", "no credits"), _ERR_NO_CREDITS),
+    (("unauthenticated", "bad credentials", "invalid api key",
+      "auth", "[wke=unauth", "401", "403"), _ERR_AUTH),
+    (("rate limit", "too many requests", "429"), _ERR_RATE_LIMITED),
+)
+
+
+def _classify_error(msg: str, status_code=None, body=None):
+    """Classify a provider error into one of the error categories.
+
+    Args:
+        msg: Human-readable error message (may be empty).
+        status_code: HTTP status code if available (e.g. 401, 429, 502).
+        body: Optional parsed response body — checked for MiniMax-style
+              ``base_resp.status_code`` 1028/1030/2061 (no_credits).
+
+    Returns:
+        One of: ``_ERR_AUTH``, ``_ERR_NO_CREDITS``,
+        ``_ERR_RATE_LIMITED``, ``_ERR_TRANSIENT``.
+    """
+    # 1) explicit status code wins
+    if status_code is not None:
+        if status_code in _STATUS_CODE_MAP:
+            return _STATUS_CODE_MAP[status_code]
+        # 5xx not in the map → still transient
+        if 500 <= status_code < 600:
+            return _ERR_TRANSIENT
+        # 4xx not in the map → treat as transient (caller can refine)
+        if 400 <= status_code < 500:
+            return _ERR_TRANSIENT
+
+    # 2) MiniMax body: base_resp.status_code 1028/1030/2061 = no_credits
+    if isinstance(body, dict):
+        br = body.get("base_resp") or {}
+        sc = br.get("status_code")
+        if isinstance(sc, int) and sc in _MINIMAX_NO_CREDITS_CODES:
+            return _ERR_NO_CREDITS
+
+    # 3) message-based fallback
+    if msg:
+        lower = msg.lower()
+        for keywords, cls in _MSG_PATTERNS:
+            if any(kw in lower for kw in keywords):
+                return cls
+
+    # 4) default: transient (safer than auth — caller can retry)
+    return _ERR_TRANSIENT
+
+
 class LLMCallTracker:
+    # Re-export the constants on the class so callers (and tests) can
+    # reference them as ``LLMCallTracker._ERR_AUTH`` etc.
+    _ERR_AUTH = _ERR_AUTH
+    _ERR_NO_CREDITS = _ERR_NO_CREDITS
+    _ERR_RATE_LIMITED = _ERR_RATE_LIMITED
+    _ERR_TRANSIENT = _ERR_TRANSIENT
+
+    @staticmethod
+    def _classify_error(msg: str, status_code=None, body=None):
+        """Static wrapper around the module-level :func:`_classify_error`.
+
+        Kept as a static method on the class for backward-compat with
+        callers that use ``LLMCallTracker._classify_error(...)`` directly.
+        """
+        return _classify_error(msg, status_code, body)
+
     def __init__(self):
         self.data = self._load_data()
-    
+
     def _load_data(self) -> dict:
         """Load tracker data from file"""
         if os.path.exists(TRACKER_FILE):
