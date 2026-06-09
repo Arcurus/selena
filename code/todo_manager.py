@@ -9,7 +9,18 @@ Each todo has:
 - priority (1-10, 10 = highest)
 - short_desc (brief title)
 - long_desc (detailed description)
-- status (open, in_progress, completed, blocked, done)
+- status (open, in_progress, completed, blocked, done, closed)
+       open                   — initial / not started
+       in_progress            — being worked on
+       completed              — work done, awaiting Arcurus review
+       blocked                — cannot proceed; has block_reason / waiting_for
+       done                   — Arcurus has reviewed and approved (terminal)
+       closed                 — closed as obsolete / no longer relevant (terminal;
+                                used by close_obsolete_todos.py)
+  Note: `completed_pending_review` is no longer a valid status as of 2026-06-09
+        (per Arcurus #openworld). It was a redundant duplicate of `completed`
+        and the 15 records that used it were migrated to `completed` in
+        data/todos.json. New code paths must set `completed` directly.
 - sensitive (boolean - if True, stored in todos.env NOT in git)
 - parent_id (optional - for hierarchical todos)
 - estimated_llm_calls (optional - estimated LLM calls for this task)
@@ -893,6 +904,27 @@ class TodoManager:
 
         Args:
             sensitive: If None, all. If True, only sensitive. If False, only non-sensitive.
+
+        Note (2026-06-08, Arcurus #selena-todo-tracker):
+            Soft-deleted todos (deleted_at set) are excluded from every
+            per-status bucket AND from `total`. Previously they were
+            included, which meant the BLOCKED counter (and friends)
+            didn't decrement when a task was soft-deleted. The Deleted
+            card on the web UI is computed separately from
+            `allTodosCache.filter(t => t.deleted_at)` so soft-deletes
+            correctly move work from its status bucket to the Deleted
+            bucket, never double-counting.
+
+            Statuses covered: open, in_progress, blocked, completed,
+            done, closed. (closed was missing before 2026-06-08 and
+            meant the actual data — 42 closed tasks — never showed up
+            in the summary. As of 2026-06-09 per Arcurus #openworld,
+            `completed_pending_review` is no longer a valid status —
+            it was a redundant duplicate of `completed` (both meant
+            "work done, awaiting Arcurus review"); the 15 records
+            that used it were migrated to `completed` in
+            data/todos.json, and new code paths should set
+            `completed` directly.)
         """
         if sensitive is None:
             all_todos = self._get_all_todos()
@@ -901,26 +933,38 @@ class TodoManager:
         else:
             all_todos = self._get_todo_list(False)
 
-        open_todos = [t for t in all_todos if t["status"] == "open" and t.get("parent_id") is None]
-        in_progress = [t for t in all_todos if t["status"] == "in_progress" and t.get("parent_id") is None]
-        completed = [t for t in all_todos if t["status"] == "completed" and t.get("parent_id") is None]
-        blocked = [t for t in all_todos if t["status"] == "blocked" and t.get("parent_id") is None]
-        done = [t for t in all_todos if t["status"] == "done"]
+        # Exclude soft-deleted from all per-status counts and from `total`.
+        # (deleted_at is a soft-delete flag; the Deleted card on the web
+        # UI is computed from the full cache in JS, not from this dict.)
+        active = [t for t in all_todos if not t.get("deleted_at") and t.get("parent_id") is None]
 
-        # Calculate total estimated LLM calls
-        total_llm_calls = sum(t.get("estimated_llm_calls", 0) or 0 for t in all_todos)
+        open_todos = [t for t in active if t["status"] == "open"]
+        in_progress = [t for t in active if t["status"] == "in_progress"]
+        # `completed` = work done, awaiting Arcurus review.
+        # We also fold in any stray `completed_pending_review` records for
+        # forward-compat (defense in depth — the migration should have
+        # cleared them all, but if a new one slips in, it counts here).
+        completed = [t for t in active
+                     if t["status"] == "completed" or t["status"] == "completed_pending_review"]
+        blocked = [t for t in active if t["status"] == "blocked"]
+        done = [t for t in active if t["status"] == "done"]
+        closed = [t for t in active if t["status"] == "closed"]
+
+        # Calculate total estimated LLM calls (active only)
+        total_llm_calls = sum(t.get("estimated_llm_calls", 0) or 0 for t in active)
         open_llm_calls = sum(t.get("estimated_llm_calls", 0) or 0 for t in open_todos)
 
-        # Get top 3 by priority
+        # Get top 3 by priority (open only)
         top_priority = sorted(open_todos, key=lambda t: t["priority"], reverse=True)[:3]
 
         return {
-            "total": len([t for t in all_todos if t.get("parent_id") is None]),
+            "total": len(active),
             "open": len(open_todos),
             "in_progress": len(in_progress),
             "completed": len(completed),
             "blocked": len(blocked),
             "done": len(done),
+            "closed": len(closed),
             "total_llm_calls": total_llm_calls,
             "open_llm_calls": open_llm_calls,
             "top_priority": top_priority

@@ -161,8 +161,9 @@ older callers; prefer `/api/llm-usage/record`.
 Get all todos, optionally filtered by status and sorted.
 
 **Parameters:**
-- `status` (optional): Filter by status - `open`, `in_progress`, `done`
+- `status` (optional): Filter by status - `open`, `in_progress`, `blocked`, `completed`, `done`, `closed` (default: all). Note: `completed_pending_review` is no longer a valid status as of 2026-06-09 (per Arcurus #openworld) — it was a redundant duplicate of `completed`; use `completed` instead.
 - `sort_by` (optional): Sort by - `priority` (default), `created`, `updated`
+- `include_deleted` (optional): `true` to also return soft-deleted todos (default: `false`)
 
 **Response:**
 ```json
@@ -187,17 +188,36 @@ Get all todos, optionally filtered by status and sorted.
     }
   ],
   "summary": {
-    "total": 5,
-    "open": 4,
-    "in_progress": 0,
-    "blocked": 0,
-    "done": 1,
-    "total_llm_calls": 50,
-    "open_llm_calls": 30,
+    "total": 330,
+    "open": 94,
+    "in_progress": 6,
+    "blocked": 8,
+    "completed": 56,
+    "done": 121,
+    "closed": 42,
+    "total_llm_calls": 5,
+    "open_llm_calls": 0,
     "top_priority": [...]
   }
 }
 ```
+
+> **Note (2026-06-08 per Arcurus #selena-todo-tracker):** The `summary`
+> object now excludes soft-deleted todos (`deleted_at` is set) from
+> every per-status bucket AND from `total`. The web UI shows a separate
+> "Deleted" card computed from the full `include_deleted=true` cache,
+> so soft-deletes correctly move work from a status bucket to the
+> Deleted bucket, never double-counting. Before this fix, the Blocked
+> counter (and friends) did NOT decrement when a task was soft-deleted.
+> Status `closed` was also added to the summary; it was already used in
+> the data but was not surfaced in the summary or the web UI before
+> this change.
+>
+> **Note (2026-06-09 per Arcurus #openworld):** Status `completed_pending_review`
+> was retired as a redundant duplicate of `completed` (both meant "work
+> done, awaiting Arcurus review"). The 15 records that used it were
+> migrated to `completed` in `data/todos.json`. The summary no longer
+> surfaces a separate `completed_pending_review` bucket.
 
 ### Get Todo Summary
 **GET** `/api/todos/summary?sensitive=true|false`
@@ -210,12 +230,15 @@ Get a quick summary of all todos.
 **Response:**
 ```json
 {
-  "total": 5,
-  "open": 4,
-  "in_progress": 0,
-  "done": 1,
-  "total_llm_calls": 50,
-  "open_llm_calls": 30,
+  "total": 330,
+  "open": 94,
+  "in_progress": 6,
+  "blocked": 8,
+  "completed": 56,
+  "done": 121,
+  "closed": 42,
+  "total_llm_calls": 5,
+  "open_llm_calls": 0,
   "top_priority": [...]
 }
 ```
@@ -780,8 +803,11 @@ Same data, rendered as the Markdown that gets posted to `#cost-tracker`.
 **GET** `/api/cost-tracker/post?channel=<id>&date=2026-06-04&weekly=0`
 
 Manually push the report to the given channel (default = the cost-tracker
-channel from `~/.openclaw/openclaw.json`). Returns the rendered payload,
-truncated to Discord's 2000-char limit.
+channel from `~/.openclaw/openclaw.json`). Returns the rendered payload.
+If the report exceeds Discord's 2000-char-per-message limit, it is split
+at section boundaries into multiple follow-up messages, each stamped with
+`_(part N/M)_` (see `render_markdown_chunks()` in `code/cost_tracker.py`).
+The reported `n_chunks` field tells you how many messages were sent.
 
 ---
 

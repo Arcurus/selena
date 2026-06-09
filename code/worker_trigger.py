@@ -195,8 +195,20 @@ def _load_todos() -> List[Dict[str, Any]]:
 
 
 def _find_open_todos(project: str) -> List[Dict[str, Any]]:
-    """Return open todos for `project`. A todo is 'open' if it has no
-    `status` field set to 'done' / 'closed' / 'cancelled'.
+    """Return open todos for `project` that the worker can act on.
+
+    A todo is 'actionable' (returned) only if ALL of:
+      1. `status` is `open` or `in_progress`
+         (excludes done/closed/cancelled/completed/blocked)
+         Note: `completed_pending_review` was a redundant duplicate of
+         `completed` and was retired 2026-06-09 (per Arcurus #openworld);
+         if any historical record still carries it, the filter still
+         excludes it correctly because it is not `open`/`in_progress`.
+      2. It is not effectively blocked — i.e. no `block_reason` set and
+         `irreversible` is not truthy. An `open` todo with a `block_reason`
+         (e.g. self-flagged destructive, or pending human review with a
+         blocker note) is reclassified as blocked and excluded from the
+         trigger count. (Per Arcurus 2026-06-09 #openworld.)
 
     Handles project-name migrations: the old todos.json uses legacy
     project names ('selena-project-2', 'selena-project-lunar', 'selena'),
@@ -213,11 +225,17 @@ def _find_open_todos(project: str) -> List[Dict[str, Any]]:
         if not isinstance(t, dict):
             continue
         tp = (t.get("project") or "").strip()
-        if tp in accepted or _ALIASES.get(tp) in accepted:
-            status = (t.get("status") or "open").strip().lower()
-            if status in ("done", "closed", "cancelled", "completed"):
-                continue
-            out.append(t)
+        if tp not in accepted and _ALIASES.get(tp) not in accepted:
+            continue
+        status = (t.get("status") or "open").strip().lower()
+        # 1. Must be open or in_progress (everything else is non-actionable)
+        if status not in ("open", "in_progress"):
+            continue
+        # 2. Even open/in_progress items can be effectively blocked via
+        #    block_reason or irreversible=True — reclassify as blocked.
+        if t.get("block_reason") or t.get("irreversible"):
+            continue
+        out.append(t)
     return out
 
 
