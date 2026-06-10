@@ -106,6 +106,107 @@ def _minimax_cache_set(payload):
     _MINIMAX_CACHE["payload"] = payload
 
 # -----------------------------------------------------------------------------
+# Live MiniMax quota fetcher (added 2026-06-10 per Arcurus #cost-tracker).
+#
+# The web widget's "MiniMax 5h" card was reading a STALE field in the
+# snapshot (`providers.minimax.quota.models.*.window_5h.remaining_percent`)
+# that hadn't been refreshed since 2026-06-08 (when the direct
+# `/v1/token_plan/remains` API call last worked). The snapshot also has a
+# fresh `minimax_interval` field, but to guarantee the widget always shows
+# the most recent value, we now call `mmx quota` directly inside the
+# endpoint. The result is cached for 1 minute by `_minimax_cache_get` so
+# the 10-second client poll never hammers the upstream.
+#
+# This deliberately mirrors the parsing in code/budget_gate.py
+# (`_parse_mmx_quota`) and code/cost_tracker.py (`_format_mmx_section`)
+# but keeps it inline and never raises — on any failure (binary missing,
+# timeout, non-zero exit, non-JSON output) it returns `ok: False` and
+# the caller falls back to whatever's in the snapshot.
+# -----------------------------------------------------------------------------
+_MMX_LIVE_TIMEOUT_S = 10
+
+def _live_mmx_quota() -> dict:
+    """Call `mmx quota` and return a parsed dict, or `{ok: False, error: ...}`.
+
+    Never raises. On failure, the caller should fall back to the snapshot.
+    """
+    import subprocess
+    import shutil
+    from datetime import datetime as _dt, timezone as _tz
+    out: dict = {
+        "ok": False,
+        "source": "mmx-cli",
+        "fetched_at": _dt.now(_tz.utc).isoformat(),
+    }
+    # Resolve the `mmx` binary: try the same candidates as budget_gate.
+    mmx_candidates = [
+        os.environ.get("MMX_BIN"),
+        os.path.expanduser("~/.npm-global/bin/mmx"),
+        "/home/openclaw/.npm-global/bin/mmx",
+        shutil.which("mmx"),
+    ]
+    mmx_path = next((c for c in mmx_candidates if c and (c == "mmx" or os.path.isfile(c))), None)
+    if not mmx_path:
+        out["error"] = "mmx CLI not found"
+        return out
+    try:
+        proc = subprocess.run(
+            [mmx_path, "quota"],
+            capture_output=True, text=True, timeout=_MMX_LIVE_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        out["error"] = f"mmx quota timed out after {_MMX_LIVE_TIMEOUT_S}s"
+        return out
+    except FileNotFoundError:
+        out["error"] = f"mmx CLI not found at {mmx_path}"
+        return out
+    except Exception as e:  # noqa: BLE001
+        out["error"] = f"mmx quota error: {type(e).__name__}: {e}"
+        return out
+    if proc.returncode != 0:
+        out["error"] = f"mmx exited {proc.returncode}: {(proc.stderr or '').strip()[:200]}"
+        return out
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError as e:
+        out["error"] = f"mmx quota returned non-JSON: {e}"
+        out["raw"] = (proc.stdout or "")[:400]
+        return out
+    out["ok"] = True
+    out["data"] = data
+    return out
+
+# -----------------------------------------------------------------------------
+# Project definitions cache (added 2026-06-09 per Arcurus #cost-tracker).
+# Source of truth = data/project_mapping.json. Used by /api/llm-usage
+# to roll up child project spend into their parents (e.g. open-world-dev
+# + open-world-running -> open-world-selena). Reloaded on every call
+# (cheap; <1ms) so editing the JSONL is picked up without a restart.
+# -----------------------------------------------------------------------------
+_PROJECT_DEFS_CACHE: dict = {"ts": 0.0, "projects": {}}
+_PROJECT_DEFS_TTL_SECONDS = 5
+
+def _load_project_defs() -> dict:
+    """Return the parsed `projects` map from data/project_mapping.json.
+
+    Schema: slug -> { title, emoji, description, color, parentProject?,
+                       worker_cron_id?, primary_channel_id?, ... }
+    Cached for 5s to avoid hitting disk on every API call.
+    """
+    now = time.time()
+    if now - _PROJECT_DEFS_CACHE["ts"] < _PROJECT_DEFS_TTL_SECONDS:
+        return _PROJECT_DEFS_CACHE["projects"]
+    try:
+        with open(os.path.join(SELENA_ROOT, "data", "project_mapping.json"), encoding="utf-8") as f:
+            data = json.load(f)
+        _PROJECT_DEFS_CACHE["projects"] = data.get("projects", {}) or {}
+    except (OSError, json.JSONDecodeError):
+        _PROJECT_DEFS_CACHE["projects"] = {}
+    _PROJECT_DEFS_CACHE["ts"] = now
+    return _PROJECT_DEFS_CACHE["projects"]
+
+
+# -----------------------------------------------------------------------------
 # OpenClaw gateway config cache (added 2026-06-04 per lunar todo 8b635506)
 # The /v1/chat/completions proxy needs the gateway's URL and bearer password.
 # Reading the config on every call would be wasteful, so we cache it.
@@ -675,7 +776,14 @@ class RequestHandler(BaseHTTPRequestHandler):
             # As of 2026-06-08, the scheduler lives in the open-world-selena
             # Rust binary (src/scheduler.rs), not here. We read the config
             # directly from the world's data dir.
-            import os
+            # NOTE: do NOT add `import os` here — `os` is already imported
+            # at module top (line ~12), and a function-local `import os`
+            # makes Python treat `os` as a local variable for the WHOLE
+            # function. If any earlier branch (e.g. the index.html
+            # handler at line ~3567) references `os` before this line
+            # runs, you get `UnboundLocalError`. Hard lesson from
+            # 2026-06-08: that's exactly what crashed `/` and made
+            # the dashboard return 502.
             cfg_path = os.path.join(
                 os.path.dirname(__file__), '..', '..', 'open-world-selena',
                 'world_data', 'ow_scheduler_config.json'
@@ -822,7 +930,34 @@ class RequestHandler(BaseHTTPRequestHandler):
             qs = parse_qs(urlparse(self.path).query)
             if qs.get('sync', ['0'])[0] in ('1', 'true', 'yes'):
                 t.sync_quotas(force=True)
-            self.send_json(t.status())
+            payload = t.status()
+            # Merge in-memory per-project counts on top of the snapshot's
+            # per_project_5h so direct (non-OpenClaw) calls — e.g. the
+            # open-world-selena Rust binary's LLM calls under project
+            # 'open-world-running' — show up in the 5h per-project view
+            # in real time. The snapshot is OpenClaw-session-driven and
+            # only refreshes on the 5-min cron, so without this overlay
+            # the OW sim's spend would lag by up to 5 minutes.
+            # Added 2026-06-09 per Arcurus #cost-tracker.
+            try:
+                local = payload.setdefault('local', {})
+                merged = dict(local.get('per_project_5h') or {})
+                for proj, n in (t.per_project_5h_inmem() or {}).items():
+                    merged[proj] = merged.get(proj, 0) + n
+                local['per_project_5h'] = merged
+                # Per-project rollup to parent (e.g. open-world-dev +
+                # open-world-running roll up to open-world-selena).
+                rollup = {}
+                project_defs = _load_project_defs()
+                for proj, n in merged.items():
+                    parent = project_defs.get(proj, {}).get('parentProject')
+                    if parent:
+                        rollup[parent] = rollup.get(parent, 0) + n
+                local['per_project_5h_rollup'] = rollup
+            except Exception as _e:
+                # Non-fatal; the user still gets the snapshot data.
+                pass
+            self.send_json(payload)
             return
 
         if path == '/api/llm-usage/sync':
@@ -1088,18 +1223,26 @@ class RequestHandler(BaseHTTPRequestHandler):
             ci = qs.get('chars_in', [None])[0]
             co = qs.get('chars_out', [None])[0]
             cr = qs.get('chars_reasoning', [None])[0]
+            # Optional session/message ids for dedup against the
+            # reconciler's events (added 2026-06-08). Without these
+            # the record is in-memory only (no file write, no double-
+            # tracking risk).
+            sid = qs.get('session_id', [None])[0]
+            mid = qs.get('message_id', [None])[0]
             if not provider or not model:
                 self.send_json({'error': 'provider and model required'}, 400)
                 return
             t = _get_llm_tracker()
-            t.record(provider, model, project=project,
-                     tokens_in=int(ti) if ti else None,
-                     tokens_out=int(to) if to else None,
-                     reasoning_tokens=int(rt) if rt else None,
-                     chars_in=int(ci) if ci else None,
-                     chars_out=int(co) if co else None,
-                     chars_reasoning=int(cr) if cr else None)
-            self.send_json({'success': True})
+            result = t.record(provider, model, project=project,
+                              tokens_in=int(ti) if ti else None,
+                              tokens_out=int(to) if to else None,
+                              reasoning_tokens=int(rt) if rt else None,
+                              chars_in=int(ci) if ci else None,
+                              chars_out=int(co) if co else None,
+                              chars_reasoning=int(cr) if cr else None,
+                              session_id=sid,
+                              message_id=mid)
+            self.send_json({'success': bool(result.get('ok')), **result})
             return
 
         # Manual pause/resume of a provider's polling (e.g. when you know
@@ -1826,6 +1969,20 @@ class RequestHandler(BaseHTTPRequestHandler):
             project = query.get('project', [None])[0] if 'project=' in parsed.query else None
             agent_owner = query.get('agent_owner', [None])[0] if 'agent_owner=' in parsed.query else None
             what_happened = query.get('what_happened', [None])[0] if 'what_happened=' in parsed.query else None
+            # FIX (lunar-worker run 75, 2026-06-09 22:50 UTC): irreversible and
+            # block_reason are referenced unconditionally on the add_todo call
+            # below. Previously they were only set inside the POST body
+            # branch, so GET requests hit UnboundLocalError on line 1945,
+            # the server's exception handler bailed without sending a
+            # response, and clients (urllib, curl GET) saw "Empty reply from
+            # server" / "Remote end closed connection without response" —
+            # the v2 loose-end extractor connection-reset bug seen in 6+
+            # consecutive runs. Initialise to None (the prefilter sentinel)
+            # here, and also accept them via query string for GET callers
+            # who want the prefilter disabled (irreversible=false) or
+            # documented as already-assessed.
+            irreversible = (False if 'irreversible=false' in parsed.query else None)
+            block_reason = query.get('block_reason', [None])[0] if 'block_reason=' in parsed.query else None
             # For POST requests with JSON body, prefer body fields over query params
             if self.command == 'POST':
                 cl = int(self.headers.get('Content-Length', 0) or 0)
@@ -1853,7 +2010,10 @@ class RequestHandler(BaseHTTPRequestHandler):
                         # bypass the prefilter.
                         if 'irreversible' in body:
                             irreversible = bool(body['irreversible'])
-                        if 'block_reason' in body and body['block_reason'] is not None:
+                        # block_reason: explicit body value (including
+                        # null) wins over query string. Already set from
+                        # query string above; only overwrite if body has it.
+                        if 'block_reason' in body:
                             block_reason = body['block_reason']
                     except Exception as e:
                         log_error(f'POST /api/todos/add bad json: {e}', 'add')
@@ -2451,6 +2611,23 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
 
         # MiniMax % used (for Last Run sub-tab widget, with 1-min server-side cache)
+        #
+        # Per Arcurus 2026-06-10 in #cost-tracker: the widget was reading
+        # `providers.minimax.quota.models.*.window_5h.remaining_percent` from
+        # the snapshot, but that field was last refreshed 2026-06-08T13:49Z
+        # (when the direct `/v1/token_plan/remains` API call last worked)
+        # and the value was stuck at 0% remaining (100% used). The snapshot
+        # *also* has a fresh `minimax_interval` field that's kept up-to-date
+        # by the budget-gate timer (which uses `mmx quota`), but the widget
+        # was ignoring it. Now we read from `minimax_interval` first, and
+        # fall back to the stale field if it's missing.
+        #
+        # Authoritative source precedence (highest first):
+        #   1. `mmx quota` (called live below) — always up-to-date
+        #   2. `snapshot.minimax_interval`     — refreshed every 5 min by
+        #                                        budget-gate.timer
+        #   3. `snapshot.providers.minimax.quota` — historical, last seen
+        #                                           working 2026-06-08
         if path == '/api/discord-lookup/llm-minimax':
             if not self.authenticate():
                 self.send_json({'error': 'Unauthorized'}, 401)
@@ -2460,40 +2637,89 @@ class RequestHandler(BaseHTTPRequestHandler):
                 if cached is not None:
                     self.send_json(cached)
                     return
+                # Run `mmx quota` live so the widget never serves stale
+                # data even if the snapshot's last refresh is older than
+                # the 1-min server-side cache. Soft-fails: if `mmx`
+                # errors, we still fall through to the snapshot fields.
+                live_quota = _live_mmx_quota()
+                live_models = {}
+                live_fetched_at = None
+                if live_quota.get("ok"):
+                    live_fetched_at = live_quota.get("fetched_at")
+                    for entry in (live_quota.get("data") or {}).get("model_remains") or []:
+                        name = entry.get("model_name")
+                        if not name:
+                            continue
+                        live_models[name] = {
+                            "remaining_percent": entry.get("current_interval_remaining_percent"),
+                            "weekly_remaining_percent": entry.get("current_weekly_remaining_percent"),
+                            "status": entry.get("current_interval_status"),
+                            "resets_in_s": (entry.get("remains_time") or 0) // 1000 if entry.get("remains_time") is not None else None,
+                        }
+                # Snapshot fallback (used when `mmx` failed or returned no models).
                 t = _get_llm_tracker()
-                # Trigger a (non-forced) sync, then read
                 try:
                     t.sync_quotas(force=False)
                 except Exception:
                     pass
                 status = t.status() or {}
-                providers = status.get('providers', {}) or {}
-                # Tracker key is 'minimax' (not 'minimax-portal'). Pull both
-                # the per-model and the flat top-level window data.
-                minimax = providers.get('minimax') or {}
-                quota = minimax.get('quota', {}) or {}
-                models = quota.get('models', {}) or {}
+                mi = status.get('minimax_interval') or {}
+                snap_models = (mi.get('models') or {}) if mi.get('ok') else {}
+                snap_fetched_at = mi.get('fetched_at')
+                # Build the per-model window list. Each model gets two
+                # windows exposed to the client: `window_5h` and `weekly`
+                # (matching the old contract, so the JS code in
+                # web/index.html doesn't need changes).
                 windows = []
-                # Flatten: for each model, each window
-                for model_name, model_data in (models or {}).items():
-                    if not isinstance(model_data, dict):
-                        continue
-                    for win_key in ('window_5h', 'weekly', 'window_24h', 'window_1h'):
-                        w = model_data.get(win_key)
-                        if not isinstance(w, dict):
-                            continue
-                        rp = w.get('remaining_percent')
-                        windows.append({
-                            'model': model_name,
-                            'name': win_key,
-                            'remaining_percent': rp,
-                            'used_percent': (100 - rp) if isinstance(rp, (int, float)) else None,
-                            'status': w.get('status'),
-                            'resets_in_s': w.get('resets_in_s'),
-                        })
+                # Union of model names from live + snapshot so we never
+                # silently drop a model just because one source missed it.
+                all_models = set(live_models.keys()) | set(snap_models.keys())
+                for model_name in sorted(all_models):
+                    live = live_models.get(model_name) or {}
+                    snap = snap_models.get(model_name) or {}
+                    # Prefer live `mmx quota`, fall back to snapshot's
+                    # `minimax_interval`, then to the legacy
+                    # `providers.minimax.quota` field as a last resort.
+                    rem_5h = (
+                        live.get('remaining_percent')
+                        if live.get('remaining_percent') is not None
+                        else snap.get('remaining_percent')
+                    )
+                    status_5h = live.get('status') if live.get('status') is not None else snap.get('status')
+                    resets_in_s_5h = live.get('resets_in_s') if live.get('resets_in_s') is not None else snap.get('resets_in_s')
+                    if rem_5h is None:
+                        # Last-resort fallback: the legacy stale field.
+                        legacy = ((status.get('providers') or {}).get('minimax') or {}).get('quota', {}) or {}
+                        legacy_model = (legacy.get('models') or {}).get(model_name) or {}
+                        legacy_5h = legacy_model.get('window_5h') or {}
+                        rem_5h = legacy_5h.get('remaining_percent')
+                        if status_5h is None:
+                            status_5h = legacy_5h.get('status')
+                        if resets_in_s_5h is None:
+                            resets_in_s_5h = legacy_5h.get('resets_in_s')
+                    rem_week = live.get('weekly_remaining_percent') if live.get('weekly_remaining_percent') is not None else snap.get('weekly_remaining_percent')
+                    windows.append({
+                        'model': model_name,
+                        'name': 'window_5h',
+                        'remaining_percent': rem_5h,
+                        'used_percent': (100 - rem_5h) if isinstance(rem_5h, (int, float)) else None,
+                        'status': status_5h,
+                        'resets_in_s': resets_in_s_5h,
+                    })
+                    windows.append({
+                        'model': model_name,
+                        'name': 'weekly',
+                        'remaining_percent': rem_week,
+                        'used_percent': (100 - rem_week) if isinstance(rem_week, (int, float)) else None,
+                        'status': None,
+                        'resets_in_s': None,
+                    })
+                # `fetched_at` = whichever source is freshest; live wins
+                # by construction since we just called it.
+                fetched_at = live_fetched_at or snap_fetched_at or datetime.datetime.now(timezone.utc).isoformat()
                 payload = {
                     'cached': False,
-                    'fetched_at': datetime.datetime.now(timezone.utc).isoformat(),
+                    'fetched_at': fetched_at,
                     'provider': 'minimax',
                     'windows': windows,
                     'summary': status.get('summary'),
@@ -3066,17 +3292,113 @@ class RequestHandler(BaseHTTPRequestHandler):
                                         projects[-1]['repo'] = value
                                     elif key == 'directory':
                                         projects[-1]['directory'] = value
+                                    elif key == 'parentproject':
+                                        projects[-1]['parentProject'] = value
                 except Exception as e:
                     pass
-            
+
+            # Decorate each project with parentProject / is_parent /
+            # children from the project_mapping.json (the canonical source
+            # of truth for project definitions). Per Arcurus 2026-06-09
+            # #cost-tracker: project_mapping.json is now the schema-v2
+            # store with parentProject / children fields. The markdown
+            # file remains the human-friendly description, but the
+            # parent/child metadata comes from the JSON.
+            project_defs = _load_project_defs()
+            for p in projects:
+                slug = p.get('name')
+                if not slug:
+                    continue
+                d = project_defs.get(slug, {})
+                p['parentProject'] = p.get('parentProject') or d.get('parentProject')
+                p['is_parent'] = bool(d.get('is_parent'))
+                p['children'] = d.get('children') or []
+                p['emoji'] = d.get('emoji', p.get('emoji', ''))
+                p['color'] = d.get('color', p.get('color', ''))
+                p['worker_cron_id'] = d.get('worker_cron_id')
+                p['worker_cron_name'] = d.get('worker_cron_name')
+                p['primary_channel_id'] = d.get('primary_channel_id')
+
             # Add default projects if none found
             if not projects:
                 projects = [
                     {'name': 'open-world-selena', 'description': 'Rust-based evolving world with LLM-driven entities', 'status': 'active', 'port': '8081', 'repo': 'https://github.com/Arcurus/openworld-selena'},
                     {'name': 'selena-project', 'description': 'Self-development, memory, reflection system', 'status': 'active', 'port': '8765', 'repo': 'https://github.com/Arcurus/selena'}
                 ]
-            
+
             self.send_json({'projects': projects})
+            return
+
+        # /api/projects/tree — return projects grouped by parent so the
+        # UI can render a tree (added 2026-06-09 per Arcurus #cost-tracker).
+        # Each top-level entry is either a parent (with `children` array)
+        # or a top-level project (with empty `children`). The parent's
+        # `children` are full project objects so the UI doesn't need a
+        # second fetch.
+        if path == '/api/projects/tree':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            project_defs = _load_project_defs()
+            # Get the basic list first (so we have description, status, port, repo)
+            # by delegating to the markdown parser. Easier: just inline the
+            # parser. We keep this DRY by reusing the same logic.
+            projects_file = os.path.join(SELENA_ROOT, 'docs', 'projects.md')
+            base = []
+            if os.path.exists(projects_file):
+                try:
+                    with open(projects_file, 'r') as f:
+                        content = f.read()
+                    import re
+                    current_project = None
+                    for line in content.split('\n'):
+                        if line.startswith('### '):
+                            current_project = line[4].strip()
+                        elif current_project and line.strip().startswith('- **') and ':' in line:
+                            key_match = re.search(r'\*\*(.+?)\*\*:\s*(.+)', line)
+                            if key_match:
+                                key = key_match.group(1).lower().replace(' ', '_')
+                                value = key_match.group(2).strip()
+                                if key == 'name':
+                                    base.append({'name': value, 'description': '', 'status': 'active', 'port': '', 'repo': ''})
+                                elif len(base) > 0:
+                                    if key == 'description': base[-1]['description'] = value
+                                    elif key == 'status': base[-1]['status'] = value
+                                    elif key == 'port': base[-1]['port'] = value
+                                    elif key == 'repo': base[-1]['repo'] = value
+                                    elif key == 'directory': base[-1]['directory'] = value
+                except Exception:
+                    pass
+            # Decorate and group
+            by_slug = {}
+            for p in base:
+                slug = p.get('name')
+                d = project_defs.get(slug, {})
+                p['parentProject'] = d.get('parentProject')
+                p['is_parent'] = bool(d.get('is_parent'))
+                p['children_slugs'] = d.get('children') or []
+                p['emoji'] = d.get('emoji', '')
+                p['color'] = d.get('color', '')
+                p['worker_cron_id'] = d.get('worker_cron_id')
+                p['worker_cron_name'] = d.get('worker_cron_name')
+                p['primary_channel_id'] = d.get('primary_channel_id')
+                by_slug[slug] = p
+            # Group: top-level = parents OR orphans (no parent slug in
+            # the loaded set). Each parent's `children` is a list of
+            # full child objects.
+            tree = []
+            children_lookup: dict = {}
+            for slug, p in by_slug.items():
+                parent = p.get('parentProject')
+                if parent and parent in by_slug:
+                    children_lookup.setdefault(parent, []).append(p)
+            for slug, p in by_slug.items():
+                if p.get('is_parent') or not p.get('parentProject'):
+                    p['children'] = children_lookup.get(slug, [])
+                    tree.append(p)
+                # (children are nested under their parent; don't add as a
+                #  separate top-level entry)
+            self.send_json({'tree': tree, 'flat': list(by_slug.values())})
             return
         
         # Service management endpoints
@@ -3609,6 +3931,8 @@ class RequestHandler(BaseHTTPRequestHandler):
                     content_type = 'text/css'
                 elif file_path.endswith('.js'):
                     content_type = 'application/javascript'
+                elif file_path.endswith('.html') or file_path.endswith('.htm'):
+                    content_type = 'text/html; charset=utf-8'
                 elif file_path.endswith('.png'):
                     content_type = 'image/png'
                 else:
@@ -3855,18 +4179,26 @@ class RequestHandler(BaseHTTPRequestHandler):
             ci = qs.get('chars_in', [None])[0]
             co = qs.get('chars_out', [None])[0]
             cr = qs.get('chars_reasoning', [None])[0]
+            # Optional session/message ids for dedup against the
+            # reconciler's events (added 2026-06-08). Without these
+            # the record is in-memory only (no file write, no double-
+            # tracking risk).
+            sid = qs.get('session_id', [None])[0]
+            mid = qs.get('message_id', [None])[0]
             if not provider or not model:
                 self.send_json({'error': 'provider and model required'}, 400)
                 return
             t = _get_llm_tracker()
-            t.record(provider, model, project=project,
-                     tokens_in=int(ti) if ti else None,
-                     tokens_out=int(to) if to else None,
-                     reasoning_tokens=int(rt) if rt else None,
-                     chars_in=int(ci) if ci else None,
-                     chars_out=int(co) if co else None,
-                     chars_reasoning=int(cr) if cr else None)
-            self.send_json({'success': True})
+            result = t.record(provider, model, project=project,
+                              tokens_in=int(ti) if ti else None,
+                              tokens_out=int(to) if to else None,
+                              reasoning_tokens=int(rt) if rt else None,
+                              chars_in=int(ci) if ci else None,
+                              chars_out=int(co) if co else None,
+                              chars_reasoning=int(cr) if cr else None,
+                              session_id=sid,
+                              message_id=mid)
+            self.send_json({'success': bool(result.get('ok')), **result})
             return
 
         # ----- OpenAI-compatible chat completions proxy -----
@@ -3978,7 +4310,19 @@ class RequestHandler(BaseHTTPRequestHandler):
                 chars_out = len(assistant_text)
                 chars_reasoning = len(reasoning_text)
                 tracker = _get_llm_tracker()
-                tracker.record(
+                # Pull session/message ids from request headers (if
+                # the caller is the OpenClaw gateway) or from the body
+                # (if the caller embeds them in metadata). Either way
+                # this gives us a dedup key so the reconciler won't
+                # re-add the same call. Added 2026-06-08 to stop the
+                # chat-proxy record() from silently double-counting.
+                sid = (self.headers.get('X-OpenClaw-Session-Id')
+                       or body.get('session_id')
+                       or body.get('metadata', {}).get('session_id') if isinstance(body.get('metadata'), dict) else None)
+                mid = (self.headers.get('X-OpenClaw-Message-Id')
+                       or body.get('message_id')
+                       or body.get('metadata', {}).get('message_id') if isinstance(body.get('metadata'), dict) else None)
+                record_result = tracker.record(
                     'minimax-portal',
                     body.get('model', 'openclaw'),
                     project='project-lunar',
@@ -3988,7 +4332,10 @@ class RequestHandler(BaseHTTPRequestHandler):
                     chars_in=chars_in,
                     chars_out=chars_out,
                     chars_reasoning=chars_reasoning,
+                    session_id=sid,
+                    message_id=mid,
                 )
+                log_api('GATEWAY_CHAT_RECORD', f'sid={sid} mid={mid} result={record_result.get("ok")} dup={record_result.get("duplicate", False)} inmem={record_result.get("inmem_only", False)}')
             except Exception:
                 pass
             self.send_json(parsed, resp_status)
