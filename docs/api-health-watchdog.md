@@ -18,10 +18,11 @@ Every 5 minutes (`OnUnitActiveSec=5min`), the watchdog:
    - `selena-api`         → `http://127.0.0.1:8765/api/health`
    - `open-world-selena`  → `http://127.0.0.1:8081/api/world/stats`
    - `orchestrator-status` → `http://127.0.0.1:8766/health`
-2. **Self-heals on first failure**: calls `systemctl --user restart <unit>`, waits 6s, re-probes. If the restart fixed it, **no Discord alert** is posted (silent recovery).
-3. **Alerts on persistent failure**: if the service is still down after the restart attempt, posts to **#selena-project-important** (channel `1495187458776891483`) with a 30-minute dedup window per service. Posts ONE alert, not spam.
-4. **Recovery post**: when a previously-failed service comes back up, posts a `✅ ... is back UP` message (one-shot, no dedup loop).
-5. **Always exits 0** — the watchdog's job is to detect failure, not to be one. A failed watchdog would mask the real issue.
+2. **Self-heals on first failure — but only `selena-api`.** Calls `systemctl --user restart <unit>`, waits 6s, re-probes. If the restart fixed it, **no Discord alert** is posted (silent recovery).
+3. **`open-world-selena` and `orchestrator-status` are NOT restarted by the external watchdog** — they're handled by the in-process `service_manager` running inside `selena-api` (see `code/service_manager.py`), which polls every 30s and restarts any service with `auto_start: true` in `docs/projects.md`. The external watchdog PROBES these services (so it can alert if selena-api's in-process watchdog is silently broken), but the restart is selena-api's job.
+4. **Alerts on persistent failure**: if a service is still down after the restart attempt (selena-api) or after a full watchdog cycle (the other 2), posts to **#selena-project-important** (channel `1495187458776891483`) with a 30-minute dedup window per service. Posts ONE alert, not spam.
+5. **Recovery post**: when a previously-failed service comes back up, posts a `✅ ... is back UP` message (one-shot, no dedup loop).
+6. **Always exits 0** — the watchdog's job is to detect failure, not to be one. A failed watchdog would mask the real issue.
 
 ## Files
 
@@ -33,6 +34,7 @@ Every 5 minutes (`OnUnitActiveSec=5min`), the watchdog:
 | `data/api_health_watchdog.json`       | state file: per-service last-OK, last-FAIL, last-alert, consecutive-fails, heal-in-flight |
 | `data/api_health_watchdog.log`        | append-only probe + heal log |
 | `data/activity_log`                   | receives `[WATCHDOG_HEAL_TRY]`, `[WATCHDOG_HEAL_OK]`, `[WATCHDOG_ALERT]`, `[WATCHDOG_RECOVERED]` one-liners |
+| `docs/projects.md`                    | **The source of truth for which services `selena-api`'s in-process watchdog auto-restarts.** Look here for the `auto_start: true` / `start_command` / `health_url` / `grace_period_seconds` / `max_restarts_per_hour` per service. Per Arcurus 2026-06-11 #selena-project: "all the other services can be tracked in project selena right? so a service can be registered there as auto start that we all added already". |
 
 ## Verified behavior (live test 2026-06-11 20:35 CEST)
 
@@ -86,16 +88,18 @@ systemctl --user start api-health-watchdog.service
 | Pure Python (stdlib only, no `requests`) | Zero install footprint, runs anywhere Python 3.10+ is present. |
 | `urllib.request` instead of `curl` | No subprocess, no shell-quoting, easier to reason about timeouts. |
 | 5-min cadence (matches old fast-heartbeat) | Frequent enough to catch outages before humans notice, sparse enough to not generate noise. |
+| **External watchdog restarts ONLY `selena-api`** (per Arcurus 2026-06-11 #selena-project) | The other 2 services (`open-world-selena`, `orchestrator-status`) are registered with `auto_start: true` in `docs/projects.md`, so `selena-api`'s in-process `service_manager` heals them. The external watchdog is a safety net for the orchestrator itself. |
+| Probes all 3 services (not just selena-api) | Even though it only restarts 1, it PROBES all 3 so it can alert if the in-process watchdog is silently broken. |
 | Single self-heal attempt on first fail | Avoids restart-loops. The 2nd consecutive fail is what triggers the alert. |
 | 30-min alert dedup | If the API is down for 11h, we don't want 132 alerts in `#selena-project-important`. One alert per 30 min is enough. |
 | 6s post-restart wait | Long enough for the systemd `RestartSec=5` to settle, short enough to not delay the timer. |
 | Posts via `discord_client.post_to_channel` | Reuses the existing in-process Discord notifier (no new auth, no new bot). Already verified to handle 401s and rate limits gracefully. |
 | Returns 0 on detected failure | The watchdog's own failure must not propagate to systemd (which would mask the real issue with "watchdog service failed"). |
 | Uses `data/api_health_watchdog.json` not a global config | Keeps it self-contained inside selena-project, easy to find. |
-| Covers 3 services, not just selena-api | open-world-selena is the biggest MiniMax consumer; orchestrator-status is the lunar workers' control plane. All three are critical. |
 
 ## What this watchdog does NOT do (deliberately)
 
+- **Does not restart the satellite services** (`open-world-selena`, `orchestrator-status`). Those are `selena-api`'s responsibility, via its in-process `service_manager`. The external watchdog only restarts `selena-api` itself.
 - **Does not restart the gateway or Caddy** — those are infra-level, restarting them needs human judgment. The 3 services covered are in-VPS application services.
 - **Does not post to #selena-project** — only #selena-project-important. The project channel is for work reports, not infra alerts.
 - **Does not call the LLM** — adding an LLM call here would add 2-5s of latency + cost. Not worth it for a 200/health check.

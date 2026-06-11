@@ -38,6 +38,7 @@ over the **agent-internals** story (memory + heartbeat).
 | **Context loop** (3 phases) | CONTEXT → CALL → PROCESS, similar to the open-world action loop | [§ Context Loop](#context-loop) below |
 | **Web interface** (transparency surface) | The selena-project `:8765` web UI, the #cost-tracker Discord post | [`transparency-and-stats.md`](transparency-and-stats.md) |
 | **Self-management** (heartbeat + task priority) | `heartbeat.md` + `priorities.md` + the autonomy policy | `heartbeat.md` (file pointer) |
+| **Service watchdog** (two layers) | ① `service_manager` in-process inside selena-api (30s polls, restarts `auto_start: true` services from `docs/projects.md`). ② External `api_health_watchdog.py` (5min timer, restarts selena-api itself, alerts to #selena-project-important). The external watchdog is the safety net for the orchestrator; the in-process watchdog is the fast path for everything else. | [`api-health-watchdog.md`](api-health-watchdog.md) + [`service_manager.py`](../code/service_manager.py) |
 
 ## Memory Hierarchy
 

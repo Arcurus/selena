@@ -1,21 +1,43 @@
 #!/usr/bin/env python3
 """
-api_health_watchdog.py — active health-check + auto-heal for the in-VPS services.
+api_health_watchdog.py — the LAST-RESORT watchdog for selena-api.
 
 Per Arcurus 2026-06-11 #selena-project: after the 11h outage (API crashed
 2026-06-10 21:09:15, no watchdog caught it until manual restart at 08:39),
 build a CHEAP (no LLM, no OpenClaw session) watchdog that:
 
-  1. Probes selena-api (8765), open-world (8081), orchestrator-status (8766)
-  2. On detected failure → attempt ONE self-heal via `systemctl --user restart`
-  3. Re-probe after a short delay; if still down → post ONCE to
+  1. Probes selena-api (8765), open-world-selena (8081), orchestrator-status (8766)
+  2. ONLY restarts selena-api (the orchestrator). The other 2 services are
+     tracked in selena-project's own in-process service_manager (started
+     2026-06-02, see selena-project/code/service_manager.py) and healed
+     automatically — every 30s, with grace_period_seconds=60 and
+     max_restarts_per_hour=4. So the external watchdog is a safety net
+     FOR selena-api only.
+  3. On detected selena-api failure → attempt ONE self-heal via
+     `systemctl --user restart selena-project.service`
+  4. Re-probe after a short delay; if still down → post ONCE to
      #selena-project-important (channel 1495187458776891483) with 30-min dedup
-  4. When the service recovers → post ONCE the "recovered" message
-  5. Always exit 0 (so the timer never marks the watchdog as failed; the
+  5. When selena-api recovers → post ONCE the "recovered" message
+  6. **Checks data freshness (added 2026-06-11 per Arcurus #cost-tracker,
+     follow-up to the 22h silent-undercount incident):** if any of the
+     producer-cron output files goes stale (mtime older than its threshold),
+     post a single #selena-project-important alert with 30-min dedup. No
+     auto-restart (the producer crons have their own systemd units; the
+     alert is enough to wake a human if they're broken). This is the
+     second layer the HTTP probe can't catch: selena-api can be perfectly
+     healthy while a producer cron (e.g. openclaw-usage-track) silently
+     stops writing because someone pointed it at a dead shim.
+  7. Always exit 0 (so the timer never marks the watchdog as failed; the
      watchdog's job is to detect failure, not be one)
 
-State is kept in data/api_health_watchdog.json (last-healthy timestamps,
-last-alert timestamps per service). Appends to data/api_health_watchdog.log.
+The other 2 services are PROBED (so the watchdog knows their state and can
+alert if selena-api's in-process watchdog is silently broken), but the
+external watchdog does NOT restart them — that's selena-api's job, per
+projects.md's auto_start: true flags.
+
+State is kept in data/api_health_watchdog.json (per-service and per-data-file
+last-healthy timestamps, last-alert timestamps). Appends to
+data/api_health_watchdog.log.
 
 Usage:
   python3 code/api_health_watchdog.py check     # one-shot probe + heal
@@ -49,18 +71,54 @@ ACTIVITY_LOG = DATA_DIR / "activity_log"
 # Discord channel for alerts (selena-project-important)
 ALERT_CHANNEL_ID = "1495187458776891483"
 
-# Each service: (label, systemd_unit, http_probe_url, host_path)
+# Each service: (label, systemd_unit, http_probe_url, host_path, can_restart)
+# - can_restart=True: external watchdog restarts it on failure
+# - can_restart=False: external watchdog only PROBES it; the in-process
+#                      service_manager inside selena-api handles restart
+#                      (see selena-project/docs/projects.md auto_start: true)
 SERVICES = [
-    ("selena-api",          "selena-project.service",          "http://127.0.0.1:8765/api/health",     "/selena-astra/"),
-    ("open-world-selena",   "open-world-selena.service",       "http://127.0.0.1:8081/api/world/stats", "/open-world/"),
-    ("orchestrator-status", "orchestrator-status.service",     "http://127.0.0.1:8766/health",         None),
+    ("selena-api",          "selena-project.service",      "http://127.0.0.1:8765/api/health",     "/selena-astra/", True),
+    ("open-world-selena",   "open-world-selena.service",   "http://127.0.0.1:8081/api/world/stats", "/open-world/",   False),
+    ("orchestrator-status", "orchestrator-status.service", "http://127.0.0.1:8766/health",         None,             False),
+]
+
+# Each data file: (label, relpath_from_selena_dir, max_age_seconds, producer_hint)
+# - max_age_seconds: how stale is too stale. After this, the producer cron
+#                    is presumed broken and we alert. Choose threshold =
+#                    2x the producer's expected cadence + 5 min grace.
+# - producer_hint: free-text that names what should be producing this file
+#                  (systemd timer + cron job ID, or "in-process" for files
+#                  written by selena-api itself). Goes in the alert message
+#                  so the on-call human knows what to investigate.
+#
+# Background: the 2026-06-10 22h silent undercount happened because
+# openclaw-usage-track.service was calling a dead shim (the openclaw_usage.py
+# -> openclaw_cost_tracker.py rename). selena-api was up the whole time, the
+# HTTP probe was green, but the .jsonl hadn't been touched in 22h. The
+# watcher's job expanded: an HTTP 200 is necessary but not sufficient.
+DATA_FILES = [
+    # The per-call LLM event log. Written by selena-api in-process
+    # (/api/llm-usage/record) AND by the openclaw-usage-reconciler cron.
+    # Threshold: 10 min (the reconciler is 5-min; 2 missed cycles = stale).
+    ("llm_usage_events.jsonl",      "data/llm_usage_events.jsonl",      600,
+     "selena-api /api/llm-usage/record (in-process) + openclaw-usage-reconciler.timer"),
+    # The OpenClaw session log. The producer is openclaw-usage-track.service
+    # (5-min cron). THIS IS THE FILE THAT WENT SILENT FOR 22H on 2026-06-11.
+    # Threshold: 15 min (5-min cadence + 5min grace + 5min grace).
+    ("openclaw_usage.jsonl",        "data/openclaw_usage.jsonl",        900,
+     "openclaw-usage-track.service (5-min timer; cmd=openclaw_cost_tracker.py sync)"),
+    # The live LLM quota snapshot (MiniMax / OpenAI). Producer: sync_llm_usage.sh
+    # called by llm-usage-sync.timer (10-min cadence per Arcurus 2026-06-11).
+    # Threshold: 20 min (10-min cadence + 10min grace).
+    ("llm_usage_snapshot.json",     "data/llm_usage_snapshot.json",     1200,
+     "llm-usage-sync.timer (scripts/sync_llm_usage.sh; 10-min cadence)"),
 ]
 
 # Probe timeout (seconds) — keep short so a hung service doesn't block the loop
 PROBE_TIMEOUT_S = 5
 # Time to wait after a restart before re-probing
 HEAL_WAIT_S = 6
-# Dedup window: don't re-alert about the same service within this many seconds
+# Dedup window: don't re-alert about the same service / data file within this many seconds
 DEDUP_S = 30 * 60  # 30 minutes
 # Treat a "stale" probe (took > N seconds) as suspicious but not failure
 SLOW_PROBE_S = 3
@@ -199,7 +257,7 @@ def check_once() -> int:
     state.setdefault("services", {})
     any_failed = False
 
-    for label, unit, url, host_path in SERVICES:
+    for label, unit, url, host_path, can_restart in SERVICES:
         svc = state["services"].setdefault(label, {
             "last_ok_at": None,
             "last_fail_at": None,
@@ -246,10 +304,15 @@ def check_once() -> int:
         any_failed = True
         svc["consecutive_fails"] += 1
         svc["last_fail_at"] = svc["last_probe_at"]
-        log_line(f"FAIL {label:24s} {err} (consecutive={svc['consecutive_fails']})")
+        log_line(f"FAIL {label:24s} {err} (consecutive={svc['consecutive_fails']}, can_restart={can_restart})")
 
-        # Self-heal: try restart ONCE on the first consecutive failure
-        if svc["consecutive_fails"] == 1 and not svc.get("heal_in_flight"):
+        # Self-heal: try restart ONCE on the first consecutive failure,
+        # ONLY for services the external watchdog is allowed to restart
+        # (selena-api). For open-world-selena and orchestrator-status, the
+        # in-process service_manager inside selena-api handles restart; if
+        # it's not working, that's a sign selena-api is also broken (which
+        # we'll catch via its own probe below).
+        if can_restart and svc["consecutive_fails"] == 1 and not svc.get("heal_in_flight"):
             svc["heal_in_flight"] = True
             log_line(f"heal: attempting restart of {unit}")
             activity_log("WATCHDOG_HEAL_TRY", f"attempting systemctl --user restart {unit} (consecutive_fails=1, err={err})")
@@ -297,18 +360,22 @@ def check_once() -> int:
                 except Exception:
                     pass
             heal_note = " (self-heal attempted, still down)" if svc.get("heal_in_flight") else ""
+            # For non-restartable services, the message says so — the on-call
+            # human needs to know this is selena-api's in-process watchdog
+            # territory, not the external watchdog's.
+            owner_note = "" if can_restart else " (handled by selena-api in-process service_manager; alert indicates that watchdog is broken too)"
             path_hint = f"\n• site path: `{host_path}`" if host_path else ""
             msg = (
                 f"🚨 **{label}** health check FAILED{heal_note}{downtime}\n"
                 f"• probe `{url}` → `{err}`\n"
                 f"• consecutive fails: {svc['consecutive_fails']}"
                 f"{path_hint}\n"
-                f"• systemd unit: `{unit}`\n"
+                f"• systemd unit: `{unit}`{owner_note}\n"
                 f"• watchdog will re-check in 5 min (30-min dedup on this alert)"
             )
             if post_discord(msg):
                 svc["last_alert_at"] = svc["last_probe_at"]
-                activity_log("WATCHDOG_ALERT", f"{label} probe failed: {err} (consecutive={svc['consecutive_fails']}, heal={'in-flight' if svc.get('heal_in_flight') else 'none'})")
+                activity_log("WATCHDOG_ALERT", f"{label} probe failed: {err} (consecutive={svc['consecutive_fails']}, heal={'in-flight' if svc.get('heal_in_flight') else 'none'}, can_restart={can_restart})")
 
     save_state(state)
     # The watchdog's own job is to detect failure; it returns 0 always so
@@ -323,14 +390,16 @@ def show_status() -> int:
         return 0
     print(f"State file: {STATE_PATH}")
     print(f"Last check: {state.get('last_check_at', 'never')}")
-    for label, _, _, _ in SERVICES:
+    for label, _, _, _, can_restart in SERVICES:
         svc = state.get("services", {}).get(label, {})
         if not svc:
             print(f"  {label:24s} (no probes yet)")
             continue
         status = "UP" if svc.get("last_ok_at") and svc.get("consecutive_fails", 0) == 0 else "DOWN"
+        role = "self-heals" if can_restart else "selena-api heals"
         print(
             f"  {label:24s} {status:5s} | "
+            f"role={role:14s} | "
             f"last_ok={svc.get('last_ok_at', 'never')} | "
             f"consec_fails={svc.get('consecutive_fails', 0)} | "
             f"last_err={svc.get('last_error') or '-'}"
