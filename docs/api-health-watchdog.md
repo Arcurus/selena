@@ -22,7 +22,8 @@ Every 5 minutes (`OnUnitActiveSec=5min`), the watchdog:
 3. **`open-world-selena` and `orchestrator-status` are NOT restarted by the external watchdog** — they're handled by the in-process `service_manager` running inside `selena-api` (see `code/service_manager.py`), which polls every 30s and restarts any service with `auto_start: true` in `docs/projects.md`. The external watchdog PROBES these services (so it can alert if selena-api's in-process watchdog is silently broken), but the restart is selena-api's job.
 4. **Alerts on persistent failure**: if a service is still down after the restart attempt (selena-api) or after a full watchdog cycle (the other 2), posts to **#selena-project-important** (channel `1495187458776891483`) with a 30-minute dedup window per service. Posts ONE alert, not spam.
 5. **Recovery post**: when a previously-failed service comes back up, posts a `✅ ... is back UP` message (one-shot, no dedup loop).
-6. **Always exits 0** — the watchdog's job is to detect failure, not to be one. A failed watchdog would mask the real issue.
+6. **Checks data freshness (added 2026-06-11 per Arcurus #cost-tracker, follow-up to the 22h silent-undercount incident):** `stat()`s the critical data files in `data/` and alerts (with the same 30-min dedup + recovery post pattern) if any of them go stale. This is the **second silent-failure layer** the HTTP probe can't catch: selena-api can be perfectly healthy while a producer cron (e.g. openclaw-usage-track) silently stops writing because someone pointed it at a dead shim. The 22h gap that motivated this extension would have been caught within 15 min if this check had existed.
+7. **Always exits 0** — the watchdog's job is to detect failure, not to be one. A failed watchdog would mask the real issue.
 
 ## Files
 
@@ -31,9 +32,10 @@ Every 5 minutes (`OnUnitActiveSec=5min`), the watchdog:
 | `code/api_health_watchdog.py`         | The script. CLI: `check` (default), `status`, `reset`. |
 | `~/.config/systemd/user/api-health-watchdog.service` | systemd oneshot, runs the script |
 | `~/.config/systemd/user/api-health-watchdog.timer`  | fires every 5 min, persistent across reboots |
-| `data/api_health_watchdog.json`       | state file: per-service last-OK, last-FAIL, last-alert, consecutive-fails, heal-in-flight |
+| `data/api_health_watchdog.json`       | state file: per-service and per-data-file last-OK, last-FAIL, last-alert, consecutive-fails, heal-in-flight |
 | `data/api_health_watchdog.log`        | append-only probe + heal log |
-| `data/activity_log`                   | receives `[WATCHDOG_HEAL_TRY]`, `[WATCHDOG_HEAL_OK]`, `[WATCHDOG_ALERT]`, `[WATCHDOG_RECOVERED]` one-liners |
+| `data/activity_log`                   | receives `[WATCHDOG_HEAL_TRY]`, `[WATCHDOG_HEAL_OK]`, `[WATCHDOG_ALERT]`, `[WATCHDOG_RECOVERED]`, `[WATCHDOG_DATA_STALE]`, `[WATCHDOG_DATA_RECOVERED]` one-liners |
+| `scripts/smoke_test_api_health_watchdog.py` | 7-test end-to-end smoke test for the data-freshness path (no real Discord posts, restores real mtimes) |
 | `docs/projects.md`                    | **The source of truth for which services `selena-api`'s in-process watchdog auto-restarts.** Look here for the `auto_start: true` / `start_command` / `health_url` / `grace_period_seconds` / `max_restarts_per_hour` per service. Per Arcurus 2026-06-11 #selena-project: "all the other services can be tracked in project selena right? so a service can be registered there as auto start that we all added already". |
 
 ## Verified behavior (live test 2026-06-11 20:35 CEST)
@@ -100,10 +102,48 @@ systemctl --user start api-health-watchdog.service
 ## What this watchdog does NOT do (deliberately)
 
 - **Does not restart the satellite services** (`open-world-selena`, `orchestrator-status`). Those are `selena-api`'s responsibility, via its in-process `service_manager`. The external watchdog only restarts `selena-api` itself.
+- **Does not auto-restart producer crons on data-staleness** — the producer crons (openclaw-usage-track, llm-usage-sync) have their own systemd timers. The watchdog's job is to detect that a producer is broken; the human decides what to do (re-point at the right script, restart the unit, etc.). Auto-restarting a misconfigured cron just makes it fail in a loop.
 - **Does not restart the gateway or Caddy** — those are infra-level, restarting them needs human judgment. The 3 services covered are in-VPS application services.
 - **Does not post to #selena-project** — only #selena-project-important. The project channel is for work reports, not infra alerts.
 - **Does not call the LLM** — adding an LLM call here would add 2-5s of latency + cost. Not worth it for a 200/health check.
 - **Does not check the gateway (`openclaw-gateway`, port 18789)** — that's OpenClaw's concern, not selena-project's. If you want it covered, add it to `SERVICES` in the script.
+
+## Data freshness: the second silent-failure layer (added 2026-06-11)
+
+**The problem this solves:** on 2026-06-10, `code/openclaw_usage.py` was converted to a re-export shim but the systemd timer kept calling it as a script. The shim exited 0 with no log, no work. The HTTP probe said selena-api was up (it was). The `data/openclaw_usage.jsonl` silently stopped writing for **22 hours** until Arcurus noticed by hand. An HTTP probe alone is necessary but not sufficient: a producer cron can silently die while the API stays up.
+
+**How it works:** the watchdog `stat()`s the files in `DATA_FILES` and applies the same alert pattern as for services (30-min dedup, recovery post, no auto-heal):
+
+| File | Threshold | Producer | Notes |
+|------|-----------|----------|-------|
+| `data/llm_usage_events.jsonl` | 30 min | in-process `/api/llm-usage/record` + openclaw-usage-reconciler.timer (5-min cadence) | Threshold is wider than the producer cadence because the reconciler only writes for **new sessions** (deduped by sessionId). 30 min allows for legitimate low-traffic hours. |
+| `data/openclaw_usage.jsonl` | 15 min | openclaw-usage-track.service (5-min cadence) | This is the file that went silent for 22h. Every cron run writes, so 15 min = 3 missed cycles = alert. |
+| `data/llm_usage_snapshot.json` | 20 min | llm-usage-sync.timer (scripts/sync_llm_usage.sh, 10-min cadence) | Wider than the cadence to allow for the script's multi-step refresh (minimax + openai + status). |
+
+**Smart context for the events file:** when `llm_usage_events.jsonl` is stale, the alert message also checks `openclaw_usage.jsonl`:
+- If openclaw-usage is **also** stale → "system appears genuinely quiet" hint
+- If openclaw-usage is **fresh** → "openclaw_usage.jsonl is fresh — sessions ARE happening, the reconciler may just not have seen new ones yet (low-traffic hour?)" hint
+
+This saves the human from waking up at 3am to investigate a "stale data" alert that's actually just a quiet hour.
+
+**Alert message format:**
+
+```
+🚨 openclaw_usage.jsonl data is STALE (last fresh ~22h ago)
+• current mtime age: 79200s (threshold: 900s)
+• path: /home/openclaw/.../data/openclaw_usage.jsonl
+• producer: openclaw-usage-track.service (5-min timer; cmd=openclaw_cost_tracker.py sync)
+• consecutive stale checks: 3
+• watchdog will re-check in 5 min (30-min dedup on this alert)
+```
+
+**Recovery message:**
+
+```
+✅ openclaw_usage.jsonl is fresh again (stale ~22h)
+• path: /home/openclaw/.../data/openclaw_usage.jsonl
+• current age: 12s (threshold: 900s)
+```
 
 ## How to extend
 
@@ -114,11 +154,23 @@ SERVICES = [
     ("selena-api",          "selena-project.service",      "http://127.0.0.1:8765/api/health",     "/selena-astra/"),
     ("open-world-selena",   "open-world-selena.service",   "http://127.0.0.1:8081/api/world/stats", "/open-world/"),
     ("orchestrator-status", "orchestrator-status.service", "http://127.0.0.1:8766/health",         None),
-    # Add more here: (label, systemd_unit, probe_url, host_path_or_None)
+    # Add more here: (label, systemd_unit, probe_url, host_path_or_None, can_restart)
 ]
 ```
 
 The `host_path` is only used in the alert message to help the on-call human navigate to the right URL. Set to `None` if the service has no public route.
+
+Add a new data file by appending to `DATA_FILES`:
+
+```python
+DATA_FILES = [
+    # (label, relpath, max_age_seconds, producer_hint)
+    ("my_data.jsonl", "data/my_data.jsonl", 600, "my-producer.service (5-min timer)"),
+    # ...
+]
+```
+
+The `max_age_seconds` should be ~2x the producer's expected cadence + 5 min grace. The `producer_hint` shows up in the alert message so the on-call human knows what to investigate.
 
 ## Related
 

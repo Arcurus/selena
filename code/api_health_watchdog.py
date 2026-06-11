@@ -99,9 +99,16 @@ SERVICES = [
 DATA_FILES = [
     # The per-call LLM event log. Written by selena-api in-process
     # (/api/llm-usage/record) AND by the openclaw-usage-reconciler cron.
-    # Threshold: 10 min (the reconciler is 5-min; 2 missed cycles = stale).
-    ("llm_usage_events.jsonl",      "data/llm_usage_events.jsonl",      600,
-     "selena-api /api/llm-usage/record (in-process) + openclaw-usage-reconciler.timer"),
+    # The reconciler ONLY writes for new sessions (deduped by sessionId),
+    # so a 30-min gap is the right SLA: long enough that low-traffic
+    # hours (e.g. overnight, no new cron sessions) don't false-alarm,
+    # short enough that a truly broken reconciler is caught within an
+    # acceptable window. (The original 10-min threshold was too tight;
+    # we hit a real-world false positive at 21:15 CEST on 2026-06-11
+    # when no new sessions had been seen for 27 min but the system was
+    # otherwise healthy.)
+    ("llm_usage_events.jsonl",      "data/llm_usage_events.jsonl",      1800,
+     "selena-api /api/llm-usage/record (in-process) + openclaw-usage-reconciler.timer (only writes for new sessions)"),
     # The OpenClaw session log. The producer is openclaw-usage-track.service
     # (5-min cron). THIS IS THE FILE THAT WENT SILENT FOR 22H on 2026-06-11.
     # Threshold: 15 min (5-min cadence + 5min grace + 5min grace).
@@ -377,10 +384,150 @@ def check_once() -> int:
                 svc["last_alert_at"] = svc["last_probe_at"]
                 activity_log("WATCHDOG_ALERT", f"{label} probe failed: {err} (consecutive={svc['consecutive_fails']}, heal={'in-flight' if svc.get('heal_in_flight') else 'none'}, can_restart={can_restart})")
 
+    # --- Data freshness (added 2026-06-11) ---
+    # HTTP 200 on the 3 services above is necessary but not sufficient: a
+    # producer cron can silently stop writing while the API stays up
+    # (e.g. the 22h openclaw-usage.jsonl gap). stat() the critical data
+    # files and alert if mtime is older than DATA_FILES threshold.
+    check_data_freshness(state)
+
     save_state(state)
     # The watchdog's own job is to detect failure; it returns 0 always so
     # systemd never marks IT as failed (which would mask the real issue).
     return 0
+
+
+# ----------------------------------------------------------------------
+# Data freshness check (added 2026-06-11)
+# ----------------------------------------------------------------------
+
+def _stat_age_s(path: Path) -> tuple:
+    """Return (age_seconds, ok). age_seconds is now - mtime.
+    ok=False if the file is missing, unreadable, or mtime is in the future
+    (which would happen if the clock just jumped backwards)."""
+    try:
+        st = path.stat()
+        age = time.time() - st.st_mtime
+        # If the file's mtime is in the future by more than 60s, the
+        # clock just jumped or the mtime is bogus; treat as unreadable.
+        if age < -60:
+            return None, False
+        return max(0.0, age), True
+    except (FileNotFoundError, OSError):
+        return None, False
+
+
+def check_data_freshness(state: dict) -> None:
+    """Stat() each critical data file. If its mtime is older than
+    DATA_FILES[max_age_seconds], post a single #selena-project-important
+    alert with 30-min dedup. Mirrors the per-service loop above (no
+    auto-heal — the producer crons have their own systemd units; the
+    alert wakes a human if they're broken). Mutates `state` in place."""
+    state.setdefault("data_files", {})
+    any_stale = False
+
+    for label, relpath, max_age_s, producer_hint in DATA_FILES:
+        full_path = SELENA_DIR / relpath
+        age, ok = _stat_age_s(full_path)
+        df = state["data_files"].setdefault(label, {
+            "last_ok_at": None,
+            "last_stale_at": None,
+            "last_alert_at": None,
+            "last_recover_alert_at": None,
+            "consecutive_stale_checks": 0,
+            "last_age_s": None,
+        })
+        df["last_check_at"] = now_iso()
+        df["last_age_s"] = age
+
+        if ok and age is not None and age <= max_age_s:
+            # Fresh.
+            was_stale = df.get("last_stale_at") is not None
+            df["consecutive_stale_checks"] = 0
+            df["last_ok_at"] = df["last_check_at"]
+            log_line(f"OK   {label:32s} age={age:6.0f}s (max {max_age_s}s)")
+            if was_stale and df.get("last_alert_at") is not None:
+                # Recovery from a previously-alerted state — post the "fresh again" message
+                gap = ""
+                if df.get("last_stale_at"):
+                    try:
+                        start = datetime.fromisoformat(df["last_stale_at"])
+                        end = datetime.fromisoformat(df["last_check_at"])
+                        delta = end - start
+                        mins = int(delta.total_seconds() // 60)
+                        gap = f" (stale ~{mins}m)"
+                    except Exception:
+                        pass
+                msg = (
+                    f"✅ **{label}** is fresh again{gap}\n"
+                    f"• path: `{full_path}`\n"
+                    f"• current age: {age:.0f}s (threshold: {max_age_s}s)"
+                )
+                if post_discord(msg):
+                    df["last_recover_alert_at"] = df["last_check_at"]
+                    activity_log("WATCHDOG_DATA_RECOVERED", f"{label} is fresh again after {gap or 'unknown gap'}")
+            df["last_stale_at"] = None
+            continue
+
+        # --- Stale (or file missing) ---
+        any_stale = True
+        df["consecutive_stale_checks"] += 1
+        df["last_stale_at"] = df["last_check_at"]
+        age_str = f"{age:.0f}s" if age is not None else "FILE MISSING"
+        log_line(f"STALE {label:32s} age={age_str:>10s} (max {max_age_s}s) consec={df['consecutive_stale_checks']}")
+
+        # No self-heal for data files (the producer crons are owned by their
+        # own systemd timers; restarting them is the right move if they're
+        # broken, but only after a human has seen the alert).
+
+        # Alert: respect 30-min dedup
+        last_alert = df.get("last_alert_at")
+        should_alert = True
+        if last_alert:
+            try:
+                last_dt = datetime.fromisoformat(last_alert)
+                if (datetime.now(timezone.utc) - last_dt).total_seconds() < DEDUP_S:
+                    should_alert = False
+            except Exception:
+                pass
+
+        if should_alert:
+            staleness = ""
+            if df.get("last_ok_at"):
+                try:
+                    start = datetime.fromisoformat(df["last_ok_at"])
+                    end = datetime.fromisoformat(df["last_check_at"])
+                    delta = end - start
+                    mins = int(delta.total_seconds() // 60)
+                    staleness = f" (last fresh ~{mins}m ago)"
+                except Exception:
+                    pass
+            # Smart context: if the primary openclaw-usage file is also
+            # stale, the system is genuinely quiet (no new sessions
+            # anywhere). If openclaw-usage is fresh but events.jsonl is
+            # stale, the reconciler may be broken OR may simply not have
+            # seen new sessions yet — both are common during low-traffic
+            # hours, so the message tells the human which one it is.
+            quiet_hint = ""
+            if label == "llm_usage_events.jsonl":
+                oc_path = SELENA_DIR / "data" / "openclaw_usage.jsonl"
+                oc_age, oc_ok = _stat_age_s(oc_path)
+                if oc_ok and oc_age is not None and oc_age > 900:
+                    quiet_hint = f"\n• also: openclaw_usage.jsonl is stale ({oc_age/60:.0f}m old) — system appears genuinely quiet"
+                elif oc_ok and oc_age is not None:
+                    quiet_hint = f"\n• note: openclaw_usage.jsonl is fresh ({oc_age/60:.0f}m old) — sessions ARE happening, the reconciler may just not have seen new ones yet (low-traffic hour?)"
+            msg = (
+                f"🚨 **{label}** data is STALE{staleness}\n"
+                f"• current mtime age: {age_str} (threshold: {max_age_s}s)\n"
+                f"• path: `{full_path}`\n"
+                f"• producer: {producer_hint}\n"
+                f"• consecutive stale checks: {df['consecutive_stale_checks']}"
+                f"{quiet_hint}\n"
+                f"• watchdog will re-check in 5 min (30-min dedup on this alert)"
+            )
+            if post_discord(msg):
+                df["last_alert_at"] = df["last_check_at"]
+                activity_log("WATCHDOG_DATA_STALE", f"{label} mtime age={age_str} > {max_age_s}s; producer={producer_hint}")
 
 
 def show_status() -> int:
@@ -403,6 +550,24 @@ def show_status() -> int:
             f"last_ok={svc.get('last_ok_at', 'never')} | "
             f"consec_fails={svc.get('consecutive_fails', 0)} | "
             f"last_err={svc.get('last_error') or '-'}"
+        )
+
+    # Data files
+    print()
+    print("Data files (mtime freshness):")
+    for label, relpath, max_age_s, _hint in DATA_FILES:
+        df = state.get("data_files", {}).get(label, {})
+        if not df:
+            print(f"  {label:32s} (no checks yet)")
+            continue
+        is_stale = df.get("consecutive_stale_checks", 0) > 0
+        status = "STALE" if is_stale else "OK"
+        age = df.get("last_age_s")
+        age_str = f"{age:6.0f}s" if age is not None else "  MISSING"
+        print(
+            f"  {label:32s} {status:5s} | "
+            f"age={age_str} (max {max_age_s}s) | "
+            f"last_ok={df.get('last_ok_at', 'never')}"
         )
     return 0
 
