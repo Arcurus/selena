@@ -1249,10 +1249,165 @@
             }
         }
 
+        // ====================================================================
+        // Idle / auth-error handling (added 2026-06-11 per Arcurus
+        // #selena-project-important: "logout (token invalid) should only
+        // happen if im not active. also if loged out it should display the
+        // login form again.")
+        //
+        // The dashboard is a single-page app with many background pollers
+        // (services, minimax widget, mod, llm-usage). On a stale token
+        // (most often: server restart cleared the in-memory token set),
+        // each poller used to call logout() independently the moment it
+        // saw a 401. That was a bad UX: the user was mid-task, didn't
+        // notice the API restart, and got bounced to the login screen.
+        //
+        // New policy (2026-06-11):
+        //   - Track `lastActivityAt` on mousemove / keydown / touchstart /
+        //     scroll / click. Reset on each.
+        //   - On 401, only call logout() if (now - lastActivityAt) >
+        //     IDLE_LOGOUT_THRESHOLD_MS (30 min). Otherwise show a
+        //     "session expired" toast and leave the user on the page.
+        //   - logout() now also clears ALL background timers
+        //     (servicesPollingInterval, minimaxTopTimer,
+        //     minimaxCountdownTimer, modPollingInterval, _llmUsageTimer)
+        //     and resets the widget UI to its placeholder state, so the
+        //     next login() call repopulates the widget immediately
+        //     (previously, the minimax timer survived logout, so the
+        //     `if (minimaxTopTimer) return` guard on the second login
+        //     silently swallowed the new fetch and the widget stayed at
+        //     '--%' until a hard reload).
+        // ====================================================================
+
+        let lastActivityAt = Date.now();
+        // 30 min idle → safe to auto-logout on 401. Anything shorter risks
+        // kicking people out while they're thinking; anything longer
+        // leaves a session open forever. The cookie's max-age is also
+        // 1h (line 1230), so the upper bound matches the cookie lifetime.
+        const IDLE_LOGOUT_THRESHOLD_MS = 30 * 60 * 1000;
+
+        function markActivity() {
+            lastActivityAt = Date.now();
+        }
+
+        // Wire up the activity listeners ONCE on first load. Use
+        // { passive: true } where possible so we never block scroll.
+        function installActivityTrackers() {
+            if (window._selenaActivityInstalled) return;
+            window._selenaActivityInstalled = true;
+            const evts = ['mousemove', 'mousedown', 'keydown', 'touchstart',
+                          'scroll', 'wheel', 'click'];
+            for (const e of evts) {
+                window.addEventListener(e, markActivity, { passive: true });
+            }
+        }
+        installActivityTrackers();
+
+        function isUserIdle() {
+            return (Date.now() - lastActivityAt) > IDLE_LOGOUT_THRESHOLD_MS;
+        }
+
+        /**
+         * Centralized 401 handler. Replaces the 11 direct logout() calls
+         * that used to fire the moment any poller saw 401. New policy:
+         * idle user → auto-logout; active user → toast + stay.
+         */
+        function handleAuthError(context) {
+            // Always stop the pollers that just learned their token is
+            // dead — otherwise they'll keep hitting 401 every 10s and
+            // spam toasts. We don't clear the *timer variables* here
+            // (logout() does that), just the intervals.
+            if (servicesPollingInterval) {
+                clearInterval(servicesPollingInterval);
+                servicesPollingInterval = null;
+            }
+            if (minimaxTopTimer) {
+                clearInterval(minimaxTopTimer);
+                minimaxTopTimer = null;
+            }
+            if (minimaxCountdownTimer) {
+                clearInterval(minimaxCountdownTimer);
+                minimaxCountdownTimer = null;
+            }
+            if (modPollingInterval) {
+                clearInterval(modPollingInterval);
+                modPollingInterval = null;
+            }
+            if (_llmUsageTimer) {
+                clearInterval(_llmUsageTimer);
+                _llmUsageTimer = null;
+            }
+
+            if (isUserIdle()) {
+                const where = context ? ` (${context})` : '';
+                showToast(`Session expired${where}. Please login again.`, 'info', 6000);
+                logout();
+            } else {
+                // Active user: don't kick them out. Toast is non-blocking
+                // and lasts 12s so they have time to notice. Token is
+                // still in localStorage but is dead on the server; the
+                // next manual re-login will replace it.
+                const where = context ? ` (${context})` : '';
+                showToast(
+                    `Session expired${where} — your token was invalidated ` +
+                    `(server may have restarted). Re-login to continue; ` +
+                    `auto-logout will fire after ${IDLE_LOGOUT_THRESHOLD_MS / 60000} min idle.`,
+                    'warning', 12000
+                );
+            }
+        }
+
+        function clearAllBackgroundTimers() {
+            if (servicesPollingInterval) { clearInterval(servicesPollingInterval); servicesPollingInterval = null; }
+            if (minimaxTopTimer) { clearInterval(minimaxTopTimer); minimaxTopTimer = null; }
+            if (minimaxCountdownTimer) { clearInterval(minimaxCountdownTimer); minimaxCountdownTimer = null; }
+            if (modPollingInterval) { clearInterval(modPollingInterval); modPollingInterval = null; }
+            if (_llmUsageTimer) { clearInterval(_llmUsageTimer); _llmUsageTimer = null; }
+        }
+
+        function resetMinimaxWidgetUI() {
+            // Reset the top-right widget to its placeholder so a fresh
+            // login() repopulates from '--%' / '00:00:00'. Without this,
+            // the previous session's stale value (e.g. "login" or a
+            // pre-restart percentage) lingers for a frame on next login.
+            const usedEl = document.getElementById('minimaxTopUsed');
+            const ageEl = document.getElementById('minimaxTopAge');
+            const resetEl = document.getElementById('minimaxTopReset');
+            const nextEl = document.getElementById('minimaxTopNext');
+            const barEl = document.getElementById('minimaxTopBar');
+            const widget = document.getElementById('minimaxTopWidget');
+            if (usedEl) usedEl.textContent = '--%';
+            if (ageEl) ageEl.textContent = '--:--';
+            if (resetEl) resetEl.textContent = '--:--';
+            if (nextEl) nextEl.textContent = '--';
+            if (barEl) barEl.style.width = '0%';
+            if (widget) {
+                widget.classList.remove('minimax-tier-low', 'minimax-tier-mid',
+                                        'minimax-tier-high', 'minimax-tier-critical');
+            }
+        }
+
         function logout() {
-            token = ''; localStorage.removeItem('selena_token');
-            document.getElementById('dashboard').style.display = 'none';
-            document.getElementById('loginScreen').style.display = 'flex';
+            token = '';
+            localStorage.removeItem('selena_token');
+            // Also drop the cookie so a subsequent auto-login via
+            // `if (token) { showDashboard(); }` doesn't fire on reload.
+            document.cookie = 'selena_token=; max-age=0; path=/; SameSite=Strict';
+            // Stop every background poller so they don't keep hitting
+            // 401 against the now-invalid token. Otherwise each one
+            // would race to call logout() and spam toasts.
+            clearAllBackgroundTimers();
+            // Reset the widget UI so the next login() starts clean.
+            resetMinimaxWidgetUI();
+            // Hide dashboard, show login form. Both elements are
+            // guaranteed to exist by the time logout() is callable.
+            const dash = document.getElementById('dashboard');
+            const login = document.getElementById('loginScreen');
+            if (dash) dash.style.display = 'none';
+            if (login) login.style.display = 'flex';
+            // Reset activity clock so a fresh login() starts the
+            // 30-min idle countdown from "now".
+            lastActivityAt = Date.now();
         }
 
         // ---- Theme toggle (space <-> bright) ----
@@ -1375,11 +1530,11 @@
                 });
 
                 if (!response.ok) {
-                    // 401 means token is invalid/expired - verify API returns Unauthorized, then logout
+                    // 401 means token is invalid/expired - verify API returns Unauthorized, then handle (idle check is in handleAuthError)
                     if (response.status === 401) {
                         console.error('Services: Auth error detected. Running auth API test...');
                         testAuthAPI();
-                        logout();
+                        handleAuthError('services tab');
                         return;
                     }
                     const errorData = await response.json().catch(() => ({}));
@@ -2039,10 +2194,10 @@
                     const data = await response.json();
                     projects = data.projects || [];
                 } else if (response.status === 401) {
-                    // 401 means token is invalid/expired - verify API returns Unauthorized, then logout
+                    // 401 means token is invalid/expired - verify API returns Unauthorized, then handle (idle check is in handleAuthError)
                     console.error('Projects: Auth error detected. Running auth API test...');
                     testAuthAPI();
-                    logout();
+                    handleAuthError('projects');
                     return;
                 }
 
@@ -2600,10 +2755,8 @@
                 });
                 
                 if (response.status === 401) {
-                    // Auth error - clear token and show login
-                    token = '';
-                    localStorage.removeItem('selena_token');
-                    showToast('Session expired. Please login again.', 'error');
+                    // Auth error - delegate to handleAuthError (idle check inside)
+                    handleAuthError('download');
                     return;
                 }
                 
@@ -2652,7 +2805,7 @@
                     // Auth error detected - verify API is correctly returning Unauthorized
                     console.error('Auth error detected. Running auth API test to verify...');
                     testAuthAPI(); // Verify API always returns Unauthorized when auth is wrong
-                    logout();
+                    handleAuthError('tasks list');
                     return;
                 }
                 if (!allResponse.ok) {
@@ -2690,7 +2843,7 @@
                     // Auth error detected - verify API is correctly returning Unauthorized
                     console.error('Auth error detected on filtered request. Running auth API test...');
                     testAuthAPI(); // Verify API always returns Unauthorized when auth is wrong
-                    logout();
+                    handleAuthError('tasks filter');
                     return;
                 }
                 
@@ -2978,7 +3131,7 @@
 
                 if (!response.ok) {
                     if (response.status === 401) {
-                        logout();
+                        handleAuthError('delete task');
                         return;
                     }
                     console.error('Failed to delete todo:', response.status);
@@ -3003,7 +3156,7 @@
 
                 if (!response.ok) {
                     if (response.status === 401) {
-                        logout();
+                        handleAuthError('restore task');
                         return;
                     }
                     console.error('Failed to restore todo:', response.status);
@@ -3111,9 +3264,9 @@
                     body: JSON.stringify(body)
                 });
 
-                // 401 means token is invalid/expired - logout and show login
+                // 401 means token is invalid/expired - delegate to handleAuthError (idle check inside)
                 if (response.status === 401) {
-                    logout();
+                    handleAuthError('action');
                     return;
                 }
 
@@ -3532,9 +3685,9 @@
                 });
 
                 if (!response.ok) {
-                    // 401 means token is invalid/expired - logout and show login
+                    // 401 means token is invalid/expired - delegate to handleAuthError (idle check inside)
                     if (response.status === 401) {
-                        logout();
+                        handleAuthError('update task');
                         return;
                     }
                     console.error('Failed to update todo:', response.status);
@@ -3607,11 +3760,11 @@
                 });
 
                 if (!response.ok) {
-                    // 401 means token is invalid/expired - verify API returns Unauthorized, then logout
+                    // 401 means token is invalid/expired - verify API returns Unauthorized, then handle (idle check is in handleAuthError)
                     if (response.status === 401) {
                         console.error('Knowledge: Auth error detected. Running auth API test...');
                         testAuthAPI();
-                        logout();
+                        handleAuthError('knowledge');
                         return;
                     }
                     console.error('Failed to load knowledge:', response.status);
@@ -4348,7 +4501,11 @@
                     return;  // keep last good value
                 }
                 if (r.status === 401) {
-                    usedEl.textContent = 'login';
+                    // Delegate to handleAuthError (idle check + idle-only
+                    // logout + toast). Reset the widget so a re-login
+                    // re-paints cleanly.
+                    usedEl.textContent = '--%';
+                    handleAuthError('MiniMax widget');
                     return;
                 }
                 try { raw = await r.text(); } catch (e) { console.warn('[minimax] text() failed:', e.message); }
