@@ -4,6 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Selena Astra - explore the stars</title>
+    <!-- Favicon (Selene's crescent moon on a cosmic background) — 2026-06-11.
+         Source: v3 image from the favicon work, deep navy-to-purple
+         gradient with a soft glowing crescent. Browsers pick the
+         largest size they can use; modern browsers also use
+         apple-touch-icon for pinned tabs and the manifest icon for
+         PWA installs. The 48x48 is the default tab favicon.
+         Dynamic swap: when the MiniMax 5h widget enters the CRITICAL
+         tier (>=90% used), JS swaps the rel=icon hrefs to the red
+         favicon-critical-* variants so the tab icon visually warns.
+         The link tags MUST be the only <link rel="icon"> entries and
+         MUST be served BEFORE the rest of the page so JS can find them
+         by id at script load. See minimaxApplyFavicon().
+         Added per Arcurus 2026-06-11 #selena-project (todo 7ea6e8fd,
+         updated 22:42 CEST to use the v3 cosmic moon everywhere
+         instead of the simple-crescent SVG variant). -->
+    <link rel="icon" type="image/png" sizes="16x16" href="static/img/favicon-16x16.png" id="selenaFavicon16">
+    <link rel="icon" type="image/png" sizes="32x32" href="static/img/favicon-32x32.png" id="selenaFavicon32">
+    <link rel="icon" type="image/png" sizes="48x48" href="static/img/favicon-48x48.png" id="selenaFavicon48">
+    <link rel="apple-touch-icon" sizes="180x180" href="static/img/apple-touch-icon.png" id="selenaAppleTouch">
     <link rel="stylesheet" href="static/style.css">
     <!-- Inline so we set data-theme before CSS paints (no FOUC). -->
     <script>
@@ -43,8 +62,26 @@
             <span id="theme-toggle-icon-login">☀️</span>
         </button>
         <div class="login-box">
+            <!-- Animated moon disc, same selene-hero.mp4 that
+                 selenaastra.com uses in its hero. Added 2026-06-11
+                 per Arcurus #selena-project-important "please use in
+                 the login form also the same video as you used in
+                 selenaastra.com". Loops muted; the page already
+                 renders a starfield behind it so the disc reads. -->
+            <div class="login-moon" aria-hidden="true">
+                <div class="login-moon-disc">
+                    <video class="login-moon-video" src="static/img/selene-hero.mp4" autoplay loop muted playsinline preload="auto"></video>
+                </div>
+            </div>
             <h1>🌙 Selena Astra</h1>
             <p style="color: var(--text-secondary); margin-bottom: 20px;">Enter password to explore the stars</p>
+            <!-- Reason banner — filled in by showLoginForm(reason) when
+                 a 401 forced a re-login. Hidden by default; the manual
+                 "click logout" path leaves it empty. The element is
+                 outside the .login-error row so its colour/weight can
+                 carry the "session expired" tone without clashing with
+                 the red "Invalid password" error. -->
+            <div class="login-reason" id="loginReason" style="display: none;"></div>
             <input type="password" id="passwordInput" placeholder="Password" onkeypress="if(event.key==='Enter')login()">
             <button onclick="login()">Login</button>
             <div class="login-error" id="loginError">Invalid password</div>
@@ -354,7 +391,7 @@
                         <!-- Live task suggestions -->
                         <div id="titleSuggestions" style="display: none; background: var(--bg-card); border: 1px solid var(--accent-blue); border-radius: 8px; margin-bottom: 15px; max-height: 150px; overflow-y: auto;"></div>
 
-                        <!-- Semantic dedup hint banner (added 2026-06-11 per Arcurus #selena-project-lunar; todo 21cfce43 P5).
+                        <!-- Semantic dedup hint banner (added 2026-06-11 per Arcurus #selena-project-lunarisis; todo 21cfce43 P5).
                              Populated after a successful POST /api/todos/add that returned deduped="hint".
                              Shows 0.82..0.92 cosine matches so the user can decide to edit the existing one
                              or just dismiss.  Hidden when there are no hint matches. -->
@@ -373,7 +410,7 @@
                         </div>
                     </div>
 
-                    <!-- Semantic Duplicate Modal (added 2026-06-11 per Arcurus #selena-project-lunar; todo 21cfce43 P5).
+                    <!-- Semantic Duplicate Modal (added 2026-06-11 per Arcurus #selena-project-lunarisis; todo 21cfce43 P5).
                          Triggered when POST /api/todos/add returns 409.  Cosine >= 0.92 against an active
                          todo.  User can: use the existing one, edit the existing one, or create anyway
                          (force=true bypasses the semantic check). -->
@@ -390,9 +427,46 @@
                                 <button id="semanticDupForceBtn" onclick="forceCreateDup()" class="save-btn" style="width: auto; padding: 8px 16px; background: var(--accent-red);">➕ Create anyway</button>
                             </div>
                             <div style="margin-top: 12px; font-size: 0.72rem; color: var(--text-secondary);">
-                                Threshold: cosine ≥ 0.92 against an active todo.  "Create anyway" sends <code>?force=true</code> and bypasses the semantic check; fingerprint dedup still runs.
+                                v0.8 bands: <b>duplicate</b> (normalized title is identical) blocks without force.  <b>conflict</b> (cosine ≥ 0.95) blocks but lets you bypass with <code>?force=true</code>.  Fingerprint dedup still runs in either case.
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Similar Tasks Modal (added 2026-06-11 per Arcurus #selena-project-lunarisis; todo 21cfce43 P5).
+                         Opened by the "🔍 similar" button on each todo card.  Shows the top_k
+                         semantically similar todos (cosine 0.5+).  Clicking a similar todo
+                         re-loads the modal with that todo as the new target, so the user can
+                         drill down through the similarity graph recursively.  Bands are colored
+                         per the v0.8 ladder (duplicate=purple, conflict=red, hint=yellow, weak=gray). -->
+                    <div id="similarModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1100; align-items: center; justify-content: center;">
+                        <div style="background: var(--bg-card); border: 2px solid var(--accent-cyan); border-radius: 12px; padding: 22px 26px; max-width: 720px; width: 92%; max-height: 84vh; overflow-y: auto; box-shadow: 0 12px 36px rgba(0,0,0,0.6);">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 14px;">
+                                <h3 style="color: var(--accent-cyan); margin: 0;">🔍 Similar tasks</h3>
+                                <button onclick="closeSimilarModal()" class="service-btn" style="width: auto; padding: 4px 12px;">✕</button>
+                            </div>
+                            <div id="similarTarget" style="background: var(--bg-dark); border: 1px solid var(--accent-blue); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px;"></div>
+                            <div id="similarList" style="margin-bottom: 12px;"></div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-secondary); border-top: 1px solid var(--text-secondary); padding-top: 8px;">
+                                <div>
+                                    <span style="display: inline-block; width: 10px; height: 10px; background: #a855f7; border-radius: 2px; margin-right: 4px;"></span>duplicate (≥99.9%)
+                                    <span style="display: inline-block; width: 10px; height: 10px; background: var(--danger); border-radius: 2px; margin: 0 4px 0 14px;"></span>conflict (≥95%)
+                                    <span style="display: inline-block; width: 10px; height: 10px; background: var(--accent-yellow); border-radius: 2px; margin: 0 4px 0 14px;"></span>hint (82–95%)
+                                    <span style="display: inline-block; width: 10px; height: 10px; background: var(--text-secondary); border-radius: 2px; margin: 0 4px 0 14px;"></span>weak (50–82%)
+                                </div>
+                                <div id="similarCount"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dedup Stats Panel (added 2026-06-11 per Arcurus #selena-project-lunarisis; todo 21cfce43 P5).
+                         Live counter showing how many adds fell into each band, the force_rate,
+                         and the top-5 most-blocked todos.  Refreshes every 30s. -->
+                    <div id="dedupStatsPanel" style="background: var(--bg-dark); border: 1px solid var(--accent-purple); border-radius: 10px; padding: 14px 16px; margin-bottom: 18px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <h4 style="color: var(--accent-purple); margin: 0; font-size: 0.95rem;">📊 Dedup stats <span style="color: var(--text-secondary); font-size: 0.78rem; font-weight: normal;">(last 24h, semantic)</span></h4>
+                            <button onclick="refreshDedupStats()" class="service-btn" style="width: auto; padding: 3px 10px; font-size: 0.75rem;">↻</button>
+                        </div>
+                        <div id="dedupStatsBody" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; font-size: 0.85rem;"></div>
                     </div>
 
                     <!-- Deleted Tasks Section (hidden by default) -->
@@ -1217,6 +1291,7 @@
         async function login() {
             const password = document.getElementById('passwordInput').value;
             const errorEl = document.getElementById('loginError');
+            const reasonEl = document.getElementById('loginReason');
             try {
                 const response = await fetch(`api/login?password=${encodeURIComponent(password)}`);
                 const data = await response.json();
@@ -1229,6 +1304,11 @@
                     // Secure requires HTTPS (only in production)
                     document.cookie = `selena_token=${token}; max-age=3600; path=/; SameSite=Strict`;
                     errorEl.style.display = 'none';
+                    // Clear the "session ended" reason banner from a
+                    // prior 401 — the user just successfully logged back
+                    // in, so the stale reason shouldn't linger for a
+                    // frame as the dashboard comes up.
+                    if (reasonEl) { reasonEl.textContent = ''; reasonEl.style.display = 'none'; }
                     
                     // Verify the token works before showing dashboard
                     const isValid = await verifyAuth();
@@ -1250,41 +1330,38 @@
         }
 
         // ====================================================================
-        // Idle / auth-error handling (added 2026-06-11 per Arcurus
-        // #selena-project-important: "logout (token invalid) should only
-        // happen if im not active. also if loged out it should display the
-        // login form again.")
+        // Auth-error / logout flow (added 2026-06-11 per Arcurus
+        // #selena-project-important).
         //
         // The dashboard is a single-page app with many background pollers
         // (services, minimax widget, mod, llm-usage). On a stale token
         // (most often: server restart cleared the in-memory token set),
         // each poller used to call logout() independently the moment it
-        // saw a 401. That was a bad UX: the user was mid-task, didn't
-        // notice the API restart, and got bounced to the login screen.
+        // saw a 401. Result: every 10 seconds a new poller timed out and
+        // fired another toast, which was useless noise.
         //
-        // New policy (2026-06-11):
-        //   - Track `lastActivityAt` on mousemove / keydown / touchstart /
-        //     scroll / click. Reset on each.
-        //   - On 401, only call logout() if (now - lastActivityAt) >
-        //     IDLE_LOGOUT_THRESHOLD_MS (30 min). Otherwise show a
-        //     "session expired" toast and leave the user on the page.
-        //   - logout() now also clears ALL background timers
-        //     (servicesPollingInterval, minimaxTopTimer,
-        //     minimaxCountdownTimer, modPollingInterval, _llmUsageTimer)
-        //     and resets the widget UI to its placeholder state, so the
-        //     next login() call repopulates the widget immediately
-        //     (previously, the minimax timer survived logout, so the
-        //     `if (minimaxTopTimer) return` guard on the second login
-        //     silently swallowed the new fetch and the widget stayed at
-        //     '--%' until a hard reload).
+        // Current policy (2026-06-11 22:32 CEST, per Arcurus
+        // "cant you instead just open the login form again and state
+        // there that the message instead. pelase use in the login form
+        // also the same video as you used in selenaastra.com"):
+        //   - On 401, just show the login form. Don't toast. Don't gate
+        //     on idle — the user is leaving anyway.
+        //   - The reason ("session expired (services tab) — server may
+        //     have restarted") goes INSIDE the login form, in the
+        //     .login-reason banner above the password input.
+        //   - The login form now leads with the same selene-hero.mp4
+        //     that selenaastra.com uses in its hero.
+        //   - All 5 background pollers are cleared so they don't keep
+        //     firing 401s against the dead token.
+        //   - logout() is now an alias for showLoginForm(null) — no
+        //     reason banner.
+        //
+        // The activity trackers (mousemove / keydown / etc) are still
+        // installed but unused by this code path. Kept around in case a
+        // future feature wants to surface "user is active" elsewhere.
         // ====================================================================
 
         let lastActivityAt = Date.now();
-        // 30 min idle → safe to auto-logout on 401. Anything shorter risks
-        // kicking people out while they're thinking; anything longer
-        // leaves a session open forever. The cookie's max-age is also
-        // 1h (line 1230), so the upper bound matches the cookie lifetime.
-        const IDLE_LOGOUT_THRESHOLD_MS = 30 * 60 * 1000;
 
         function markActivity() {
             lastActivityAt = Date.now();
@@ -1302,60 +1379,6 @@
             }
         }
         installActivityTrackers();
-
-        function isUserIdle() {
-            return (Date.now() - lastActivityAt) > IDLE_LOGOUT_THRESHOLD_MS;
-        }
-
-        /**
-         * Centralized 401 handler. Replaces the 11 direct logout() calls
-         * that used to fire the moment any poller saw 401. New policy:
-         * idle user → auto-logout; active user → toast + stay.
-         */
-        function handleAuthError(context) {
-            // Always stop the pollers that just learned their token is
-            // dead — otherwise they'll keep hitting 401 every 10s and
-            // spam toasts. We don't clear the *timer variables* here
-            // (logout() does that), just the intervals.
-            if (servicesPollingInterval) {
-                clearInterval(servicesPollingInterval);
-                servicesPollingInterval = null;
-            }
-            if (minimaxTopTimer) {
-                clearInterval(minimaxTopTimer);
-                minimaxTopTimer = null;
-            }
-            if (minimaxCountdownTimer) {
-                clearInterval(minimaxCountdownTimer);
-                minimaxCountdownTimer = null;
-            }
-            if (modPollingInterval) {
-                clearInterval(modPollingInterval);
-                modPollingInterval = null;
-            }
-            if (_llmUsageTimer) {
-                clearInterval(_llmUsageTimer);
-                _llmUsageTimer = null;
-            }
-
-            if (isUserIdle()) {
-                const where = context ? ` (${context})` : '';
-                showToast(`Session expired${where}. Please login again.`, 'info', 6000);
-                logout();
-            } else {
-                // Active user: don't kick them out. Toast is non-blocking
-                // and lasts 12s so they have time to notice. Token is
-                // still in localStorage but is dead on the server; the
-                // next manual re-login will replace it.
-                const where = context ? ` (${context})` : '';
-                showToast(
-                    `Session expired${where} — your token was invalidated ` +
-                    `(server may have restarted). Re-login to continue; ` +
-                    `auto-logout will fire after ${IDLE_LOGOUT_THRESHOLD_MS / 60000} min idle.`,
-                    'warning', 12000
-                );
-            }
-        }
 
         function clearAllBackgroundTimers() {
             if (servicesPollingInterval) { clearInterval(servicesPollingInterval); servicesPollingInterval = null; }
@@ -1387,27 +1410,91 @@
             }
         }
 
-        function logout() {
+        /**
+         * Centralized 401 handler. Replaces the 11 direct logout() calls
+         * that used to fire the moment any poller saw 401. Now: stop the
+         * pollers (so we don't keep spamming 401s against the dead
+         * token), then call showLoginForm() with a reason string.
+         */
+        function handleAuthError(context) {
+            // Stop every poller that just learned its token is dead —
+            // otherwise they'll keep hitting 401 every 10s. The
+            // next showLoginForm() also clears them (defence in depth),
+            // but doing it here too means a 401 from the minimax widget
+            // (which doesn't know about handleAuthError's caller) can't
+            // race the cleanup.
+            clearAllBackgroundTimers();
+            const where = context ? ` (${context})` : '';
+            const reason =
+                `Your session ended${where}. The server may have restarted, ` +
+                `which clears all in-memory tokens. Please log in again to continue.`;
+            showLoginForm(reason);
+        }
+
+        /**
+         * Show the login form. Optional `reason` text is rendered in the
+         * .login-reason banner above the password input. If `reason` is
+         * null/empty, the banner is hidden (the manual-logout case).
+         *
+         * Side effects (intentional):
+         *   - clears the token (localStorage + cookie)
+         *   - clears all 5 background pollers
+         *   - resets the minimax widget UI to placeholders
+         *   - hides the dashboard
+         *   - shows the login screen
+         *   - focuses the password input so the user can type immediately
+         *   - clears the previous error/reason state on a fresh login attempt
+         */
+        function showLoginForm(reason) {
             token = '';
             localStorage.removeItem('selena_token');
-            // Also drop the cookie so a subsequent auto-login via
-            // `if (token) { showDashboard(); }` doesn't fire on reload.
+            // Drop the cookie so a subsequent auto-login via
+            // `if (token) { showDashboard(); }` doesn't replay the
+            // dead token on the next page reload.
             document.cookie = 'selena_token=; max-age=0; path=/; SameSite=Strict';
-            // Stop every background poller so they don't keep hitting
-            // 401 against the now-invalid token. Otherwise each one
-            // would race to call logout() and spam toasts.
             clearAllBackgroundTimers();
-            // Reset the widget UI so the next login() starts clean.
             resetMinimaxWidgetUI();
-            // Hide dashboard, show login form. Both elements are
-            // guaranteed to exist by the time logout() is callable.
+
+            // Reason banner.
+            const reasonEl = document.getElementById('loginReason');
+            if (reasonEl) {
+                if (reason) {
+                    reasonEl.textContent = reason;
+                    reasonEl.style.display = 'block';
+                } else {
+                    reasonEl.textContent = '';
+                    reasonEl.style.display = 'none';
+                }
+            }
+            // Clear the "Invalid password" red error from any prior
+            // attempt; the manual-logout path has no reason and no
+            // error, and the 401 path has a reason and no error.
+            const errorEl = document.getElementById('loginError');
+            if (errorEl) errorEl.style.display = 'none';
+
+            // Swap dashboard ↔ login.
             const dash = document.getElementById('dashboard');
             const login = document.getElementById('loginScreen');
             if (dash) dash.style.display = 'none';
             if (login) login.style.display = 'flex';
-            // Reset activity clock so a fresh login() starts the
-            // 30-min idle countdown from "now".
+
+            // Reset activity clock so a fresh login() starts from "now".
             lastActivityAt = Date.now();
+            // Focus the password field so the user can type immediately
+            // — small UX win, especially for the "I just got booted,
+            // I want to type my password right now" path.
+            setTimeout(() => {
+                const pw = document.getElementById('passwordInput');
+                if (pw) { pw.value = ''; pw.focus(); }
+            }, 50);
+        }
+
+        // logout() is now just showLoginForm(null) — manual logout has
+        // no reason banner. Kept as a separate name so the manual
+        // button (line ~94: <button class="logout" onclick="logout()">)
+        // and any "Logout" links across the dashboard keep working.
+        function logout() {
+            showLoginForm(null);
         }
 
         // ---- Theme toggle (space <-> bright) ----
@@ -1485,6 +1572,11 @@
             // 2026-06-09 per Arcurus #cost-tracker: the function was defined
             // but never called, so the widget rendered as static placeholders.
             startMinimaxTopWidget();
+            // Start the dedup stats panel auto-refresh (added 2026-06-11
+            // per Arcurus #selena-project-lunarisis; todo 21cfce43 P5).  Polls
+            // /api/dedup/stats every 30s and refreshes the 5-tile counter
+            // + top-3 most-blocked list.
+            startDedupStatsAutoRefresh();
             // Set up services polling by showing the services tab
             showTab('services');
         }
@@ -1856,7 +1948,7 @@
                     // Map cron name to project scope (heuristic)
                     let project = null;
                     if (name.startsWith('selena-project-worker')) project = 'selena-project';
-                    else if (name.startsWith('selena-project-lunar-worker')) project = 'selena-project-lunar';
+                    else if (name.startsWith('selena-project-lunar-worker')) project = 'selena-project-lunarisis';
                     else if (name.startsWith('selena-slow-heartbeat') || name.startsWith('selena-fast-heartbeat')) project = 'global';
                     else if (name.includes('openlife')) project = 'openlife';
                     else if (name.includes('open-world') || name.includes('openworld')) project = 'open-world-selena';
@@ -2713,20 +2805,25 @@
         function showToast(message, type = 'info', duration = 8000) {
             const container = document.getElementById('toastContainer');
             if (!container) return;
-            
-            const icons = {
-                success: '✅',
-                error: '❌',
-                info: 'ℹ️',
-                warning: '⚠️'
-            };
-            
+
+            // Per Arcurus #selena-project-important 2026-06-11: when the
+            // system (Selena) sends a message to the user in the web,
+            // show the moon avatar instead of the default emoji. The
+            // type still drives the color/border (success/error/info/
+            // warning) but the leading slot is always Selena's face so
+            // every "Selena → user" toast looks like a real person
+            // talking, not a generic browser alert.
+            const avatarSrc = 'static/img/avatar-32.png';
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
-            toast.innerHTML = `<span class="toast-icon">${icons[type] || icons.info}</span><span>${message}</span>`;
-            
+            toast.innerHTML = (
+                `<img class="toast-avatar" src="${avatarSrc}" alt="" ` +
+                `width="32" height="32" aria-hidden="true">` +
+                `<span class="toast-message">${message}</span>`
+            );
+
             container.appendChild(toast);
-            
+
             // Auto-remove after duration
             setTimeout(() => {
                 toast.style.animation = 'toastOut 0.3s ease-out forwards';
@@ -3225,7 +3322,7 @@
         }
 
         // State for the semantic-dedup modal (added 2026-06-11 per Arcurus
-        // #selena-project-lunar; todo 21cfce43 P5).  Holds the in-flight
+        // #selena-project-lunarisis; todo 21cfce43 P5).  Holds the in-flight
         // form values + the conflict payload from the 409 response, so the
         // modal actions (use / edit / force-create) can act on them.
         let _semanticDupState = null;  // { title, priority, desc, conflict: {existing, similar} }
@@ -3273,11 +3370,15 @@
                 const data = await response.json();
 
                 if (response.status === 409) {
-                    // Semantic conflict (cosine >= 0.92).  Show modal with
-                    // existing + similar; the user can pick a path.
+                    // v0.8 bands: 'duplicate' (no force, 100% match) or
+                    // 'conflict' (≥0.95, force offered).  The 409 payload
+                    // carries both `band` and `force_offered` from the
+                    // server so the modal can show the right actions.
                     _semanticDupState.conflict = {
                         existing: data.existing,
-                        similar: data.similar || []
+                        similar: data.similar || [],
+                        band: data.band,
+                        force_offered: data.force_offered
                     };
                     openSemanticDup();
                     return;
@@ -3313,16 +3414,30 @@
         }
 
         // --- Semantic dedup modal helpers (added 2026-06-11 per Arcurus
-        // #selena-project-lunar; todo 21cfce43 P5) -------------------------
+        // #selena-project-lunarisis; todo 21cfce43 P5) -------------------------
 
         function openSemanticDup() {
             const modal = document.getElementById('semanticDupModal');
             const existingDiv = document.getElementById('semanticDupExisting');
             const similarDiv = document.getElementById('semanticDupSimilarList');
+            const forceBtn = document.getElementById('semanticDupForceBtn');
             const c = (_semanticDupState && _semanticDupState.conflict) || {};
             const ex = c.existing || {};
             const sims = c.similar || [];
-
+            const isDuplicate = c.band === 'duplicate';
+            // v0.8: a true duplicate has no force escape.  Hide the
+            // "Create anyway" button and adjust the title so the user
+            // sees "already added" instead of "this is too close".
+            if (isDuplicate) {
+                modal.querySelector('h3').innerHTML = '🔁 Already added';
+                if (forceBtn) forceBtn.style.display = 'none';
+            } else {
+                modal.querySelector('h3').innerHTML = '⚠️ Semantic duplicate detected';
+                if (forceBtn) forceBtn.style.display = '';
+            }
+            // The "edit / use existing" buttons stay available for both
+            // bands.  The "Create anyway" button only appears for the
+            // conflict band (cosine >= 0.95) where force is offered.
             existingDiv.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
                     <div style="flex: 1;">
@@ -3420,6 +3535,159 @@
             const banner = document.getElementById('dedupHintBanner');
             if (banner) banner.style.display = 'none';
             clearTimeout(window._dedupHintTimeout);
+        }
+
+        // -----------------------------------------------------------------
+        // "Show similar tasks" modal (added 2026-06-11 per Arcurus
+        // #selena-project-lunarisis; todo 21cfce43 P5).  Each todo card has
+        // a "🔍 similar" button that calls openSimilarModal(todoId).
+        // The modal fetches /api/dedup/similar/<id> and renders the
+        // top_k results with band-coloured bars.  Clicking a similar
+        // todo re-opens the modal with that todo as the new target,
+        // so the user can recursively walk the similarity graph.
+        // -----------------------------------------------------------------
+
+        async function openSimilarModal(todoId) {
+            const modal = document.getElementById('similarModal');
+            const targetDiv = document.getElementById('similarTarget');
+            const listDiv = document.getElementById('similarList');
+            const countDiv = document.getElementById('similarCount');
+            modal.style.display = 'flex';
+            targetDiv.innerHTML = '<div style="color: var(--text-secondary);">Loading similar tasks…</div>';
+            listDiv.innerHTML = '';
+            countDiv.textContent = '';
+            try {
+                const r = await fetch(`api/dedup/similar/${encodeURIComponent(todoId)}?top_k=10&min_score=0.5`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (r.status === 401) { handleAuthError('load similar tasks'); return; }
+                const data = await r.json();
+                if (!data.success) {
+                    targetDiv.innerHTML = `<div style="color: var(--danger);">Error: ${escapeHtml(data.error || 'unknown')}</div>`;
+                    return;
+                }
+                const t = data.target || {};
+                targetDiv.innerHTML = `
+                    <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 4px;">${escapeHtml(t.short_desc || '(deleted)')}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">
+                        id: <code>${escapeHtml(t.id || '?')}</code>
+                        ${t.priority != null ? ' • P' + t.priority : ''}
+                        ${t.status ? ' • ' + escapeHtml(t.status) : ''}
+                        ${t.project ? ' • ' + escapeHtml(t.project) : ''}
+                    </div>
+                `;
+                const sims = data.similar || [];
+                countDiv.textContent = sims.length === 0 ? 'no similar tasks found' : `${sims.length} similar`;
+                if (sims.length === 0) {
+                    listDiv.innerHTML = '<div style="color: var(--text-secondary); padding: 12px; text-align: center;">No active todo has cosine &ge; 0.5 with this one.</div>';
+                } else {
+                    listDiv.innerHTML = sims.map(s => {
+                        const bandColor = s.band === 'duplicate' ? '#a855f7'
+                            : s.band === 'conflict' ? 'var(--danger)'
+                            : s.band === 'hint' ? 'var(--accent-yellow)'
+                            : 'var(--text-secondary)';
+                        const bandLabel = s.band === 'duplicate' ? '🟣 duplicate'
+                            : s.band === 'conflict' ? '🔴 conflict'
+                            : s.band === 'hint' ? '🟡 hint'
+                            : '⚪ weak';
+                        return `
+                        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-left: 4px solid ${bandColor}; background: var(--bg-dark); border-radius: 6px; margin-bottom: 6px; cursor: pointer;" onclick="openSimilarModal('${escapeHtml(s.id)}')" title="Click to drill into this todo's similar list">
+                            <div style="flex: 1;">
+                                <div style="font-weight: 500; color: var(--text-primary);">${escapeHtml(s.short_desc || '(no description)')}</div>
+                                <div style="font-size: 0.72rem; color: var(--text-secondary);">
+                                    <code>${escapeHtml(s.id)}</code>${s.project ? ' • ' + escapeHtml(s.project) : ''}${s.priority ? ' • P' + s.priority : ''} • ${bandLabel} • similarity ${((s.score || 0) * 100).toFixed(1)}%
+                                </div>
+                            </div>
+                            <div style="font-size: 0.7rem; color: var(--text-secondary); white-space: nowrap;">→</div>
+                        </div>
+                        `;
+                    }).join('');
+                }
+            } catch (e) {
+                targetDiv.innerHTML = `<div style="color: var(--danger);">Network error: ${escapeHtml(e.message)}</div>`;
+            }
+        }
+
+        function closeSimilarModal() {
+            const modal = document.getElementById('similarModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        // -----------------------------------------------------------------
+        // Dedup stats panel (added 2026-06-11 per Arcurus #selena-project-lunarisis;
+        // todo 21cfce43 P5).  Auto-refreshes every 30s; manual refresh via
+        // the ↻ button.  Shows counts of each action in the last 24h,
+        // the force_rate, and the top-3 most-blocked todos so the operator
+        // can see at a glance whether the dedup is too aggressive or
+        // too lenient.
+        // -----------------------------------------------------------------
+
+        let _dedupStatsTimer = null;
+
+        async function refreshDedupStats() {
+            const body = document.getElementById('dedupStatsBody');
+            if (!body) return;
+            try {
+                // 24h window
+                const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+                const r = await fetch(`api/dedup/stats?since=${encodeURIComponent(sinceIso)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (r.status === 401) { handleAuthError('load dedup stats'); return; }
+                const data = await r.json();
+                if (!data.success) { return; }
+                const s = data.stats || {};
+                const by = s.by_action || {};
+                const total = s.total || 0;
+                body.innerHTML = `
+                    <div style="text-align: center; padding: 8px; background: var(--bg-card); border-radius: 6px;">
+                        <div style="font-size: 0.7rem; color: var(--text-secondary);">🛑 blocked</div>
+                        <div style="font-size: 1.4rem; color: var(--danger); font-weight: bold;">${by.blocked || 0}</div>
+                    </div>
+                    <div style="text-align: center; padding: 8px; background: var(--bg-card); border-radius: 6px;">
+                        <div style="font-size: 0.7rem; color: var(--text-secondary);">⛔ duplicate</div>
+                        <div style="font-size: 1.4rem; color: #a855f7; font-weight: bold;">${by.duplicate_blocked || 0}</div>
+                    </div>
+                    <div style="text-align: center; padding: 8px; background: var(--bg-card); border-radius: 6px;">
+                        <div style="font-size: 0.7rem; color: var(--text-secondary);">⚠ hint add</div>
+                        <div style="font-size: 1.4rem; color: var(--accent-yellow); font-weight: bold;">${by.hint_add || 0}</div>
+                    </div>
+                    <div style="text-align: center; padding: 8px; background: var(--bg-card); border-radius: 6px;">
+                        <div style="font-size: 0.7rem; color: var(--text-secondary);">✅ normal add</div>
+                        <div style="font-size: 1.4rem; color: var(--success); font-weight: bold;">${by.normal_add || 0}</div>
+                    </div>
+                    <div style="text-align: center; padding: 8px; background: var(--bg-card); border-radius: 6px;">
+                        <div style="font-size: 0.7rem; color: var(--text-secondary);">force_rate</div>
+                        <div style="font-size: 1.4rem; color: var(--text-primary); font-weight: bold;">${((s.force_rate || 0) * 100).toFixed(0)}%</div>
+                    </div>
+                `;
+                // Also surface a top-blocked list below the 5-stat row
+                const tb = s.top_blocked || [];
+                if (tb.length) {
+                    const tbHtml = tb.slice(0, 3).map((b, i) =>
+                        `<div style="font-size: 0.78rem; padding: 2px 0; color: var(--text-secondary);">${i+1}. <code>${escapeHtml(b.id)}</code> ${escapeHtml((b.short_desc || '').slice(0, 50))} <span style="color: var(--danger);">×${b.count}</span></div>`
+                    ).join('');
+                    body.insertAdjacentHTML('afterend', `<div id="dedupStatsTopBlocked" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--text-secondary);">${tbHtml}</div>`);
+                } else {
+                    const existing = document.getElementById('dedupStatsTopBlocked');
+                    if (existing) existing.remove();
+                }
+            } catch (e) {
+                // Silent fail — the panel is informational, not critical.
+            }
+        }
+
+        function startDedupStatsAutoRefresh() {
+            if (_dedupStatsTimer) return;  // idempotent
+            refreshDedupStats();
+            _dedupStatsTimer = setInterval(refreshDedupStats, 30000);
+        }
+
+        function stopDedupStatsAutoRefresh() {
+            if (_dedupStatsTimer) {
+                clearInterval(_dedupStatsTimer);
+                _dedupStatsTimer = null;
+            }
         }
 
         function escapeHtml(s) {
@@ -3628,10 +3896,11 @@
                                 </div>
                             </div>
                             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                                ${todo.deleted_at ? 
+                                ${todo.deleted_at ?
                                     `<button onclick="restoreTodo('${todo.id}')" class="service-btn restart" title="Restore task">↩️</button>` :
                                     `<button onclick="deleteTodo('${todo.id}')" class="service-btn danger" title="Delete task"></button>`
                                 }
+                                ${!todo.deleted_at ? `<button onclick="openSimilarModal('${todo.id}')" class="service-btn" style="background: var(--bg-dark); color: var(--accent-cyan); border: 1px solid var(--accent-cyan); padding: 4px 10px; font-size: 0.78rem;" title="Show similar tasks (semantic dedup drill-down)">🔍 similar</button>` : ''}
                                 ${!todo.deleted_at && todo.status === 'in_progress' ? `<button onclick="markTodoStatus('${todo.id}', 'completed')" class="service-btn start" title="Mark Completed (pending review)">⏳</button>` : ''}
                                 ${!todo.deleted_at && todo.status === 'completed' ? `<button onclick="markTodoStatus('${todo.id}', 'done')" class="service-btn start" title="Approve & Done">✓</button>` : ''}
                                 ${!todo.deleted_at && todo.status !== 'done' && todo.status !== 'in_progress' && todo.status !== 'completed' ? `<button onclick="markTodoStatus('${todo.id}', 'done')" class="service-btn start" title="Mark Done">✓</button>` : ''}
@@ -4381,11 +4650,17 @@
                         tag: 'minimax-5h-' + tier,   // dedup
                         requireInteraction: isCritical, // sticky at 90%+
                         silent: false,
+                        icon: 'static/img/avatar-128.png',  // Selena's moon, 2026-06-11
+                        badge: 'static/img/avatar-32.png',  // small status-bar icon
                     });
                 } else if (Notification.permission === 'default') {
                     Notification.requestPermission().then(p => {
                         if (p === 'granted') {
-                            new Notification(title, { body, tag: 'minimax-5h-' + tier, requireInteraction: isCritical });
+                            new Notification(title, {
+                                body, tag: 'minimax-5h-' + tier, requireInteraction: isCritical,
+                                icon: 'static/img/avatar-128.png',
+                                badge: 'static/img/avatar-32.png',
+                            });
                         }
                     }).catch(() => {});
                 }
@@ -4408,8 +4683,49 @@
             if (barEl) barEl.style.width = Math.max(0, Math.min(100, pct)) + '%';
             // Tier-change notifications (once per crossing).
             minimaxNotify(tier, pct);
+            // Dynamic favicon swap: red crescent when the budget is critical
+            // so the browser tab itself signals the danger even when the
+            // page is backgrounded. Added per Arcurus 2026-06-11 (todo 7ea6e8fd).
+            minimaxApplyFavicon(tier);
             minimaxLastTier = tier;
             minimaxLastPct = pct;
+        }
+
+        // Swap favicon + apple-touch-icon links to the red critical variants
+        // when the MiniMax 5h widget crosses into the CRITICAL tier
+        // (>= 90% used). Restores the normal crescent otherwise.
+        // Idempotent: safe to call on every poll.
+        // Per Arcurus 2026-06-11 #selena-project (todo 7ea6e8fd).
+        function minimaxApplyFavicon(tier) {
+            try {
+                const isCrit = tier === 'CRITICAL';
+                const swap = (id, suffix) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    const base = el.getAttribute('data-base-href') || el.getAttribute('href');
+                    if (!el.getAttribute('data-base-href')) {
+                        el.setAttribute('data-base-href', base);
+                    }
+                    const next = isCrit
+                        ? base.replace(/favicon(-16x16|-32x32|-48x48)?\.png$/, 'favicon-critical$1.png')
+                              .replace(/favicon\.svg$/, 'favicon-critical.svg')
+                              .replace(/apple-touch-icon\.png$/, 'apple-touch-icon-critical.png')
+                        : el.getAttribute('data-base-href');
+                    if (el.getAttribute('href') !== next) {
+                        el.setAttribute('href', next);
+                    }
+                };
+                // Swap each favicon link to the red critical variant.
+                // The SVG entry was removed 2026-06-11 22:42 (we now use
+                // the v3 cosmic-moon PNG everywhere, no SVG variant).
+                swap('selenaFavicon16');
+                swap('selenaFavicon32');
+                swap('selenaFavicon48');
+                swap('selenaAppleTouch');
+            } catch (e) {
+                // Silent — favicon is decorative; the in-page widget is the
+                // primary signal. Don't spam the console.
+            }
         }
 
         function minimaxFormatCountdown(ms) {
