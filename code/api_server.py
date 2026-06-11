@@ -2084,16 +2084,117 @@ class RequestHandler(BaseHTTPRequestHandler):
                 result = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner, what_happened, irreversible, block_reason, force=force)
                 self.send_json({'success': True, **result})
             except TodoDuplicateError as dup:
-                # Semantic conflict (>= 0.92 cosine) — return 409 with existing + similar
-                log_api('TODO_SEMANTIC_CONFLICT', f'conflict for {short_desc[:60]} with {dup.existing.get("id")}')
+                # v0.8 dedup bands: 409 carries the band so the web UI can
+                # decide between "edit / use / force" (conflict, force_offered)
+                # and a hard "already exists" (duplicate, no force escape).
+                # force=true is honoured only when force_offered=True; for
+                # the duplicate band we still return 409 but the UI must
+                # hide the "Add anyway" button.
+                log_api(
+                    'TODO_SEMANTIC_CONFLICT',
+                    f'band={"duplicate" if not dup.force_offered else "conflict"} '
+                    f'for {short_desc[:60]} with {dup.existing.get("id")} '
+                    f'score={dup.existing.get("_score")}'
+                )
                 self.send_json({
                     'success': False,
                     'error': 'semantic duplicate',
+                    'band': 'duplicate' if not dup.force_offered else 'conflict',
+                    'force_offered': dup.force_offered,
                     'existing': dup.existing,
                     'similar': dup.similar,
                 }, 409)
             return
-        
+
+        # =====================================================================
+        # /api/dedup/similar/<id> — drill-down helper for the "show similar
+        # tasks" web UI button.  Given an existing todo id, return the top_k
+        # most similar active todos (v0.8 band ladder).  The web modal uses
+        # this to populate the similar list AND to power recursive drill-down
+        # (click a similar → re-call this endpoint with that id).
+        # =====================================================================
+        if path.startswith('/api/dedup/similar/'):
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            todo_id = path[len('/api/dedup/similar/'):].strip()
+            if not todo_id:
+                self.send_json({'success': False, 'error': 'todo id required'}, 400)
+                return
+            # `query` may not be set in this code path (it is only
+            # initialised inside the earlier /api/todos/* branches);
+            # parse it here so top_k / min_score work consistently.
+            local_query = parse_qs(parsed.query)
+            try:
+                top_k = int(local_query.get('top_k', ['10'])[0])
+            except (TypeError, ValueError):
+                top_k = 10
+            try:
+                min_score = float(local_query.get('min_score', ['0.5'])[0])
+            except (TypeError, ValueError):
+                min_score = 0.5
+            try:
+                import todo_embeddings
+                results = todo_embeddings.find_similar_to_todo(
+                    todo_id, top_k=top_k, min_score=min_score
+                )
+                target = todo_manager.get_todo(todo_id) or {}
+                self.send_json({
+                    'success': True,
+                    'target': {
+                        'id': target.get('id'),
+                        'short_desc': target.get('short_desc'),
+                        'status': target.get('status'),
+                        'project': target.get('project'),
+                        'priority': target.get('priority'),
+                    } if target else {'id': todo_id, 'short_desc': '', 'status': 'missing'},
+                    'similar': results,
+                    'top_k': top_k,
+                    'min_score': min_score,
+                })
+            except Exception as exc:
+                log_error(f'/api/dedup/similar/{todo_id} failed: {exc}', 'dedup-similar')
+                self.send_json({'success': False, 'error': str(exc)}, 500)
+            return
+
+        # =====================================================================
+        # /api/dedup/stats — live counter for the cost-tracker-style panel.
+        # Returns the by_action counts, score distribution, top-5 most
+        # blocked todos, and a force_rate so we can see how often the
+        # --force escape hatch is being used.  Optional ?since=<iso>
+        # filter for the "last 24h" view.
+        # =====================================================================
+        if path == '/api/dedup/stats':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            # See similar branch above: `query` may not be defined in
+            # this dispatch path.  Re-parse locally.
+            local_query = parse_qs(parsed.query)
+            since = local_query.get('since', [None])[0] if 'since=' in parsed.query else None
+            try:
+                import todo_embeddings
+                stats = todo_embeddings.summarize_dedup_stats(since_iso=since)
+                # Also expose the current band thresholds so the UI can
+                # show them in the legend (no magic numbers in JS).
+                self.send_json({
+                    'success': True,
+                    'stats': stats,
+                    'thresholds': {
+                        'duplicate_title': todo_embeddings.THRESHOLD_DUPLICATE_TITLE,
+                        'duplicate_cosine': todo_embeddings.THRESHOLD_DUPLICATE_COSINE,
+                        'conflict': todo_embeddings.THRESHOLD_HIGH,
+                        'hint': todo_embeddings.THRESHOLD_LOW,
+                        'weak_floor': 0.5,
+                    },
+                    'model': todo_embeddings.DEFAULT_MODEL,
+                    'since': since,
+                })
+            except Exception as exc:
+                log_error(f'/api/dedup/stats failed: {exc}', 'dedup-stats')
+                self.send_json({'success': False, 'error': str(exc)}, 500)
+            return
+
         if path == '/api/todos/update':
             if not self.authenticate():
                 self.send_json({'error': 'Unauthorized'}, 401)
@@ -3962,6 +4063,26 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.send_html('<html><body><h1>Web interface not found</h1></body></html>', 404)
             return
         
+        # Browser auto-fallback for favicon (2026-06-11).
+        # Browsers auto-request /favicon.ico from the page's directory
+        # BEFORE the page parses, so we serve our 32x32 PNG here even
+        # though the dashboard is at /selena-astra/* and Caddy strips
+        # the prefix. Without this alias, the tab shows a generic
+        # "broken icon" until the page's <link rel="icon"> tags load.
+        if path == '/favicon.ico':
+            favicon_path = os.path.join(SELENA_ROOT, 'web', 'img',
+                                        'favicon-32x32.png')
+            if os.path.exists(favicon_path):
+                with open(favicon_path, 'rb') as f:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'image/x-icon')
+                    self.send_header('Cache-Control', 'public, max-age=86400')
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(f.read())
+                return
+            # fall through to 404 if the PNG is missing
+
         # Serve other static files
         if path.startswith('/static/'):
             # Extract and sanitize the requested file path
@@ -3996,6 +4117,26 @@ class RequestHandler(BaseHTTPRequestHandler):
                     content_type = 'text/html; charset=utf-8'
                 elif file_path.endswith('.png'):
                     content_type = 'image/png'
+                elif file_path.endswith('.svg'):
+                    # Browsers refuse SVGs with the wrong MIME (Chrome shows
+                    # nothing, Firefox warns). 2026-06-11: the favicon work
+                    # exposed this gap — the static handler used to fall
+                    # back to text/plain, which made the moon favicon
+                    # invisible. Added so the SVG variant of the favicon
+                    # (and any future SVGs) render correctly.
+                    content_type = 'image/svg+xml'
+                elif file_path.endswith('.ico'):
+                    # Browsers auto-request /favicon.ico even when an SVG
+                    # favicon is declared. Serve it with the right MIME so
+                    # the favicon shows up on the first paint (before the
+                    # page's <link rel="icon"> tags are parsed).
+                    content_type = 'image/x-icon'
+                elif file_path.endswith('.jpg') or file_path.endswith('.jpeg'):
+                    content_type = 'image/jpeg'
+                elif file_path.endswith('.webp'):
+                    content_type = 'image/webp'
+                elif file_path.endswith('.gif'):
+                    content_type = 'image/gif'
                 else:
                     content_type = 'text/plain'
                 
@@ -4198,19 +4339,38 @@ class RequestHandler(BaseHTTPRequestHandler):
             if isinstance(data, dict) and 'force' in data:
                 force = bool(data['force'])
             try:
-                todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner, what_happened, irreversible, block_reason, force=force)
-                self.send_json({'success': True, 'todo': todo})
+                result = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner, what_happened, irreversible, block_reason, force=force)
+                # Flatten the manager's return shape to match the
+                # _dispatch_routes /api/todos/add response (v0.8): the
+                # web UI reads `dedup_action`, `similar`, and
+                # `force_offered` as siblings of `todo`, not nested
+                # inside it.
+                self.send_json({
+                    'success': True,
+                    'todo': result.get('todo'),
+                    'similar': result.get('similar', []),
+                    'deduped': result.get('deduped'),
+                    'dedup_action': result.get('dedup_action'),
+                    'force_offered': result.get('force_offered', False),
+                    'embedding_saved': result.get('embedding_saved', False),
+                })
             except TodoDuplicateError as dup:
-                # Semantic conflict (>= 0.92 cosine) — return 409 with
-                # existing + similar.  Without this handler the do_POST
-                # path crashed with "Empty reply from server" on
-                # duplicate add, leaving the web UI's addTodo() flow
-                # with no way to surface the conflict (the call just
-                # died).  Mirror the _dispatch_routes 409 shape.
-                log_api('TODO_SEMANTIC_CONFLICT', f'POST conflict for {short_desc[:60]} with {dup.existing.get("id")}')
+                # v0.8 dedup bands: same as the _dispatch_routes handler.
+                # Returns band + force_offered so the web UI can decide
+                # between "edit/use/force" (conflict) and "already added"
+                # (duplicate, no force escape).  The 409 status is the
+                # same in both cases.
+                log_api(
+                    'TODO_SEMANTIC_CONFLICT',
+                    f'POST band={"duplicate" if not dup.force_offered else "conflict"} '
+                    f'for {short_desc[:60]} with {dup.existing.get("id")} '
+                    f'score={dup.existing.get("_score")}'
+                )
                 self.send_json({
                     'success': False,
                     'error': 'semantic duplicate',
+                    'band': 'duplicate' if not dup.force_offered else 'conflict',
+                    'force_offered': dup.force_offered,
                     'existing': dup.existing,
                     'similar': dup.similar,
                 }, 409)
