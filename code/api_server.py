@@ -42,7 +42,7 @@ from self_evolution import evolution_loop
 from llm_call_tracker import get_tracker as _get_llm_tracker
 from cost_tracker import build_daily_report as _ct_build_daily, build_weekly_report as _ct_build_weekly_report, render_markdown as _ct_render, post_to_discord as _ct_post
 # OpenClaw session-usage tracker (proper input/output split, all sessions).
-# Lives in code/openclaw_usage.py; this import fails soft so the rest of
+# Lives in code/openclaw_cost_tracker.py; this import fails soft so the rest of
 # the API server keeps working if the file isn't there yet.
 try:
     import openclaw_usage as _openclaw_usage
@@ -51,7 +51,7 @@ except Exception as _imp_err:  # noqa: BLE001
     _OPENCLAW_USAGE_IMPORT_ERROR = str(_imp_err)
 else:
     _OPENCLAW_USAGE_IMPORT_ERROR = None
-from todo_manager import todo_manager
+from todo_manager import todo_manager, TodoDuplicateError
 from knowledge_base import knowledge_base as kb
 from workspace_scanner import scanner, scan_workspace, get_last_scan, get_scan_history
 from service_manager import (
@@ -85,12 +85,13 @@ import subprocess
 API_START_TS = time.time()
 
 # -----------------------------------------------------------------------------
-# MiniMax usage cache (1-minute TTL, per Arcurus 2026-06-04)
+# MiniMax usage cache (10-second TTL, per Arcurus 2026-06-11 #lunar-project:
+# "5 min for minimax budget update seems quite long, better use 10 secs")
 # Used by the Moderation → Last Run sub-tab widget so the LLM usage bar
 # doesn't hammer the MiniMax token plan API on every 10s poll.
 # -----------------------------------------------------------------------------
 _MINIMAX_CACHE = {"ts": 0.0, "payload": None}
-_MINIMAX_TTL_SECONDS = 60
+_MINIMAX_TTL_SECONDS = 10
 
 def _minimax_cache_get():
     if _MINIMAX_CACHE["payload"] is None:
@@ -106,7 +107,9 @@ def _minimax_cache_set(payload):
     _MINIMAX_CACHE["payload"] = payload
 
 # -----------------------------------------------------------------------------
-# Live MiniMax quota fetcher (added 2026-06-10 per Arcurus #cost-tracker).
+# Live MiniMax quota fetcher (added 2026-06-10 per Arcurus #cost-tracker,
+# TTL changed 2026-06-11 per Arcurus #lunar-project: "5 min for minimax
+# budget update seems quite long, better use 10 secs").
 #
 # The web widget's "MiniMax 5h" card was reading a STALE field in the
 # snapshot (`providers.minimax.quota.models.*.window_5h.remaining_percent`)
@@ -114,7 +117,7 @@ def _minimax_cache_set(payload):
 # `/v1/token_plan/remains` API call last worked). The snapshot also has a
 # fresh `minimax_interval` field, but to guarantee the widget always shows
 # the most recent value, we now call `mmx quota` directly inside the
-# endpoint. The result is cached for 1 minute by `_minimax_cache_get` so
+# endpoint. The result is cached for 10 seconds by `_minimax_cache_get` so
 # the 10-second client poll never hammers the upstream.
 #
 # This deliberately mirrors the parsing in code/budget_gate.py
@@ -936,8 +939,9 @@ class RequestHandler(BaseHTTPRequestHandler):
             # open-world-selena Rust binary's LLM calls under project
             # 'open-world-running' — show up in the 5h per-project view
             # in real time. The snapshot is OpenClaw-session-driven and
-            # only refreshes on the 5-min cron, so without this overlay
-            # the OW sim's spend would lag by up to 5 minutes.
+            # only refreshes on the 10-sec budget-gate / llm-usage-sync
+            # timer (was 5 min before 2026-06-11), so without this overlay
+            # the OW sim's spend would lag by up to the refresh window.
             # Added 2026-06-09 per Arcurus #cost-tracker.
             try:
                 local = payload.setdefault('local', {})
@@ -971,7 +975,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         # ---- OpenClaw session-usage tracker ----
         # Proper per-turn input/output/cacheRead/cacheWrite token split
         # parsed from per-session .jsonl transcripts. The CLI
-        # `python3 code/openclaw_usage.py {backfill,sync,status}` writes
+        # `python3 code/openclaw_cost_tracker.py {backfill,sync,status}` writes
         # to data/openclaw_usage.jsonl; we serve slices of that log here.
         if path.startswith('/api/openclaw-usage'):
             if not self.authenticate():
@@ -1143,6 +1147,41 @@ class RequestHandler(BaseHTTPRequestHandler):
                 days = 7
             t = _get_llm_tracker()
             self.send_json(t.per_project_breakdown(days=days))
+            return
+
+        # Per-model cost breakdown (added 2026-06-10 per Arcurus
+        # #lunar-project).  Powers the "Cost by Model" sub-tab in the
+        # web UI.  Runs the price audit (llm_price_audit.py) which
+        # aggregates events + openclaw usage, then prices each model's
+        # tokens using the hardcoded llm_pricing.py table (cache
+        # tokens at the model's actual cache_read/cache_write rate).
+        if path == '/api/llm-usage/per-model-cost':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            force = qs.get('force', ['0'])[0] in ('1', 'true', 'yes')
+            try:
+                window_hours = float(qs.get('window_hours', ['24'])[0])
+            except (TypeError, ValueError):
+                window_hours = 24.0
+            try:
+                from llm_price_audit import run_audit
+                report = run_audit(window_hours=window_hours)
+                # The audit appends to data/llm_price_audit.jsonl each
+                # time it runs; we don't need to re-append on every
+                # poll.  When `force=1` (user clicks "Sync now" in the
+                # UI), the run_audit() call above already wrote the
+                # new line, so just return it.
+                self.send_json(report)
+            except Exception as e:  # noqa: BLE001
+                self.send_json({
+                    'error': f'audit_failed: {e}',
+                    'at': datetime.now(timezone.utc).isoformat(),
+                    'by_model': [],
+                    'missing_prices': [],
+                    'drift_flags': [],
+                }, 500)
             return
 
         # Pre-action gate (per Arcurus 2026-06-03: "postpone autonomous
@@ -2020,6 +2059,17 @@ class RequestHandler(BaseHTTPRequestHandler):
             if not short_desc:
                 self.send_json({'success': False, 'error': 'short_desc required'}, 400)
                 return
+            # Parse force flag (bypass semantic dedup)
+            force = False
+            if 'force' in query:
+                force = query.get('force', ['0'])[0].lower() in ('1', 'true', 'yes')
+            if self.command == 'POST' and cl:
+                try:
+                    # body already parsed above for other fields
+                    if 'force' in body:
+                        force = bool(body['force'])
+                except Exception:
+                    pass
             # Defensive dedup (added 2026-06-03): if short_desc + creator_id
             # match an existing open todo, skip creating a new one and return
             # the existing record.  Protects against client-side double-submits
@@ -2030,8 +2080,18 @@ class RequestHandler(BaseHTTPRequestHandler):
                     log_api('TODO_DUP_SKIP', f'skipped duplicate add for {creator_id}: {short_desc[:60]}')
                     self.send_json({'success': True, 'todo': existing, 'deduped': True})
                     return
-            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner, what_happened, irreversible, block_reason)
-            self.send_json({'success': True, 'todo': todo})
+            try:
+                result = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner, what_happened, irreversible, block_reason, force=force)
+                self.send_json({'success': True, **result})
+            except TodoDuplicateError as dup:
+                # Semantic conflict (>= 0.92 cosine) — return 409 with existing + similar
+                log_api('TODO_SEMANTIC_CONFLICT', f'conflict for {short_desc[:60]} with {dup.existing.get("id")}')
+                self.send_json({
+                    'success': False,
+                    'error': 'semantic duplicate',
+                    'existing': dup.existing,
+                    'similar': dup.similar,
+                }, 409)
             return
         
         if path == '/api/todos/update':
@@ -2610,7 +2670,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.send_json({'error': str(e)}, 500)
             return
 
-        # MiniMax % used (for Last Run sub-tab widget, with 1-min server-side cache)
+        # MiniMax % used (for Last Run sub-tab widget, with 10-sec server-side cache)
         #
         # Per Arcurus 2026-06-10 in #cost-tracker: the widget was reading
         # `providers.minimax.quota.models.*.window_5h.remaining_percent` from
@@ -2624,8 +2684,9 @@ class RequestHandler(BaseHTTPRequestHandler):
         #
         # Authoritative source precedence (highest first):
         #   1. `mmx quota` (called live below) — always up-to-date
-        #   2. `snapshot.minimax_interval`     — refreshed every 5 min by
-        #                                        budget-gate.timer
+        #   2. `snapshot.minimax_interval`     — refreshed every 10 sec by
+        #                                        budget-gate.timer (was 5 min
+        #                                        before 2026-06-11)
         #   3. `snapshot.providers.minimax.quota` — historical, last seen
         #                                           working 2026-06-08
         if path == '/api/discord-lookup/llm-minimax':
@@ -2639,7 +2700,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     return
                 # Run `mmx quota` live so the widget never serves stale
                 # data even if the snapshot's last refresh is older than
-                # the 1-min server-side cache. Soft-fails: if `mmx`
+                # the 10-sec server-side cache. Soft-fails: if `mmx`
                 # errors, we still fall through to the snapshot fields.
                 live_quota = _live_mmx_quota()
                 live_models = {}
@@ -4130,8 +4191,29 @@ class RequestHandler(BaseHTTPRequestHandler):
                     self.send_json({'success': True, 'todo': existing, 'deduped': True})
                     return
 
-            todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner, what_happened, irreversible, block_reason)
-            self.send_json({'success': True, 'todo': todo})
+            # Parse force flag (bypass semantic dedup) — mirror the
+            # _dispatch_routes /api/todos/add handler so the web UI's
+            # addTodo() flow can opt out of dedup the same way.
+            force = False
+            if isinstance(data, dict) and 'force' in data:
+                force = bool(data['force'])
+            try:
+                todo = todo_manager.add_todo(short_desc, long_desc, priority, sensitive, parent_id, estimated_llm_calls, creator_id, conversation_id, agent_id, project, agent_owner, what_happened, irreversible, block_reason, force=force)
+                self.send_json({'success': True, 'todo': todo})
+            except TodoDuplicateError as dup:
+                # Semantic conflict (>= 0.92 cosine) — return 409 with
+                # existing + similar.  Without this handler the do_POST
+                # path crashed with "Empty reply from server" on
+                # duplicate add, leaving the web UI's addTodo() flow
+                # with no way to surface the conflict (the call just
+                # died).  Mirror the _dispatch_routes 409 shape.
+                log_api('TODO_SEMANTIC_CONFLICT', f'POST conflict for {short_desc[:60]} with {dup.existing.get("id")}')
+                self.send_json({
+                    'success': False,
+                    'error': 'semantic duplicate',
+                    'existing': dup.existing,
+                    'similar': dup.similar,
+                }, 409)
             return
 
         if path == '/api/world/scheduler/config':

@@ -39,6 +39,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone, timedelta
@@ -65,19 +66,35 @@ LLM_CALLS_FILE = os.path.join(DATA_DIR, "llm_calls.json")
 # authoritative source for MiniMax is the Token Plan's remaining_percent,
 # which is in the snapshot. We use these only for the per-model spend
 # estimate when token counts are available.
+#
+# Rate keys (all per 1M tokens):
+#   in            — unique, non-cached input
+#   out           — generated output
+#   cacheRead     — input served from the provider's prompt cache
+#                   (much cheaper than `in`; Anthropic charges 10%,
+#                   MiniMax 10%, OpenAI varies)
+#   cacheWrite    — input written to the prompt cache (Anthropic
+#                   charges a small premium over `in`; most others
+#                   bill it at the `in` rate)
+# If a model has no cacheRead/cacheWrite entry, those buckets are
+# treated as 0.0 USD/M (no surprise cost, no missing-row error).
+#
+# Per Arcurus 2026-06-10 #lunar-project: the canonical source of
+# truth is `code/llm_pricing.py`.  This module re-exports it as
+# PRICE_PER_1M_USD (legacy camelCase keys) for backward compat with
+# callers that index into it directly.
+from llm_pricing import (  # noqa: F401  (re-exported)
+    MODEL_PRICES_USD_PER_1M,
+    compute_cost_usd as _llm_pricing_compute_cost_usd,
+    price_for,
+    normalize_model,
+)
+# Backward-compat alias (camelCase) for callers that index it directly.
 PRICE_PER_1M_USD = {
-    # xAI Grok
-    "grok-4.3":              {"in": 3.00, "out": 15.00},
-    "grok-4.3-fast":         {"in": 0.20, "out": 0.50},
-    # Anthropic
-    "anthropic/claude-sonnet-4.5": {"in": 3.00, "out": 15.00},
-    "anthropic/claude-opus-4.6":   {"in": 15.00, "out": 75.00},
-    # OpenAI
-    "openai/gpt-4o":         {"in": 2.50, "out": 10.00},
-    "openai/gpt-4o-mini":    {"in": 0.15, "out": 0.60},
-    # MiniMax
-    "MiniMax-M3":            {"in": 0.50, "out": 1.00},
-    "MiniMax-M2.5":          {"in": 0.30, "out": 0.60},
+    model: {**p,
+            "cacheRead": p.get("cache_read", 0.0),
+            "cacheWrite": p.get("cache_write", 0.0)}
+    for model, p in MODEL_PRICES_USD_PER_1M.items()
 }
 
 EUR_PER_USD = 0.92  # rough; just for the €/$ display
@@ -172,7 +189,7 @@ def legacy_cumulative() -> int:
 # OpenClaw session-usage integration
 # ---------------------------------------------------------------------------
 #
-# Reads data/openclaw_usage.jsonl (built by `code/openclaw_usage.py`
+# Reads data/openclaw_usage.jsonl (built by `code/openclaw_cost_tracker.py`
 # backfill) and renders a per-day summary. The new tracker is the
 # authoritative source for sessions that ran through the OpenClaw
 # gateway (cron jobs, subagents, discord/telegram/direct messages)
@@ -208,7 +225,7 @@ def _build_openclaw_section(target_date: str) -> Optional[Dict[str, Any]]:
     lines: List[str] = [
         f"Sessions: **{s['events']}** (distinct: {s['distinct_sessions']})",
         f"Tokens in/out: **{s['tokensIn']:,}** / **{s['tokensOut']:,}** (cache reads: {s['cacheRead']:,} — hit ratio **{s.get('cacheHitRatio', 0)*100:.1f}%**)",
-        f"Est. spend (token-priced): **${s['estCostUsd']:.4f}** (~€{eur:.4f})",
+        f"Est. spend (token-priced): **${s['estCostUsd']:.2f}** (~€{eur:.2f})",
     ]
     # Fallback attribution: how many sessions used the configured
     # primary model vs fell back. Important for catching gateway
@@ -236,7 +253,7 @@ def _build_openclaw_section(target_date: str) -> Optional[Dict[str, Any]]:
         # Show top 3 cron jobs (using short IDs to keep the report tight)
         cron_str = ", ".join(f"`{k[:8]}…`: {n}" for k, n in list(s["per_cron"].items())[:3])
         lines.append(f"Top cron: {cron_str}")
-    lines.append("_Source: `python3 code/openclaw_usage.py report --date " + target_date + "`_")
+    lines.append("_Source: `python3 code/openclaw_cost_tracker.py report --date " + target_date + "`_")
     return {"heading": "🛰️ OpenClaw Sessions", "lines": lines}
 
 
@@ -374,6 +391,15 @@ def _eur(usd: float) -> float:
     return round(usd * EUR_PER_USD, 4)
 
 
+def _fmt_int(n: int) -> str:
+    """Format an integer with thousands separators (e.g. 12,345,678).
+
+    Used by the cost-breakdown section to right-align token counts
+    inside the existing bullet-list format.
+    """
+    return f"{int(n):,}"
+
+
 def build_daily_report(date: Optional[str] = None) -> Dict[str, Any]:
     """Build the data blob for the daily cost report.
 
@@ -393,6 +419,16 @@ def build_daily_report(date: Optional[str] = None) -> Dict[str, Any]:
     per_provider_today: Dict[str, int] = {}
     per_project_today: Dict[str, int] = {}
     per_model_today: Dict[str, int] = {}
+    # Cost breakdown (per-event, summed for the day). All values in USD.
+    #   cost_in          — non-cached, unique input tokens (the expensive bucket)
+    #   cost_cache_read  — tokens served from the provider's prompt cache
+    #   cost_cache_write — tokens written to the cache (charged on first sight)
+    #   cost_out         — generated output tokens
+    #   cost_total       — sum of the four; == what we'd pay if we were pay-as-you-go
+    cost_in = 0.0
+    cost_cache_read = 0.0
+    cost_cache_write = 0.0
+    cost_out = 0.0
     est_usd_today = 0.0
     for ev in events_today:
         prov = ev.get("provider", "?")
@@ -403,10 +439,24 @@ def build_daily_report(date: Optional[str] = None) -> Dict[str, Any]:
         per_model_today[model] = per_model_today.get(model, 0) + 1
         tin = ev.get("tokens_in") or 0
         tout = ev.get("tokens_out") or 0
-        if tin or tout:
+        tcr = ev.get("cache_read") or 0
+        tcw = ev.get("cache_write") or 0
+        if tin or tout or tcr or tcw:
             price = PRICE_PER_1M_USD.get(model)
             if price:
-                est_usd_today += (tin * price["in"] + tout * price["out"]) / 1_000_000
+                # Each line uses the model's per-bucket rate, defaulting to
+                # the `in` rate when a specific cache rate is missing.
+                # Defaulting to `in` (rather than 0) is the safe, *upper
+                # bound* behavior — we'd rather over-estimate than under.
+                ci = (tin * price["in"]) / 1_000_000
+                ccr = (tcr * price.get("cacheRead", price["in"])) / 1_000_000
+                ccw = (tcw * price.get("cacheWrite", price["in"])) / 1_000_000
+                co = (tout * price["out"]) / 1_000_000
+                cost_in += ci
+                cost_cache_read += ccr
+                cost_cache_write += ccw
+                cost_out += co
+    est_usd_today = cost_in + cost_cache_read + cost_cache_write + cost_out
 
     # 5h window
     local = status.get("local", {})
@@ -466,10 +516,36 @@ def build_daily_report(date: Optional[str] = None) -> Dict[str, Any]:
     else:
         err = (mi.get("error") or "unknown")[:80]
         headline_lines.append(f"🎯 **MiniMax API**: ⚠️ unavailable — {err}")
+    # Use the snapshot's limits (was hardcoded 4,500 / 4,500 before
+    # 2026-06-11; that mis-stated the target=4,000 vs hard=4,500 split
+    # defined in `data/llm_usage_snapshot.json` `limits.target_per_5h`
+    # / `limits.hard_per_5h`). Per Arcurus #lunar-project: "switch
+    # better to true priced cost. for now just monitoring is enough."
+    # So we keep the call-count line for audit AND surface the
+    # true-priced cost (added below). The line numbers should match
+    # the snapshot so a reader can compare 5,200 / 4,500 with $0.32
+    # without ambiguity.
+    _limits = status.get("limits", {}) or {}
+    _target_5h = int(_limits.get("target_per_5h", 4000) or 4000)
+    _hard_5h = int(_limits.get("hard_per_5h", 4500) or 4500)
     headline_lines.append(
-        f"📊 **Our 5h local count**: **{local.get('calls_5h', 0):,} / 4,500** "
-        f"(target) / 4,500 (hard)"
+        f"📊 **Our 5h local count**: **{local.get('calls_5h', 0):,} "
+        f"/ {_target_5h:,}** (target) / {_hard_5h:,} (hard)"
     )
+    # True-priced 5h cost (added 2026-06-11 per Arcurus #lunar-project:
+    # "switch better to true priced cost").  Pulled from
+    # `llm_call_tracker._CompatTracker._true_priced_cost_5h()` which
+    # sums `cost_usd` from the events log + `estCostUsd` from the
+    # openclaw-usage log + the in-memory per-call cost list (covers
+    # the OW Rust binary).  Kept as a separate headline line so the
+    # call count and the dollar figure can both be audited.
+    tpc = status.get("true_priced_cost_5h") or {}
+    tpc_usd = float(status.get("true_priced_cost_5h_usd") or 0.0)
+    if tpc_usd > 0 or tpc:
+        headline_lines.append(
+            f"💵 **True-priced 5h cost** (USD, token-priced): "
+            f"**${tpc_usd:.2f}** (~€{_eur(tpc_usd):.2f})"
+        )
     headline_lines.append(
         f"🕰 **All-time cumulative**: **{legacy_cumulative():,}** calls "
         f"(since April 2026)"
@@ -483,10 +559,101 @@ def build_daily_report(date: Optional[str] = None) -> Dict[str, Any]:
         "heading": "📊 Today",
         "lines": [
             f"Calls: **{len(events_today)}**",
-            f"Est. spend (token-priced only): **${est_usd_today:.4f}** (~€{_eur(est_usd_today):.4f})",
+            f"Est. spend (token-priced only): **${est_usd_today:.2f}** (~€{_eur(est_usd_today):.2f})",
             f"Billing model: **subscription** (MiniMax Token Plan + xAI Grok)",
         ],
     })
+
+    # --- 💵 Cost breakdown (today) ---
+    # Per Arcurus 2026-06-08 in #cost-tracker: "please add also cost
+    # cached and not cached and total". The main "Est. spend" line
+    # above is now the same `cost_total`, but the breakdown is what
+    # the question was really about — what fraction of the (token-
+    # priced) bill is the cache saving us.
+    #
+    # We render a small table-ish block:
+    #   Cost (not cached)  = tin   * in_rate
+    #   Cost (cached)      = tcr   * cacheRead_rate
+    #                       + tcw  * cacheWrite_rate
+    #   Cost (output)      = tout  * out_rate
+    #   ───
+    #   Cost (total)       = sum
+    #
+    # If cache cost is 0 (no cacheRead/cacheWrite in today's events
+    # OR all calls were to models without cache rates), we still show
+    # the line so the structure stays consistent.
+    if events_today:
+        # Compute per-bucket token totals so the reader can see what
+        # the cost is *priced against*.
+        sum_tin = sum((ev.get("tokens_in") or 0) for ev in events_today)
+        sum_tcr = sum((ev.get("cache_read") or 0) for ev in events_today)
+        sum_tcw = sum((ev.get("cache_write") or 0) for ev in events_today)
+        sum_tout = sum((ev.get("tokens_out") or 0) for ev in events_today)
+        sum_thinking = sum((ev.get("thinking_tokens") or 0) for ev in events_today)
+        # Tokens that we couldn't price (model not in PRICE_PER_1M_USD
+        # or had no rate at all) are accounted for in the "0.0%" line
+        # so the report never silently under-counts.
+        unpriced_in = unpriced_out = unpriced_cr = unpriced_cw = 0
+        for ev in events_today:
+            if ev.get("model") in PRICE_PER_1M_USD:
+                continue
+            unpriced_in += ev.get("tokens_in") or 0
+            unpriced_out += ev.get("tokens_out") or 0
+            unpriced_cr += ev.get("cache_read") or 0
+            unpriced_cw += ev.get("cache_write") or 0
+        cached_total = cost_cache_read + cost_cache_write
+        # Total input = new + cached. The user (Arcurus 2026-06-08 in
+        # #cost-tracker) asked for this explicitly: "379.7M new + 386.0M
+        # cached = 765.7M total effective input — so it should state
+        # also the total input tokens". The "cr+cw" / "in" field-name
+        # shorthand he asked about is also expanded here.
+        sum_input = sum_tin + sum_tcr + sum_tcw
+        cost_input = cost_in + cached_total
+        breakdown_lines = [
+            f"  - **Not-cached input** (new tokens the model had to process): **{_fmt_int(sum_tin)}** tok → **${cost_in:.2f}** (~€{_eur(cost_in):.2f})",
+            f"  - **Cached input** (served from the provider's prompt cache): **{_fmt_int(sum_tcr+sum_tcw)}** tok → **${cached_total:.2f}** (~€{_eur(cached_total):.2f})",
+            f"      - cache read: **{_fmt_int(sum_tcr)}** tok → **${cost_cache_read:.2f}**",
+            f"      - cache write: **{_fmt_int(sum_tcw)}** tok → **${cost_cache_write:.2f}**",
+            f"  - **Total input** (new + cached): **{_fmt_int(sum_input)}** tok → **${cost_input:.2f}** (~€{_eur(cost_input):.2f})",
+            f"  - **Output** (model generation): **{_fmt_int(sum_tout)}** tok → **${cost_out:.2f}** (~€{_eur(cost_out):.2f})",
+            f"  - **Thinking** (priced as part of `out` for the models we use): **{_fmt_int(sum_thinking)}** tok",
+            f"  - ── **TOTAL** (input + output): **{_fmt_int(sum_input+sum_tout)}** tok → **${est_usd_today:.2f}** (~€{_eur(est_usd_today):.2f})",
+        ]
+        if unpriced_in or unpriced_out or unpriced_cr or unpriced_cw:
+            breakdown_lines.append(
+                f"  - _Note: {_fmt_int(unpriced_in+unpriced_cr+unpriced_cw)} in/cache tokens and "
+                f"{_fmt_int(unpriced_out)} out tokens had no price row (model not in `PRICE_PER_1M_USD`); "
+                f"they contribute $0.00 to the breakdown above._"
+            )
+        # Quick "what would it have cost without caching?" comparison,
+        # so the cache savings is concrete. If `cost_in` is 0 we skip
+        # the line (it would be misleading).
+        if cost_in > 0 and (sum_tcr + sum_tcw) > 0:
+            # Per-event re-pricing: assume all (cached) input was non-cached
+            # and see what the bill would have been at the full `in` rate.
+            est_no_cache = 0.0
+            for ev in events_today:
+                model = ev.get("model")
+                price = PRICE_PER_1M_USD.get(model)
+                if not price:
+                    continue
+                tin = ev.get("tokens_in") or 0
+                tout = ev.get("tokens_out") or 0
+                tcr = ev.get("cache_read") or 0
+                tcw = ev.get("cache_write") or 0
+                in_rate = price["in"]
+                est_no_cache += (
+                    ((tin + tcr + tcw) * in_rate) + (tout * price["out"])
+                ) / 1_000_000
+            saved = est_no_cache - est_usd_today
+            saved_pct = (saved / est_no_cache * 100) if est_no_cache > 0 else 0
+            breakdown_lines.append(
+                f"  - 💸 **What it would have cost without caching**: **${est_no_cache:.2f}** → cache saved **${saved:.2f}** ({saved_pct:.1f}%) today"
+            )
+        sections.append({
+            "heading": "💵 Cost breakdown (today, token-priced)",
+            "lines": breakdown_lines,
+        })
 
     sections.append({
         "heading": "⏱️ 5h Window",
@@ -558,7 +725,23 @@ def build_daily_report(date: Optional[str] = None) -> Dict[str, Any]:
             "date": target_date,
             "calls_today": len(events_today),
             "est_usd_today": est_usd_today,
+            # Cost breakdown (USD, summed across today's events with a
+            # known price row).  `cost_in` is the *uncached* input bill,
+            # `cost_cache_*` are the prompt-cache buckets, `cost_out`
+            # is the output bill. `cost_total` mirrors `est_usd_today`.
+            "cost_in": cost_in,
+            "cost_cache_read": cost_cache_read,
+            "cost_cache_write": cost_cache_write,
+            "cost_out": cost_out,
+            "cost_total": est_usd_today,
             "calls_5h": local.get("calls_5h", 0),
+            # New (2026-06-11): true-priced 5h USD cost, sourced from
+            # the snapshot's `true_priced_cost_5h` field (computed
+            # in `llm_call_tracker._CompatTracker._true_priced_cost_5h`).
+            # Surfaced here so the cost report carries the same
+            # figure the Overseer monitors.
+            "true_priced_cost_5h_usd": tpc_usd,
+            "true_priced_cost_5h": tpc,
             "per_provider_today": per_provider_today,
             "per_project_today": per_project_today,
             "per_model_today": per_model_today,
@@ -627,6 +810,71 @@ def render_markdown(report: Dict[str, Any]) -> str:
     return "\n".join(out)
 
 
+# Discord hard limit per message is 2000 chars. The daily report was
+# already creeping over that (2016 chars pre-change), and the new
+# "Cost breakdown" section pushed it to ~2600 chars, so the old
+# `text[:2000]` truncation was silently chopping the bottom half.
+#
+# Fix: split at section boundaries, each chunk ≤ 1900 chars (leaving
+# headroom for the `_msg N/M_` marker). The first chunk keeps the
+# `### ` heading style; continuation chunks are sent as plain
+# follow-ups.
+DISCORD_MAX = 1900
+
+
+def render_markdown_chunks(report: Dict[str, Any]) -> List[str]:
+    """Render the report as a list of message-sized chunks.
+
+    Each chunk is ≤ DISCORD_MAX chars and is itself a valid Discord
+    message. Sections are kept whole; a single section is never split
+    across chunks (a section that doesn't fit on its own gets its own
+    chunk and is left as-is — we'd rather truncate a single section
+    than split it mid-line).
+    """
+    full = render_markdown(report)
+    if len(full) <= DISCORD_MAX:
+        return [full]
+    # First pass: figure out where the section-boundary splits fall so
+    # we can stamp the chunks with a correct `_(continued N/M)_` marker
+    # in the second pass. Without this we'd have to guess the total
+    # chunk count, which is annoying for the reader.
+    splits: List[int] = []  # indices into sections[] where splits happen
+    cur_len = len(report["header"]) + 2  # header + blank line
+    for i, sec in enumerate(report["sections"]):
+        block_len = len(f"### {sec['heading']}\n") + sum(len(l) + 1 for l in sec["lines"]) + 2
+        if cur_len + block_len > DISCORD_MAX and cur_len > len(report["header"]) + 2:
+            splits.append(i)
+            cur_len = block_len
+        else:
+            cur_len += block_len
+    n_chunks = len(splits) + 1
+    # Second pass: emit the chunks.
+    chunks: List[str] = []
+    cur: List[str] = [report["header"], ""]
+    chunk_idx = 0
+    def _stamp(text: str) -> str:
+        return text.rstrip() + f"\n\n_(part {chunk_idx+1}/{n_chunks})_"
+    for i, sec in enumerate(report["sections"]):
+        block = [f"### {sec['heading']}"] + list(sec["lines"]) + [""]
+        prospective = "\n".join(cur + block)
+        if len(prospective) > DISCORD_MAX and len(cur) > 2:
+            chunks.append(_stamp("\n".join(cur)))
+            chunk_idx += 1
+            cur = [f"### {sec['heading']}"] + list(sec["lines"]) + [""]
+        else:
+            cur.extend(block)
+    if cur and any(s.strip() for s in cur):
+        chunks.append(_stamp("\n".join(cur)))
+    # Sanity-check chunk sizes; if any chunk is still over the limit
+    # (huge single section), truncate the trailing lines.
+    out: List[str] = []
+    for c in chunks:
+        if len(c) > DISCORD_MAX:
+            c = c[: DISCORD_MAX - 50] + "\n\n_…(section truncated)_"
+        out.append(c)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Discord post
 # ---------------------------------------------------------------------------
@@ -664,15 +912,35 @@ def post_to_discord(channel_id: Optional[str] = None, date: Optional[str] = None
                     weekly: bool = False) -> Dict[str, Any]:
     """Build the report and POST it to Discord.
 
-    Honors COST_TRACKER_DRY_RUN env var.
+    Honors COST_TRACKER_DRY_RUN env var. For daily reports that exceed
+    the 2000-char Discord message limit, sends multiple section-aware
+    chunks (see `render_markdown_chunks`).
     """
     cid = channel_id or os.environ.get("COST_TRACKER_CHANNEL_ID") or DEFAULT_CHANNEL_ID
     report = build_weekly_report() if weekly else build_daily_report(date)
-    text = render_markdown(report)
+    chunks = render_markdown_chunks(report)
     if os.environ.get("COST_TRACKER_DRY_RUN") == "1":
-        return {"dry_run": True, "channel_id": cid, "text": text, "data": report["data"]}
-    result = _discord_post(cid, text)
-    return {"sent": True, "channel_id": cid, "discord": result, "data": report["data"]}
+        return {
+            "dry_run": True,
+            "channel_id": cid,
+            "chunks": chunks,
+            "n_chunks": len(chunks),
+            "data": report["data"],
+        }
+    results = []
+    for i, text in enumerate(chunks):
+        # Tiny stagger (50 ms) so Discord orders the messages correctly
+        # even if the API races them.
+        if i > 0:
+            time.sleep(0.05)
+        results.append(_discord_post(cid, text))
+    return {
+        "sent": True,
+        "channel_id": cid,
+        "n_chunks": len(chunks),
+        "discord": results,
+        "data": report["data"],
+    }
 
 
 def send_file(channel_id: str, file_path: str) -> Dict[str, Any]:
