@@ -7519,6 +7519,54 @@
                 </div>`;
             })();
 
+            // Credit balance card (per Arcurus 2026-06-12 18:42 CEST
+            // #cost-tracker: 'i dont see the minimax credits
+            // displayed where are they? / Credit balance 5,582').
+            // The MiniMax public API does NOT expose this number
+            // — only the cookie-auth dashboard does. The server
+            // returns a graceful `ok: false` placeholder; we
+            // render a clear explanation with a link to the
+            // dashboard so the user can check the number
+            // manually until the dashboard-scraper TODO is
+            // implemented. When `ok: true` (MMX_DASHBOARD_COOKIE
+            // is set + scraper succeeds), we render the actual
+            // number prominently. Mirrors the OpenAI pattern in
+            // code/refresh_openai_interval.py:280.
+            const creditBalanceCard = (() => {
+                const cb = (typeof window !== 'undefined' && window._lastMinimaxQuota)
+                    ? (window._lastMinimaxQuota.credit_balance || null)
+                    : null;
+                if (!cb) {
+                    // No credit_balance field in the live payload
+                    // (older server without the field) — skip
+                    // silently.
+                    return '';
+                }
+                if (cb.ok) {
+                    // Real number available. Show it as a KPI
+                    // alongside the 5h bar.
+                    return `<div style="background:var(--bg-dark);border-radius:6px;padding:10px;margin-top:6px;display:flex;justify-content:space-between;align-items:baseline;" title="MiniMax credit balance (Subscription credits + recharge + gift, used automatically after the plan quota is exhausted). Sourced from the cookie-authenticated dashboard; ${cb.source || 'live'}.">
+                        <strong style="font-size:0.9rem;">💰 Credit balance</strong>
+                        <span style="font-size:1.15rem;font-weight:bold;color:var(--success);">${typeof cb.value === 'number' ? cb.value.toLocaleString() : cb.value}</span>
+                    </div>`;
+                }
+                // Graceful placeholder: explain why we don't
+                // have the number, with a link to the dashboard.
+                // The hint is the 2nd-line 'reason' (terse) and
+                // the link lets the user check the number in
+                // their browser.
+                return `<div style="background:var(--bg-dark);border-radius:6px;padding:10px;margin-top:6px;font-size:0.82rem;" title="${(cb.error || '').replace(/"/g, '&quot;')}">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                        <strong style="font-size:0.9rem;">💰 Credit balance</strong>
+                        <span style="color:var(--text-secondary);">unavailable via public API</span>
+                    </div>
+                    <div style="color:var(--text-secondary);font-size:0.78rem;margin-top:4px;">
+                        MiniMax exposes this only on the cookie-authenticated dashboard, not via the Bearer-token API.
+                        ${cb.hint_url ? `<a href="${cb.hint_url}" target="_blank" style="color:var(--accent,#569cd6);">Check it in the dashboard →</a>` : ''}
+                    </div>
+                </div>`;
+            })();
+
             let quotaHtml = '';
             if (!windows.length) {
                 // No live data yet (first load failed or is in flight).
@@ -7627,6 +7675,7 @@
                     <div style="display:flex;align-items:center;gap:8px;">${stateBadge}${actionButtons}</div>
                 </div>
                 ${usedBar}
+                ${creditBalanceCard}
                 ${quotaHtml}
                 ${nextInfo}
                 ${fetchedLine}

@@ -306,6 +306,44 @@ def main() -> int:
         return 1
     print("OK no absolute-path fetch() in web/index.html")
 
+    # 9. credit_balance field is exposed by /api/discord-lookup/llm-minimax
+    #    (per Arcurus 2026-06-12 18:42 CEST #cost-tracker: 'i dont see
+    #    the minimax credits displayed where are they? / Credit
+    #    balance 5,582').
+    if "credit_balance" not in a:
+        print("FAIL: /api/discord-lookup/llm-minimax response missing 'credit_balance' field")
+        return 1
+    cb = a["credit_balance"]
+    if "ok" not in cb:
+        print(f"FAIL: credit_balance missing 'ok' field: {cb}")
+        return 1
+    if cb["ok"]:
+        print(f"OK credit_balance: real value available — {cb.get('value')} ({cb.get('source')})")
+    else:
+        # Graceful placeholder expected: the public API doesn't
+        # expose the credit balance, so we expect ok=False with
+        # an explanation.
+        if not cb.get("error"):
+            print(f"FAIL: credit_balance.ok=False but no error message")
+            return 1
+        print(f"OK credit_balance: graceful placeholder (ok=False). Server says: '{cb.get('error')[:80]}...'")
+    if "hint_url" in cb:
+        print(f"OK credit_balance.hint_url present: {cb['hint_url']}")
+
+    # 10. The card renders the credit balance section. The JS
+    #     handles both ok=true (real number) and ok=false
+    #     (graceful placeholder) shapes.
+    if "creditBalanceCard" not in src:
+        print("FAIL: _renderMinimaxProviderCard doesn't compute creditBalanceCard")
+        return 1
+    if "💰 Credit balance" not in src:
+        print("FAIL: card doesn't include a '💰 Credit balance' label")
+        return 1
+    if "unavailable via public API" not in src:
+        print("FAIL: graceful-placeholder text 'unavailable via public API' missing")
+        return 1
+    print("OK card renders a 'Credit balance' section (real number when ok, graceful placeholder when not)")
+
     print()
     print("ALL CHECKS PASSED ✅")
     return 0

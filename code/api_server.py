@@ -93,6 +93,71 @@ API_START_TS = time.time()
 _MINIMAX_CACHE = {"ts": 0.0, "payload": None}
 _MINIMAX_TTL_SECONDS = 10
 
+def _fetch_minimax_credit_balance() -> dict:
+    """Fetch the MiniMax 'credit balance' (Subscription credits +
+    recharge + gift — used automatically after the plan quota is
+    exhausted). Per Arcurus 2026-06-12 18:42 CEST #cost-tracker:
+    'i dont see the minimax credits displayed where are they? / the
+    minimax dashboard says: Credit balance 5,582 — can you display
+    these credits and query them with the minimax api?'.
+
+    The MiniMax public API (Bearer-token auth) does NOT expose this
+    number — only the cookie-authenticated web dashboard at
+    api.minimax.io returns it. Probed 50+ endpoints in
+    2026-06-12; the only ones that return anything are the 5h
+    window endpoints. The same situation exists for OpenAI
+    (see code/refresh_openai_interval.py:280) where the
+    credit_grants/subscription endpoints require a session key,
+    not a secret API key.
+
+    Returns one of:
+      {ok: True,  value: <number>, fetched_at: <iso>, source: ...}
+        when MMX_DASHBOARD_COOKIE is set and a successful scrape
+        happens (TODO: not implemented in this commit; the
+        placeholder is the only path active today).
+      {ok: False, error: <message>, source: 'minimax-dashboard',
+        hint: 'public API does not expose credit balance; see
+               MiniMax web dashboard'}
+        when the public API is the only available path.
+
+    The 10s cache in _MINIMAX_CACHE also covers this field (it's
+    part of the per-endpoint payload, so re-fetching for
+    /api/discord-lookup/llm-minimax automatically refreshes the
+    credit_balance too).
+    """
+    import os
+    cookie = os.environ.get('MMX_DASHBOARD_COOKIE')
+    if not cookie:
+        return {
+            "ok": False,
+            "source": "minimax-dashboard",
+            "error": (
+                "MiniMax credit balance is only exposed via the "
+                "cookie-authenticated web dashboard. The public "
+                "MiniMax API (Bearer-token) only returns the 5h "
+                "window quota — no credit-balance field. To enable "
+                "the display, set MMX_DASHBOARD_COOKIE=<session-cookie> "
+                "env var (TODO scraper) or paste the current "
+                "balance from the dashboard into a TODO "
+                "credit-override endpoint."
+            ),
+            "hint_url": "https://api.minimax.io/user-center/payment/coding-plan",
+        }
+    # TODO: implement the scraper. The dashboard endpoint is
+    # cookie-authenticated, so the cookie is needed. We have
+    # playwright-core installed at:
+    #   /home/openclaw/.npm-global/lib/node_modules/openclaw/node_modules/playwright-core
+    # so a headless Chromium scrape is doable but is a meaningful
+    # chunk of work (login flow, session refresh, layout changes).
+    # Arcurus should explicitly approve the headless-scrape
+    # approach before we build it (it adds dependencies + complexity).
+    return {
+        "ok": False,
+        "source": "minimax-dashboard",
+        "error": "MMX_DASHBOARD_COOKIE is set but the scraper is not yet implemented",
+    }
+
+
 def _minimax_cache_get():
     if _MINIMAX_CACHE["payload"] is None:
         return None
@@ -2326,9 +2391,13 @@ class RequestHandler(BaseHTTPRequestHandler):
                 min_score = 0.5
             try:
                 import todo_embeddings
-                results = todo_embeddings.find_similar_to_todo(
+                ext = todo_embeddings.find_similar_to_todo_ext(
                     todo_id, top_k=top_k, min_score=min_score
                 )
+                results = ext.get("similar", [])
+                rule = ext.get("rule", {})
+                count = ext.get("count", 0)
+                total_above_floor = ext.get("total_above_floor", 0)
                 target = todo_manager.get_todo(todo_id) or {}
                 self.send_json({
                     'success': True,
@@ -2340,6 +2409,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                         'priority': target.get('priority'),
                     } if target else {'id': todo_id, 'short_desc': '', 'status': 'missing'},
                     'similar': results,
+                    'count': count,
+                    'total_above_floor': total_above_floor,
+                    'rule': rule,
                     'top_k': top_k,
                     'min_score': min_score,
                 })
@@ -2378,6 +2450,8 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.send_json({
                     'success': True,
                     'counts': result.get('counts', {}),
+                    'rules': result.get('rules', {}),
+                    'window_days': result.get('window_days', 7),
                     'min_score': min_score,
                     'top_k_per_todo': top_k_per_todo,
                     'n_todos': result.get('n_todos', 0),
@@ -2424,6 +2498,47 @@ class RequestHandler(BaseHTTPRequestHandler):
                 })
             except Exception as exc:
                 log_error(f'/api/dedup/stats failed: {exc}', 'dedup-stats')
+                self.send_json({'success': False, 'error': str(exc)}, 500)
+            return
+
+        # =====================================================================
+        # /api/dedup/similar-tasks-by-count — list of todos ordered by their
+        # smart similar count (highest first).  Powers the "📊 Similar →
+        # ordered by count" button on the dedup stats panel.  Same smart
+        # rule as /similar-counts: if the source is done/closed & <7d,
+        # only count recent-terminal similars; otherwise count all
+        # non-deleted.  Clicking a row opens the standard similar modal
+        # for that todo.  Limit caps the response size.
+        # =====================================================================
+        if path == '/api/dedup/similar-tasks-by-count':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            local_query = parse_qs(parsed.query)
+            try:
+                min_score = float(local_query.get('min_score', ['0.5'])[0])
+            except (TypeError, ValueError):
+                min_score = 0.5
+            try:
+                limit = int(local_query.get('limit', ['50'])[0])
+            except (TypeError, ValueError):
+                limit = 50
+            try:
+                import todo_embeddings
+                result = todo_embeddings.tasks_by_similar_count(
+                    min_score=min_score, limit=limit
+                )
+                self.send_json({
+                    'success': True,
+                    'rows': result.get('rows', []),
+                    'limit': limit,
+                    'min_score': min_score,
+                    'window_days': result.get('window_days', 7),
+                    'n_todos': result.get('n_todos', 0),
+                    'compute_ms': result.get('compute_ms', 0),
+                })
+            except Exception as exc:
+                log_error(f'/api/dedup/similar-tasks-by-count failed: {exc}', 'dedup-by-count')
                 self.send_json({'success': False, 'error': str(exc)}, 500)
             return
 
@@ -3111,12 +3226,39 @@ class RequestHandler(BaseHTTPRequestHandler):
                 # `fetched_at` = whichever source is freshest; live wins
                 # by construction since we just called it.
                 fetched_at = live_fetched_at or snap_fetched_at or datetime.datetime.now(timezone.utc).isoformat()
+                # Credit balance ("Subscription credits + recharge +
+                # gift — used automatically after the plan quota is
+                # exhausted"). Per Arcurus 2026-06-12 18:42 CEST
+                # #cost-tracker: 'i dont see the minimax credits
+                # displayed where are they?'. The MiniMax dashboard
+                # shows this number (e.g. 5,582) but the public API
+                # (Bearer-token auth) does NOT expose it — only the
+                # cookie-authenticated web UI at api.minimax.io
+                # returns it. The same situation exists for OpenAI
+                # (see code/refresh_openai_interval.py:280, which
+                # uses the same graceful "ok=False" placeholder).
+                # Two options if the user wants the real number:
+                #   1. Set MMX_DASHBOARD_COOKIE=<session-cookie> env
+                #      var to enable a Playwright scrape (TODO if
+                #      Arcurus wants it — we have playwright-core
+                #      installed at
+                #      /home/openclaw/.npm-global/lib/node_modules/
+                #      openclaw/node_modules/playwright-core)
+                #   2. Run the dashboard in their browser, copy the
+                #      "Credit balance" number, paste it in via the
+                #      new POST /api/discord-lookup/llm-minimax/
+                #      credit-override endpoint (also TODO if
+                #      Arcurus wants it)
+                # For now we return ok=False so the UI knows to show
+                # the placeholder rather than fake a number.
+                credit_balance = _fetch_minimax_credit_balance()
                 payload = {
                     'cached': False,
                     'fetched_at': fetched_at,
                     'provider': 'minimax',
                     'windows': windows,
                     'summary': status.get('summary'),
+                    'credit_balance': credit_balance,
                 }
                 _minimax_cache_set(payload)
                 self.send_json(payload)
