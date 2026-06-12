@@ -309,7 +309,7 @@
                 <div class="tasks-panel">
                     <!-- Header row: Title, Search, New Task button -->
                     <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
-                        <h2 style="margin: 0; white-space: nowrap;">🎯 Tasks / Loose Ends / Todos</h2>
+                        <h2 style="margin: 0; white-space: nowrap;">🎯 Tasks / Loose Ends / Todos <span id="taskCountBadge" style="color: var(--text-secondary); font-size: 0.95rem; font-weight: normal;"></span></h2>
                         
                         <!-- Search field -->
                         <div style="flex: 1; min-width: 200px; max-width: 400px;">
@@ -446,6 +446,8 @@
                             </div>
                             <div id="similarTarget" style="background: var(--bg-dark); border: 1px solid var(--accent-blue); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px;"></div>
                             <div id="similarList" style="margin-bottom: 12px;"></div>
+                            <div id="nextTenHeader" style="display: none; color: var(--text-secondary); font-size: 0.78rem; margin: 14px 0 8px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08);">📋 Other recent tasks (next 10) — for context</div>
+                            <div id="nextTenList" style="margin-bottom: 12px;"></div>
                             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-secondary); border-top: 1px solid var(--text-secondary); padding-top: 8px;">
                                 <div>
                                     <span style="display: inline-block; width: 10px; height: 10px; background: #a855f7; border-radius: 2px; margin-right: 4px;"></span>duplicate (≥99.9%)
@@ -664,6 +666,23 @@
                         <span style="margin-left: auto; color: var(--text-secondary); font-size: 0.8rem;">
                             <span id="cbmLastUpdate"></span>
                         </span>
+                    </div>
+                    <!-- Time-range selector (added 2026-06-12 per Arcurus
+                         #cost-tracker: "in the Detailed table please make
+                         costs selectable by 1h, 24h, 7days, 1 month,
+                         year, all"). Wires to ?window_hours= on
+                         /api/llm-usage/per-model-cost; the whole sub-tab
+                         (KPIs, charts, detail table, audit) re-fetches
+                         and re-renders on click. 0 = "all-time" (the
+                         server treats window_hours <= 0 as no cutoff). -->
+                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:15px;">
+                        <span style="color:var(--text-secondary); font-size:0.8rem; margin-right:4px;">Window:</span>
+                        <button class="save-btn cbm-window-btn" data-hours="1"   onclick="setCostByModelWindow(1,   this)" style="width:auto;padding:4px 12px;font-size:0.8rem;">1h</button>
+                        <button class="save-btn cbm-window-btn" data-hours="24"  onclick="setCostByModelWindow(24,  this)" style="width:auto;padding:4px 12px;font-size:0.8rem;">24h</button>
+                        <button class="save-btn cbm-window-btn" data-hours="168" onclick="setCostByModelWindow(168, this)" style="width:auto;padding:4px 12px;font-size:0.8rem;">7d</button>
+                        <button class="save-btn cbm-window-btn" data-hours="720" onclick="setCostByModelWindow(720, this)" style="width:auto;padding:4px 12px;font-size:0.8rem;">1mo</button>
+                        <button class="save-btn cbm-window-btn" data-hours="8760" onclick="setCostByModelWindow(8760, this)" style="width:auto;padding:4px 12px;font-size:0.8rem;">1y</button>
+                        <button class="save-btn cbm-window-btn" data-hours="0"   onclick="setCostByModelWindow(0,   this)" style="width:auto;padding:4px 12px;font-size:0.8rem;">all</button>
                     </div>
 
                     <div class="cost-summary" id="cbmKpis"></div>
@@ -3566,10 +3585,14 @@
             const targetDiv = document.getElementById('similarTarget');
             const listDiv = document.getElementById('similarList');
             const countDiv = document.getElementById('similarCount');
+            const nextTenHeader = document.getElementById('nextTenHeader');
+            const nextTenList = document.getElementById('nextTenList');
             modal.style.display = 'flex';
             targetDiv.innerHTML = '<div style="color: var(--text-secondary);">Loading similar tasks…</div>';
             listDiv.innerHTML = '';
             countDiv.textContent = '';
+            if (nextTenHeader) nextTenHeader.style.display = 'none';
+            if (nextTenList) nextTenList.innerHTML = '';
             try {
                 const r = await fetch(`api/dedup/similar/${encodeURIComponent(todoId)}?top_k=10&min_score=0.5`, {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -3591,25 +3614,35 @@
                     </div>
                 `;
                 const sims = data.similar || [];
+                const simIds = new Set([todoId, ...sims.map(s => s.id)]);
                 countDiv.textContent = sims.length === 0 ? 'no similar tasks found' : `${sims.length} similar`;
                 if (sims.length === 0) {
                     listDiv.innerHTML = '<div style="color: var(--text-secondary); padding: 12px; text-align: center;">No active todo has cosine &ge; 0.5 with this one.</div>';
                 } else {
                     listDiv.innerHTML = sims.map(s => {
-                        const bandColor = s.band === 'duplicate' ? '#a855f7'
-                            : s.band === 'conflict' ? 'var(--danger)'
-                            : s.band === 'hint' ? 'var(--accent-yellow)'
-                            : 'var(--text-secondary)';
+                        // Color-wise gradient: map score 0.5..1.0 to a color
+                        // ramp. 0.5 (weak) = gray, 0.82 (hint) = yellow,
+                        // 0.95 (conflict) = red, 0.999 (duplicate) = purple.
+                        // Use a smooth HSL interpolation so the user can see
+                        // *how* similar each task is at a glance, not just
+                        // the band label.
+                        const score = Math.max(0, Math.min(1, s.score || 0));
+                        const color = scoreToColor(score);
                         const bandLabel = s.band === 'duplicate' ? '🟣 duplicate'
                             : s.band === 'conflict' ? '🔴 conflict'
                             : s.band === 'hint' ? '🟡 hint'
                             : '⚪ weak';
+                        // Width bar shows exact score (0% = 0, 100% = 1.0)
+                        const barWidthPct = Math.max(2, Math.round((score - 0.5) / 0.5 * 100));
                         return `
-                        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-left: 4px solid ${bandColor}; background: var(--bg-dark); border-radius: 6px; margin-bottom: 6px; cursor: pointer;" onclick="openSimilarModal('${escapeHtml(s.id)}')" title="Click to drill into this todo's similar list">
+                        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-left: 4px solid ${color}; background: var(--bg-dark); border-radius: 6px; margin-bottom: 6px; cursor: pointer;" onclick="openSimilarModal('${escapeHtml(s.id)}')" title="Click to drill into this todo's similar list">
                             <div style="flex: 1;">
                                 <div style="font-weight: 500; color: var(--text-primary);">${escapeHtml(s.short_desc || '(no description)')}</div>
                                 <div style="font-size: 0.72rem; color: var(--text-secondary);">
                                     <code>${escapeHtml(s.id)}</code>${s.project ? ' • ' + escapeHtml(s.project) : ''}${s.priority ? ' • P' + s.priority : ''} • ${bandLabel} • similarity ${((s.score || 0) * 100).toFixed(1)}%
+                                </div>
+                                <div title="score ${((s.score || 0) * 100).toFixed(1)}% — wider bar = more similar" style="margin-top: 4px; height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;">
+                                    <div style="height: 100%; width: ${barWidthPct}%; background: ${color}; transition: width 0.2s;"></div>
                                 </div>
                             </div>
                             <div style="font-size: 0.7rem; color: var(--text-secondary); white-space: nowrap;">→</div>
@@ -3617,9 +3650,74 @@
                         `;
                     }).join('');
                 }
+                // "Next 10" — fetch the 10 most recent active todos (excl. the
+                // current target + everything in the similar list) so the user
+                // has context.  This catches tasks the cosine model might have
+                // missed (e.g. very short or boilerplate titles that embed to
+                // near-zero) and tasks the user might want to fold into the
+                // current one.
+                try {
+                    const nr = await fetch('api/todos?status=open&sort_by=created', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (nr.ok) {
+                        const ndata = await nr.json();
+                        const all = (ndata.todos || ndata || []);
+                        const nextTen = all
+                            .filter(x => !simIds.has(x.id) && !x.deleted_at)
+                            .slice(0, 10);
+                        if (nextTen.length > 0) {
+                            if (nextTenHeader) nextTenHeader.style.display = 'block';
+                            if (nextTenList) {
+                                nextTenList.innerHTML = nextTen.map(x => `
+                                    <div style="display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-left: 4px solid var(--text-secondary); background: var(--bg-dark); border-radius: 6px; margin-bottom: 5px; cursor: pointer; opacity: 0.85;" onclick="openSimilarModal('${escapeHtml(x.id)}')" title="Click to drill into this todo's similar list">
+                                        <div style="flex: 1;">
+                                            <div style="font-weight: 500; color: var(--text-primary);">${escapeHtml(x.short_desc || '(no description)')}</div>
+                                            <div style="font-size: 0.7rem; color: var(--text-secondary);">
+                                                <code>${escapeHtml(x.id)}</code>${x.project ? ' • ' + escapeHtml(x.project) : ''}${x.priority ? ' • P' + x.priority : ''}${x.created_at ? ' • ' + new Date(x.created_at).toLocaleDateString() : ''}
+                                            </div>
+                                        </div>
+                                        <div style="font-size: 0.7rem; color: var(--text-secondary); white-space: nowrap;">→</div>
+                                    </div>
+                                `).join('');
+                            }
+                        }
+                    }
+                } catch (_) { /* next 10 is a nice-to-have; silent on failure */ }
             } catch (e) {
                 targetDiv.innerHTML = `<div style="color: var(--danger);">Network error: ${escapeHtml(e.message)}</div>`;
             }
+        }
+
+        // scoreToColor — map similarity score [0.5, 1.0] to a smooth color
+        // gradient so the user can see *how* similar each task is at a
+        // glance, not just the band label. Stops:
+        //   0.50  gray (weak floor)
+        //   0.82  yellow (hint threshold)
+        //   0.95  red    (conflict / BLOCK)
+        //   0.999 purple (duplicate / HARD BLOCK)
+        function scoreToColor(score) {
+            // Clamp to the band range
+            const s = Math.max(0.5, Math.min(1.0, score));
+            // Anchor colors (R,G,B) at the four band stops
+            const stops = [
+                { t: 0.50, r: 120, g: 120, b: 120 },  // gray
+                { t: 0.82, r: 251, g: 191, b: 36  },  // yellow
+                { t: 0.95, r: 239, g: 68,  b: 68  },  // red
+                { t: 0.999, r: 168, g: 85, b: 247 },  // purple
+            ];
+            // Find the segment and lerp
+            for (let i = 0; i < stops.length - 1; i++) {
+                const a = stops[i], b = stops[i + 1];
+                if (s >= a.t && s <= b.t) {
+                    const f = (s - a.t) / (b.t - a.t);
+                    const r = Math.round(a.r + (b.r - a.r) * f);
+                    const g = Math.round(a.g + (b.g - a.g) * f);
+                    const bl = Math.round(a.b + (b.b - a.b) * f);
+                    return `rgb(${r}, ${g}, ${bl})`;
+                }
+            }
+            return `rgb(${stops[stops.length - 1].r}, ${stops[stops.length - 1].g}, ${stops[stops.length - 1].b})`;
         }
 
         function closeSimilarModal() {
@@ -3999,6 +4097,17 @@
                 if (currentTodoSort)      bits.push(`sort: ${currentTodoSort}`);
                 const base = bits.length ? bits.join(' · ') + ' · ' : '';
                 countsEl.textContent = `${base}${todos ? todos.length : 0} shown`;
+            }
+            // Big task-count badge next to the page title.
+            // Shows the visible (filtered) count, plus the total active
+            // count in parens so the user always knows both numbers.
+            const badge = document.getElementById('taskCountBadge');
+            if (badge) {
+                const visible = todos ? todos.length : 0;
+                const totalActive = summary && typeof summary.total === 'number' ? summary.total : visible;
+                const openCount = summary && typeof summary.open === 'number' ? summary.open : 0;
+                const inProg = summary && typeof summary.in_progress === 'number' ? summary.in_progress : 0;
+                badge.textContent = `(${visible} shown · ${openCount} open · ${inProg} in progress · ${totalActive} total)`;
             }
         }
 
@@ -6176,9 +6285,41 @@
         // under the /selena-astra/ Caddy prefix. See the convention
         // comment at the top of this <script>.
         // ============================================================
+        // Time-range selector state (added 2026-06-12 per Arcurus
+        // #cost-tracker). Default = 24h. setCostByModelWindow() updates
+        // the state, highlights the active button, and triggers a
+        // re-fetch via loadCostByModel(). window_hours <= 0 means
+        // "all-time" (the server's _read_events treats it as no cutoff).
+        let _cbmWindowHours = 24;
+
+        function setCostByModelWindow(hours, btn) {
+            _cbmWindowHours = hours;
+            // Update button highlight: .cbm-window-btn gets a green
+            // background for the active one. We use inline style so we
+            // don't have to thread a CSS class.
+            document.querySelectorAll('.cbm-window-btn').forEach(b => {
+                b.style.background = '';
+                b.style.color = '';
+            });
+            if (btn) {
+                btn.style.background = 'var(--success)';
+                btn.style.color = '#000';
+            }
+            loadCostByModel(false);
+        }
+
         async function loadCostByModel(force) {
             try {
-                const r = await fetch('api/llm-usage/per-model-cost' + (force ? '?force=1' : ''));
+                // Compose the query string. force=1 forces a fresh
+                // server-side audit run; window_hours selects the
+                // time range (0 = all-time, otherwise hours).
+                const qs = [];
+                if (force) qs.push('force=1');
+                if (typeof _cbmWindowHours === 'number') {
+                    qs.push('window_hours=' + _cbmWindowHours);
+                }
+                const url = 'api/llm-usage/per-model-cost' + (qs.length ? '?' + qs.join('&') : '');
+                const r = await fetch(url);
                 if (!r.ok) {
                     document.getElementById('cbmKpis').innerHTML =
                         '<div class="empty-state">Failed to load: HTTP ' + r.status + '</div>';
@@ -6186,6 +6327,18 @@
                 }
                 const data = await r.json();
                 renderCostByModel(data);
+                // Sync the active-button highlight on initial load
+                // (the first time the tab opens).
+                document.querySelectorAll('.cbm-window-btn').forEach(b => {
+                    const h = parseInt(b.getAttribute('data-hours'), 10);
+                    if (h === _cbmWindowHours) {
+                        b.style.background = 'var(--success)';
+                        b.style.color = '#000';
+                    } else {
+                        b.style.background = '';
+                        b.style.color = '';
+                    }
+                });
             } catch (e) {
                 document.getElementById('cbmKpis').innerHTML =
                     '<div class="empty-state">Error: ' + e.message + '</div>';
@@ -6370,7 +6523,16 @@
             const audit = document.getElementById('cbmAudit');
             const missing = data.missing_prices || [];
             const drift = data.drift_flags || [];
-            let html = `<div>Window: ${data.window_hours}h · Events: ${data.events_count} · `;
+            // Format the window label: 0 / undefined / negative → 'all-time',
+            // otherwise render as e.g. '24h' or '168h' (the server can
+            // return a fractional window_hours so coerce to a clean
+            // integer when it's a whole number).
+            let winLabel;
+            const wh = data.window_hours;
+            if (wh == null || wh <= 0) winLabel = 'all-time';
+            else if (Number.isInteger(wh) || Math.abs(wh - Math.round(wh)) < 1e-6) winLabel = Math.round(wh) + 'h';
+            else winLabel = wh + 'h';
+            let html = `<div>Window: ${winLabel} · Events: ${data.events_count} · `;
             html += `mmx quota: ${data.mmx_quota_pulled ? '✓' : 'unavailable'} · `;
             html += `last audit: ${data.at ? data.at.replace('T',' ').slice(0,19) : 'n/a'}</div>`;
             if (missing.length) {

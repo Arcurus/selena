@@ -258,6 +258,22 @@ def main() -> int:
           f"mmx_quota={a['mmx_quota_pulled']}, "
           f"missing={len(a['missing'])}, drift_flags={len(a['drift_flags'])}")
 
+    # 6c. Cache-read is no longer 0 for known-cache models.
+    # Per Arcurus 2026-06-12 10:47 CEST #cost-tracker: "in the
+    # Detailed table Cache read is always 0 but for sure we had
+    # some cache reads, please fix." After fixing the reconciler
+    # + running the backfill, MiniMax-M3 alone has 1.75B cache_read
+    # tokens all-time and ~100M+ in any 24h window.
+    models_for_cache = data.get("by_model") or []
+    models_with_cache = [m for m in models_for_cache if (m.get("cache_read_tokens") or 0) > 0]
+    if not models_with_cache:
+        print(f"FAIL: no model has cache_read_tokens > 0 in {data['window_hours']}h window "
+              f"(this is the bug Arcurus reported)")
+        return 1
+    total_cr = sum(m.get("cache_read_tokens") or 0 for m in models_for_cache)
+    print(f"OK cache-read non-zero: {len(models_with_cache)}/{len(models_for_cache)} models have cache_read > 0, "
+          f"total={total_cr:,} tokens")
+
     # 6b. Price rows (added 2026-06-12 per Arcurus)
     assert a["price_rows"], "no price rows produced"
     for pr in a["price_rows"]:

@@ -78,10 +78,16 @@ def _read_events(window_hours: float) -> List[Dict[str, Any]]:
 
     Returns a list of dicts (the parsed JSON of each line).  Skips
     malformed lines silently.  If the file doesn't exist, returns [].
+
+    If `window_hours <= 0`, reads ALL events (no time filter).
+    Used by the 'all' button in the Cost by Model sub-tab.
     """
     if not os.path.isfile(EVENT_LOG):
         return []
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).isoformat()
+    if window_hours <= 0:
+        cutoff = ""  # no filter
+    else:
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).isoformat()
     out: List[Dict[str, Any]] = []
     with open(EVENT_LOG) as f:
         for line in f:
@@ -103,10 +109,15 @@ def _read_openclaw_usage(window_hours: float) -> List[Dict[str, Any]]:
 
     Schema differs from llm_usage_events.jsonl (per-session vs
     per-message) so we translate the fields we need.
+
+    If `window_hours <= 0`, reads ALL rows (no time filter).
     """
     if not os.path.isfile(OPENCLAW_USAGE):
         return []
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).isoformat()
+    if window_hours <= 0:
+        cutoff = ""
+    else:
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).isoformat()
     out: List[Dict[str, Any]] = []
     with open(OPENCLAW_USAGE) as f:
         for line in f:
