@@ -209,6 +209,7 @@ def main() -> int:
     print(f"OK rendered card contains the live {rem}% value (not the snapshot's 0)")
 
     # 7. Source check: the helper should be called from both render paths
+    # with the right withActions argument.
     if "if (name === 'minimax')" not in src:
         print("FAIL: neither render path uses the new helper for the minimax entry")
         return 1
@@ -216,7 +217,28 @@ def main() -> int:
     if n_minimax_branches < 2:
         print(f"FAIL: only {n_minimax_branches} render path(s) use the helper, expected 2 (LLM Usage + Provider Usage)")
         return 1
-    print(f"OK both render paths use the helper ({n_minimax_branches} minimax branches)")
+    # Provider Usage sub-tab should pass true (shows pause/resume + retry),
+    # LLM Usage tab should pass false (cleaner card, no extra controls).
+    if "_renderMinimaxProviderCard(p, polling[name] || {}, true)" not in src:
+        print("FAIL: Provider Usage sub-tab doesn't pass withActions=true to the helper")
+        print("      (without true, the pause/resume buttons + retry timer won't show)")
+        return 1
+    if "_renderMinimaxProviderCard(p, polling[name] || {}, false)" not in src:
+        print("FAIL: LLM Usage tab doesn't pass withActions=false to the helper")
+        return 1
+    # And the old replace-based approach must be GONE (it was fragile
+    # and would silently fail if the stateBadge HTML changed).
+    if "inner.replace(" in src and "pause 30m" in src.split("inner.replace(")[1].split("loadProviderUsage")[0] if "inner.replace(" in src else False:
+        # the above is awkward; just check the simpler way
+        pass
+    if "inner.replace(" in src:
+        # Be strict: any "inner.replace(" is the fragile old approach
+        print("FAIL: still using fragile 'inner.replace(' approach for the minimax card.")
+        print("      Per Arcurus 2026-06-12 11:00 CEST #cost-tracker: user still saw")
+        print("      the old card even after the first fix, so we replaced the")
+        print("      regex-based injection with a direct build (withActions param).")
+        return 1
+    print(f"OK both render paths use the helper with correct withActions ({n_minimax_branches} minimax branches)")
 
     # 8. AGENTS.md relative-path discipline
     abs_fetch = re.findall(r"fetch\(['\"]/", src)
