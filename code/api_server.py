@@ -606,7 +606,7 @@ class RequestHandler(BaseHTTPRequestHandler):
 
     def _task_followup_audit_path(self):
         """Absolute path to the task follow-up audit log JSONL."""
-        return os.path.join(ROOT_DIR, '..', 'selena-project-2', 'data', 'task_followup_log.jsonl')
+        return os.path.join(SELENA_ROOT, '..', 'selena-project-2', 'data', 'task_followup_log.jsonl')
 
     def _write_task_followup_audit(self, todo_id, updates, source, todo):
         """Append a row to the task follow-up audit log for a web-UI-driven
