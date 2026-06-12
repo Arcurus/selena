@@ -1122,6 +1122,15 @@
         let currentAgentFilter = '';
         let currentProjectFilter = '';
         let todoFilterOptions = { agent_owners: [], projects: [] }; // loaded once on init
+        // parent_id subtask expansion (added 2026-06-12 per Arcurus
+        // #project-lunaris). Tracks which parent todo IDs are currently
+        // expanded in the list. When a parent is expanded, its direct
+        // children render inline below it (no grandchildren).
+        let expandedParents = new Set();
+        // lastRenderedTodos + lastRenderedSummary: cached so toggleParentExpand
+        // can re-render without re-fetching from the API.
+        let lastRenderedTodos = [];
+        let lastRenderedSummary = null;
         const settings = {
             port: localStorage.getItem('selena_port') || '8765',
             domain: localStorage.getItem('selena_domain') || window.location.hostname
@@ -3072,6 +3081,33 @@
                 document.getElementById('todoList').innerHTML = '<p style="color: var(--danger);">Failed to load tasks: Network error. Is the API server running?</p>';
             }
         }
+
+        // parent_id subtask expand/collapse (added 2026-06-12 per
+        // Arcurus #project-lunaris). Toggles the parent in the
+        // expandedParents Set, then re-renders the list. No
+        // grandchildren — only direct children of the toggled parent
+        // become visible.
+        function toggleParentExpand(parentId) {
+            if (expandedParents.has(parentId)) {
+                expandedParents.delete(parentId);
+            } else {
+                expandedParents.add(parentId);
+            }
+            // Re-render with the last filtered list + summary.
+            // Falls back to allTodosCache if nothing was rendered yet
+            // (e.g. user clicked the badge before loadTodos completed).
+            const todos = (lastRenderedTodos && lastRenderedTodos.length > 0)
+                ? lastRenderedTodos
+                : allTodosCache;
+            renderTodos(todos, lastRenderedSummary);
+        }
+
+        // Recursively clear all expanded parents (used when the
+        // user changes filter, to avoid confusion from stale
+        // expansion state across filter changes).
+        function clearExpandedParents() {
+            expandedParents.clear();
+        }
         
         function setTodoFilter(filter) {
             currentTodoFilter = filter;
@@ -3082,6 +3118,9 @@
             document.getElementById('btn-new-task').classList.remove('active');
             document.getElementById('todoSummary').style.display = 'grid';
             document.getElementById('todoList').style.display = 'block';
+            // v0.1.4 (2026-06-12): clear expanded parents across filter
+            // changes to avoid stale expansion state confusing the user.
+            clearExpandedParents();
             // v0.1.4: refresh the task follow-up counters panel.
             loadTaskFollowupCounters();
             // Switching status resets the user-selected sort override so
@@ -3095,6 +3134,9 @@
 
         function handleTodoSearch(query) {
             todoSearchQuery = query.trim();
+            // v0.1.4 (2026-06-12): clear expanded parents on search so the
+            // user doesn't see stale expansions from a previous query.
+            clearExpandedParents();
             loadTodos();
         }
 
@@ -4113,6 +4155,11 @@
         }
 
         function renderTodos(todos, summary) {
+            // Cache the args so toggleParentExpand() can re-render
+            // without re-fetching from the API. (added 2026-06-12 per
+            // Arcurus #project-lunaris)
+            lastRenderedTodos = todos || [];
+            lastRenderedSummary = summary || null;
             // Get deleted todos from cache
             const deletedTodos = allTodosCache.filter(t => t.deleted_at);
             
@@ -4286,6 +4333,39 @@
                     // see at a glance which todos are gated on Arcurus
                     // and what the worker is waiting for.
                     const irreversibleBadge = todo.irreversible ? `<span class="status-badge" style="background: rgba(239, 68, 68, 0.18); color: var(--danger, #ef4444); border: 1px solid var(--danger, #ef4444); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;" title="Worker must NOT execute this todo without Arcurus confirmation. Either set by add_todo (manual) or by the danger prefilter, or self-assessed by a worker mid-step.">⚠ IRREVERSIBLE</span>` : '';
+                    // parent/subtask badges (added 2026-06-12 per Arcurus
+                    // #project-lunaris). For a parent todo: show a "N
+                    // subtasks" pill (clickable to expand inline). For a
+                    // child todo: show a "↑ parent" link to the parent's
+                    // short_desc. No grandchildren — only direct children
+                    // are shown, even if a child has its own children.
+                    let parentChildBadge = '';
+                    if (todo.parent_id) {
+                        // Child: link back to parent
+                        const parent = allTodosCache.find(t => t.id === todo.parent_id);
+                        const parentLabel = parent ? parent.short_desc : `(missing parent ${todo.parent_id})`;
+                        const parentTrunc = parentLabel.length > 60 ? parentLabel.slice(0, 60) + '…' : parentLabel;
+                        parentChildBadge = `<span class="status-badge" style="background: var(--bg-dark); color: var(--accent-purple); border: 1px solid var(--accent-purple); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;" title="This is a subtask of ${escapeHtml(parentLabel)} (id ${todo.parent_id})">↑ parent: ${escapeHtml(parentTrunc)}</span>`;
+                    } else {
+                        // Parent (or top-level): count direct children from
+                        // allTodosCache (which includes deleted). Skip
+                        // children-of-children (no grandchildren).
+                        const directChildren = allTodosCache.filter(t => t.parent_id === todo.id);
+                        if (directChildren.length > 0) {
+                            const openChildren = directChildren.filter(t => !t.deleted_at && (t.status === 'open' || t.status === 'in_progress')).length;
+                            const doneChildren = directChildren.filter(t => !t.deleted_at && (t.status === 'done' || t.status === 'completed' || t.status === 'closed')).length;
+                            const expanded = expandedParents.has(todo.id);
+                            const arrow = expanded ? '▼' : '▶';
+                            const titleLines = [
+                                `${directChildren.length} direct subtask(s) (no grandchildren shown):`,
+                                ...directChildren.slice(0, 10).map(c => `  • ${c.id} P${c.priority || '?'} [${c.status}] ${c.short_desc.slice(0, 50)}`),
+                            ];
+                            if (directChildren.length > 10) {
+                                titleLines.push(`  … and ${directChildren.length - 10} more`);
+                            }
+                            parentChildBadge = `<span class="status-badge" style="background: var(--bg-dark); color: var(--accent-purple); border: 1px solid var(--accent-purple); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; user-select: none;" onclick="event.stopPropagation(); toggleParentExpand('${todo.id}');" title="${escapeHtml(titleLines.join('\\n'))}">${arrow} 👶 ${directChildren.length} subtask${directChildren.length === 1 ? '' : 's'} <span style="opacity: 0.7; font-size: 0.7rem;">(${openChildren} open, ${doneChildren} done)</span></span>`;
+                        }
+                    }
                     return `
                     <div class="todo-card" style="border-color: ${getPriorityColor(todo.priority)};">
                         <div style="display: flex; justify-content: space-between; align-items: start;">
@@ -4295,6 +4375,7 @@
                                     <span class="status-badge" style="background: ${getStatusColor(todo.status)}; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">${todo.status}</span>
                                     ${projectTag}
                                     ${ownerTag}
+                                    ${parentChildBadge}
                                     ${todo.deleted_at ? `<span style="color: var(--accent-red); font-size: 0.75rem;">🗑️ ${getTimeUntilPurge(todo.deleted_at)}</span>` : ''}
                                     ${irreversibleBadge}
                                     ${todo.block_reason ? `<span style="color: var(--danger); font-size: 0.8rem;">🚫 ${todo.block_reason}</span>` : ''}
@@ -4320,6 +4401,36 @@
                             </div>
                         </div>
                     </div>
+                    ${(() => {
+                        // v0.1.4 (2026-06-12): parent_id subtask expansion.
+                        // Render the parent's direct children inline if the
+                        // parent is expanded. NO grandchildren — even if a
+                        // child has its own children, those are hidden.
+                        // Children that are also in the filtered list are
+                        // shown as a small "↳ also in list" link (not
+                        // rendered as full cards) to avoid double-rendering.
+                        if (todo.parent_id) return '';
+                        if (!expandedParents.has(todo.id)) return '';
+                        const directChildren = allTodosCache.filter(t => t.parent_id === todo.id);
+                        if (directChildren.length === 0) return '';
+                        const childRows = directChildren.map(c => {
+                            const isFiltered = todos.some(t => t.id === c.id);
+                            const statusColor = getStatusColor(c.status);
+                            const priorityColor = getPriorityColor(c.priority);
+                            return `<div style="margin: 6px 0 6px 32px; padding: 8px 12px; background: rgba(170, 130, 255, 0.05); border-left: 3px solid var(--accent-purple); border-radius: 4px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                <span style="color: var(--accent-purple);">↳</span>
+                                <span class="priority-badge" style="background: ${priorityColor}; padding: 1px 6px; border-radius: 3px; font-size: 0.7rem;">P${c.priority || '?'}</span>
+                                <span style="background: ${statusColor}; padding: 1px 6px; border-radius: 3px; font-size: 0.7rem; color: var(--bg-dark);">${c.status}</span>
+                                <span style="flex: 1; min-width: 200px; ${c.deleted_at ? 'text-decoration: line-through; opacity: 0.6;' : ''}">${escapeHtml(c.short_desc)}</span>
+                                <span style="color: var(--text-secondary); font-size: 0.7rem;">${c.id}</span>
+                                ${isFiltered ? '<span style="color: var(--accent-cyan); font-size: 0.7rem;" title="This subtask also matches the current filter and is shown as its own card below">↳ also in list</span>' : ''}
+                            </div>`;
+                        }).join('');
+                        return `<div style="margin: 8px 0 0 24px; padding: 8px 12px; background: rgba(170, 130, 255, 0.03); border: 1px dashed var(--accent-purple); border-radius: 4px;">
+                            <div style="font-size: 0.75rem; color: var(--accent-purple); margin-bottom: 4px; font-weight: bold;">${directChildren.length} direct subtask${directChildren.length === 1 ? '' : 's'} (no grandchildren shown)</div>
+                            ${childRows}
+                        </div>`;
+                    })()}
                 `;}).join('');
             } else {
                 const noTasksMsg = todoSearchQuery
