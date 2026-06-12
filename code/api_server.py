@@ -642,13 +642,34 @@ class RequestHandler(BaseHTTPRequestHandler):
                     '.gif': 'image/gif',
                 }
                 content_type = content_types.get(ext, 'application/octet-stream')
+                # HTML/JS/CSS change frequently and a stale cached copy
+                # hides bug fixes (e.g. 2026-06-12: user saw the old
+                # Per-Provider Quota card for 1+ hour after we shipped
+                # the fix because index.html was cached for 3600s).
+                # We use a short max-age + must-revalidate for HTML
+                # (forces the browser to revalidate before reusing the
+                # cached copy), and a long max-age for everything else
+                # (CSS/JS/images don't change often and benefit from
+                # the cache).  This is the standard pattern: short TTL
+                # for the entry point, long TTL for sub-resources.
+                if ext in ('.html', '.htm'):
+                    cache_control = 'no-cache, must-revalidate'
+                else:
+                    cache_control = 'public, max-age=3600'
                 try:
                     with open(full_path, 'rb') as f:
                         content = f.read()
                     self.send_response(200)
                     self.send_header('Content-Type', content_type)
                     self.send_header('Content-Length', len(content))
-                    self.send_header('Cache-Control', 'public, max-age=3600')
+                    self.send_header('Cache-Control', cache_control)
+                    # ETag based on file mtime so the browser can do a
+                    # 304 Not Modified round-trip if the file hasn't
+                    # changed. Cheap and correct.
+                    import os as _os
+                    mtime = int(_os.path.getmtime(full_path))
+                    self.send_header('ETag', f'"{mtime:x}"')
+                    self.send_header('Last-Modified', self.date_time_string(mtime))
                     self.end_headers()
                     self.wfile.write(content)
                     return
@@ -1085,6 +1106,40 @@ class RequestHandler(BaseHTTPRequestHandler):
                             if jid:
                                 id_to_name[jid] = nm
                 self.send_json({'jobs': id_to_name})
+                return
+            if sub == 'channels':
+                # Resolve Discord channel IDs to friendly names.
+                # Per Arcurus 2026-06-12 #project-selena: "under
+                # Recent sessions, can you display also the related
+                # discord channel or cron name". The cost-tracker
+                # v4 schema (2026-06-12) now records ``channelId``
+                # in each session row; this endpoint feeds the
+                # web UI the ID → name map it needs to render the
+                # channel column. Reads from the explicit allowlist
+                # ``data/discord_known_channels.json`` (the same
+                # file ``code/discord_client.py::collect_known_channels``
+                # reads — single source of truth, no extra Discord
+                # API call). Falls back to {} on any read error so
+                # the UI keeps working with channelId-only labels.
+                id_to_name = {}
+                try:
+                    allowlist = os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)),
+                        '..', 'data', 'discord_known_channels.json',
+                    )
+                    allowlist = os.path.normpath(allowlist)
+                    with open(allowlist, encoding='utf-8') as _f:
+                        cfg = json.loads(_f.read())
+                    for c in (cfg.get('channels') or []):
+                        if not isinstance(c, dict):
+                            continue
+                        cid = c.get('id')
+                        cname = c.get('name')
+                        if cid and cname:
+                            id_to_name[str(cid)] = str(cname)
+                except (OSError, json.JSONDecodeError, ValueError) as _e:
+                    log_error(f'/api/openclaw-usage/channels read failed: {_e}', 'channels')
+                self.send_json({'channels': id_to_name})
                 return
             if sub == 'sync':
                 # Force a sync (reads sessions.json + per-session .jsonl)
@@ -2154,6 +2209,47 @@ class RequestHandler(BaseHTTPRequestHandler):
                 })
             except Exception as exc:
                 log_error(f'/api/dedup/similar/{todo_id} failed: {exc}', 'dedup-similar')
+                self.send_json({'success': False, 'error': str(exc)}, 500)
+            return
+
+        # =====================================================================
+        # /api/dedup/similar-counts?min_score=0.5 — bulk count of similar
+        # tasks for every active todo.  Powers the "🔍 similar (N)" badge
+        # on each todo card so the user can see at a glance which todos
+        # have semantic relatives.  One bulk request per page load, cached
+        # client-side; the server uses numpy vectorised cosine to compute
+        # the full similarity matrix in a single matrix multiply.
+        # =====================================================================
+        if path == '/api/dedup/similar-counts':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            local_query = parse_qs(parsed.query)
+            try:
+                min_score = float(local_query.get('min_score', ['0.5'])[0])
+            except (TypeError, ValueError):
+                min_score = 0.5
+            try:
+                top_k_per_todo = int(local_query.get('top_k', ['0'])[0])
+            except (TypeError, ValueError):
+                top_k_per_todo = 0
+            try:
+                import todo_embeddings
+                result = todo_embeddings.compute_similar_counts(
+                    min_score=min_score,
+                    top_k_per_todo=top_k_per_todo,
+                )
+                self.send_json({
+                    'success': True,
+                    'counts': result.get('counts', {}),
+                    'min_score': min_score,
+                    'top_k_per_todo': top_k_per_todo,
+                    'n_todos': result.get('n_todos', 0),
+                    'n_pairs': result.get('n_pairs', 0),
+                    'compute_ms': result.get('compute_ms', 0),
+                })
+            except Exception as exc:
+                log_error(f'/api/dedup/similar-counts failed: {exc}', 'dedup-counts')
                 self.send_json({'success': False, 'error': str(exc)}, 500)
             return
 
@@ -4137,6 +4233,15 @@ class RequestHandler(BaseHTTPRequestHandler):
                     content_type = 'image/webp'
                 elif file_path.endswith('.gif'):
                     content_type = 'image/gif'
+                elif file_path.endswith('.mp4'):
+                    # Login-form moon video (2026-06-11, per Arcurus
+                    # #selena-project-important "please use in the login
+                    # form also the same video as you used in
+                    # selenaastra.com"). Without the right MIME, the
+                    # browser refuses to play it.
+                    content_type = 'video/mp4'
+                elif file_path.endswith('.webm'):
+                    content_type = 'video/webm'
                 else:
                     content_type = 'text/plain'
                 
@@ -4444,7 +4549,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
 
         # ----- OpenAI-compatible chat completions proxy -----
-        # Added 2026-06-04 per lunar todo 8b635506: selena-project-lunar needs
+        # Added 2026-06-04 per lunar todo 8b635506: selena-project-lunarisis needs
         # an internal LLM endpoint so the orchestrator / reflection pipeline
         # can call MiniMax-M3 (or any openclaw/* agent) without each subsystem
         # having to know the OpenClaw gateway password. This proxy:
@@ -4567,7 +4672,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 record_result = tracker.record(
                     'minimax-portal',
                     body.get('model', 'openclaw'),
-                    project='project-lunar',
+                    project='project-lunaris',
                     tokens_in=tokens_in,
                     tokens_out=tokens_out,
                     reasoning_tokens=reasoning_tokens,

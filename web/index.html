@@ -6593,8 +6593,16 @@
         //                                  — most recent session rows
         //   4. /api/openclaw-usage/cron-jobs
         //                                  — UUID → friendly name map
+        //   5. /api/openclaw-usage/channels
+        //                                  — Discord channel ID → name map
+        //                                    (added 2026-06-12 per Arcurus
+        //                                    #project-selena: "under Recent
+        //                                    sessions, can you display also
+        //                                    the related discord channel or
+        //                                    cron name")
         let _ocStats = null;
         let _ocCronJobs = {};
+        let _ocDiscordChannels = {};
         let _ocTimeseriesHours = 24;
         let _ocTimeseriesDim = 'model';
         let _ocTimer = null;
@@ -6646,6 +6654,18 @@
                 if (cronR.ok) {
                     const cronD = await cronR.json();
                     _ocCronJobs = cronD.jobs || {};
+                }
+                // 1b. Discord channels (friendly names). Per Arcurus
+                // 2026-06-12 #project-selena: "under Recent sessions,
+                // can you display also the related discord channel
+                // or cron name". Fetched in parallel with cron-jobs
+                // since both are static lookups. Failure is
+                // non-fatal — the UI falls back to the channelId
+                // prefix when the map is empty.
+                const chR = await fetch('api/openclaw-usage/channels', { headers: { 'Authorization': `Bearer ${token}` } });
+                if (chR.ok) {
+                    const chD = await chR.json();
+                    _ocDiscordChannels = chD.channels || {};
                 }
                 // 2. Stats
                 const r = await fetch('api/openclaw-usage/stats', { headers: { 'Authorization': `Bearer ${token}` } });
@@ -6904,12 +6924,44 @@
                 const rows = d.sessions.map(s => {
                     const kindColor = _ocColor(s.kind, '#888');
                     const modelColor = _ocColor(s.model, '#888');
-                    const cronName = s.cronJobId && _ocCronJobs[s.cronJobId] ? _ocCronJobs[s.cronJobId] : (s.cronJobId ? s.cronJobId.slice(0,8)+'…' : '');
+                    // Channel / Cron cell. Per Arcurus 2026-06-12
+                    // #project-selena: "display also the related
+                    // discord channel or cron name". Logic:
+                    //   * kind=cron    → cron job friendly name
+                    //   * kind=discord → Discord channel name
+                    //     (looked up via _ocDiscordChannels by
+                    //      channelId from the rec; falls back to
+                    //      the channelId prefix when the map is
+                    //      empty or the id is unknown)
+                    //   * other        → the kind (or "—")
+                    // The rec's ``channelId`` field is the actual
+                    // Discord channel id parsed from the session
+                    // key (added 2026-06-12 in cost-tracker v4).
+                    // Old rows that pre-date the field have
+                    // channelId=null and fall through to the kind.
+                    let sourceLabel = '—';
+                    if (s.kind === 'cron') {
+                        sourceLabel = s.cronJobId && _ocCronJobs[s.cronJobId]
+                            ? _ocCronJobs[s.cronJobId]
+                            : (s.cronJobId ? s.cronJobId.slice(0, 8) + '…' : '—');
+                    } else if (s.kind === 'discord') {
+                        if (s.channelId && _ocDiscordChannels[s.channelId]) {
+                            sourceLabel = _ocDiscordChannels[s.channelId];
+                        } else if (s.channelId) {
+                            sourceLabel = '#' + s.channelId.slice(0, 8) + '…';
+                        } else {
+                            // Pre-v4 row: no channelId in the rec.
+                            // Fall back to the kind label.
+                            sourceLabel = 'discord';
+                        }
+                    } else if (s.kind) {
+                        sourceLabel = s.kind;
+                    }
                     const updated = s.updatedAt ? new Date(s.updatedAt).toLocaleString() : '?';
                     return `<tr style="border-bottom: 1px solid var(--border-color, #333);">
                         <td style="padding:6px 8px;font-family:monospace;font-size:0.8rem;">${(s.sessionId||'').slice(0,8)}</td>
                         <td style="padding:6px 8px;"><span style="color:${kindColor};">●</span> ${s.kind || '?'}</td>
-                        <td style="padding:6px 8px;">${cronName}</td>
+                        <td style="padding:6px 8px;">${sourceLabel}</td>
                         <td style="padding:6px 8px;"><span style="color:${modelColor};">●</span> ${s.model || '?'}</td>
                         <td style="padding:6px 8px;text-align:right;">${_fmt(s.tokensIn)} in / ${_fmt(s.tokensOut)} out</td>
                         <td style="padding:6px 8px;text-align:right;">${_fmt(s.cacheRead)}</td>
@@ -6922,7 +6974,7 @@
                         <tr style="text-align:left;border-bottom:1px solid var(--border-color,#444);color:var(--text-secondary);">
                             <th style="padding:6px 8px;">Session</th>
                             <th style="padding:6px 8px;">Kind</th>
-                            <th style="padding:6px 8px;">Cron / Source</th>
+                            <th style="padding:6px 8px;">Channel / Cron</th>
                             <th style="padding:6px 8px;">Model</th>
                             <th style="padding:6px 8px;text-align:right;">Tokens (in/out)</th>
                             <th style="padding:6px 8px;text-align:right;">Cache read</th>
@@ -6973,10 +7025,10 @@
         // from /api/llm-usage, but that field was stale/broken
         // (used_percent=None, remaining_percent=0) so the user
         // always saw "0% remaining" on the MiniMax card even when
-        // the top-right widget was showing 76%. Per Arcurus
-        // 2026-06-12 10:40 CEST #cost-tracker: "use the same data
-        // you use for the minimax budget display on top right,
-        // which works now perfectly".
+        // the top-right widget was showing the real number. Per
+        // Arcurus 2026-06-12 10:40 CEST #cost-tracker: "use the
+        // same data you use for the minimax budget display on top
+        // right, which works now perfectly".
         //
         // Shape we expect on window._lastMinimaxQuota:
         //   { windows: [{ model, name, remaining_percent, used_percent,
@@ -6984,18 +7036,27 @@
         // and we display one card section per model with two windows
         // each (window_5h and weekly), matching the top-right
         // widget's source.
-        function _renderMinimaxProviderCard(p, polling) {
+        //
+        // `withActions` (added 2026-06-12): when true, the card
+        // includes the ⏸ pause / ▶ resume buttons that the Provider
+        // Usage sub-tab surfaces.  The LLM Usage tab passes false.
+        // We build the buttons directly into the markup (no
+        // fragile string-replace) so the layout is always correct
+        // even when the state badge HTML changes.
+        function _renderMinimaxProviderCard(p, polling, withActions) {
             const poll = polling || {};
             const stateBadge = _pollStateBadge(poll.state);
             const local5h = p.local_5h_calls || 0;
             const live = (typeof window !== 'undefined') ? window._lastMinimaxQuota : null;
             const windows = (live && live.windows) || [];
             const fetchedAt = live && live.fetched_at;
+            const providerKey = 'minimax';
 
             let quotaHtml = '';
             if (!windows.length) {
-                // No live data yet (first load failed) — fall back to
-                // the snapshot's stale fields and warn the user.
+                // No live data yet (first load failed or is in flight).
+                // Show the snapshot's stale fields with a clear warning
+                // so the user knows it's not the real number.
                 quotaHtml = `<div style="color:var(--warning);font-size:0.8rem;margin-top:6px;">⚠️ live quota unavailable (top-right widget hasn't loaded yet); showing stale snapshot</div>`;
                 if (p.quota && p.quota.ok && p.models) {
                     quotaHtml += Object.entries(p.models).map(([mname, m]) => {
@@ -7071,18 +7132,33 @@
                     </div>`;
                 }).join('');
             }
-            // Live-fetched timestamp + cache indicator
+            // Live-fetched timestamp + cache indicator. Always shown
+            // so the user can see at a glance that the data is live
+            // (and not the stale snapshot fallback).
             const fetchedLine = fetchedAt
                 ? `<div style="color:var(--text-secondary);font-size:0.72rem;margin-top:6px;">
                        live API · fetched ${new Date(fetchedAt).toLocaleTimeString()}${live && live.cached ? ' (cached)' : ''}
                    </div>`
                 : '';
+            // Pause/resume buttons (only for the Provider Usage sub-tab).
+            const actionButtons = withActions
+                ? `<button class="save-btn" style="width:auto;padding:4px 10px;font-size:0.8rem;" onclick="providerUsageAction('pause','${providerKey}')">⏸ pause 30m</button>
+                   <button class="save-btn" style="width:auto;padding:4px 10px;font-size:0.8rem;" onclick="providerUsageAction('resume','${providerKey}')">▶ resume</button>`
+                : '';
+            // next-attempt countdown (only the Provider Usage sub-tab
+            // shows this — it's part of the snapshot's polling metadata
+            // and the live endpoint doesn't expose it, so we render
+            // it for the action tab only as a fallback diagnostic).
+            const nextInfo = (withActions && poll.next_attempt_in_s > 0)
+                ? `<div style="color:var(--text-secondary);font-size:0.8rem;">retry in ${_formatDuration(poll.next_attempt_in_s)}</div>`
+                : '';
             return `<div class="cost-card" style="margin-bottom:10px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
-                    <div><strong>${p.name}</strong> <span style="color:var(--text-secondary);font-size:0.8rem;">local 5h: ${local5h}</span></div>
-                    <div style="display:flex;align-items:center;gap:8px;">${stateBadge}</div>
+                    <div><strong>${p.name}</strong> <span style="color:var(--text-secondary);font-size:0.8rem;">${p.kind ? p.kind + ' · ' : ''}local 5h: ${local5h}</span></div>
+                    <div style="display:flex;align-items:center;gap:8px;">${stateBadge}${actionButtons}</div>
                 </div>
                 ${quotaHtml}
+                ${nextInfo}
                 ${fetchedLine}
             </div>`;
         }
@@ -7173,38 +7249,13 @@
             // Per-provider quota. The MiniMax card uses the live data
             // path (window._lastMinimaxQuota) so it matches the
             // top-right widget; the other providers still read from
-            // the snapshot.
+            // the snapshot. Pass `withActions=true` to surface the
+            // pause/resume buttons + retry countdown that only this
+            // tab (Provider Usage sub-tab of the Cost tab) needs.
             const provEl = document.getElementById('providerUsageProviders');
             const providerCards = Object.entries(providers).map(([name, p]) => {
                 if (name === 'minimax') {
-                    // Use the shared helper, then wrap it in the same
-                    // .cost-card chrome as the other providers (with
-                    // the pause/resume buttons that only this tab
-                    // surfaces).
-                    const inner = _renderMinimaxProviderCard(p, polling[name] || {});
-                    // Inject the pause/resume buttons into the inner
-                    // card (the helper is also used by the LLM Usage
-                    // tab which doesn't have those buttons).
-                    return inner.replace(
-                        /<div style="display:flex;align-items:center;gap:8px;">([^<]*)<\/div>\s*<div style="display:flex/,
-                        (m) => {
-                            // Find the right side action div and inject
-                            // the pause/resume buttons. We do this
-                            // with a second map below for safety; this
-                            // replace is intentionally a no-op fallback.
-                            return m;
-                        }
-                    ).replace(
-                        // Inject pause/resume into the right-side action row.
-                        /(<div style="display:flex;align-items:center;gap:8px;">)([\s\S]*?)(<\/div>)(\s*<\/div>)/,
-                        (m, open, middle, close, end) => {
-                            return open
-                                + middle
-                                + `<button class="save-btn" style="width:auto;padding:4px 10px;font-size:0.8rem;" onclick="providerUsageAction('pause','${name}')">⏸ pause 30m</button>`
-                                + `<button class="save-btn" style="width:auto;padding:4px 10px;font-size:0.8rem;" onclick="providerUsageAction('resume','${name}')">▶ resume</button>`
-                                + close + end;
-                        }
-                    );
+                    return _renderMinimaxProviderCard(p, polling[name] || {}, true);
                 }
                 const poll = polling[name] || {};
                 const stateBadge = _pollStateBadge(poll.state);
@@ -7519,10 +7570,12 @@
             // budget instead of the stale snapshot's 0% remaining.
             // All other providers (xai / openrouter / openai) still
             // come from providers.{name}.models in /api/llm-usage.
+            // LLM Usage tab doesn't need the pause/resume buttons,
+            // so we pass withActions=false.
             const provEl = document.getElementById('llmUsageProviders');
             const providerCards = Object.entries(providers).map(([name, p]) => {
                 if (name === 'minimax') {
-                    return _renderMinimaxProviderCard(p, polling[name] || {});
+                    return _renderMinimaxProviderCard(p, polling[name] || {}, false);
                 }
                 const poll = polling[name] || {};
                 const stateBadge = _pollStateBadge(poll.state);

@@ -26,10 +26,21 @@ Storage
 -------
   * `data/openclaw_usage.jsonl`        — one row per session, with
     proper input/output split. Schema:
-        {ts, sessionId, kind, channel, cronJobId, agentId,
+        {ts, sessionId, kind, channel, channelId, cronJobId, agentId,
          model, provider, startedAt, updatedAt, runtimeMs,
          tokensIn, tokensOut, cacheRead, cacheWrite,
          estCostUsd, source}
+
+    `channel` is the kind-level channel (e.g. "discord", "webchat",
+    "telegram"); `channelId` is the actual chat-channel id parsed
+    from the session key (e.g. "1511700519582695456" for a
+    `#cost-tracker` session). `channelId` was added 2026-06-12 so
+    the web UI's recent-sessions table can show *which* Discord
+    channel each row came from (per Arcurus #project-selena
+    "under Recent sessions, can you display also the related
+    discord channel or cron name"). Old rows that pre-date this
+    field have `channelId: null` and the UI falls back to showing
+    the kind ("discord") or the channel-id prefix.
   * `data/openclaw_usage_state.json`   — dedupe state. Maps
     `sessionId -> {ts, kind, model, updatedAt, fileMtime}`. Trims
     to last N entries on each write. Re-running the same window
@@ -237,6 +248,84 @@ def _infer_from_key(key: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
     if kind == "cron" and len(parts) >= 4:
         cron_job_id = parts[3]
     return kind, cron_job_id
+
+
+# Session kinds whose session-key carries a chat-channel id.
+# Used by ``_extract_channel_id_from_key`` below to surface the
+# actual Discord / Telegram / Slack / Signal channel id for a
+# session, not just the kind.
+_CHANNEL_KEY_KINDS = frozenset({
+    "discord", "telegram", "slack", "signal", "lark", "imessage",
+})
+
+# Words that appear between the kind and the channel id in
+# extended session-key shapes. Discord uses ``channel`` (e.g.
+# ``agent:main:discord:channel:1511700519582695456``); other
+# transports may use ``chat`` / ``dm`` / ``group`` / ``thread``.
+# When we see one of these labels, the next colon-separated field
+# is the channel id.
+_CHANNEL_KEY_LABELS = frozenset({"channel", "chat", "dm", "group", "thread", "user", "conversation"})
+
+
+def _extract_channel_id_from_key(key: Optional[str]) -> Optional[str]:
+    """Pull the chat-channel id from a session key.
+
+    Session-key formats seen in the wild (2026-06 audit):
+
+      - ``agent:main:discord:channel:<numeric>``     ← the common case
+      - ``agent:main:discord:<numeric>``             ← short form
+      - ``agent:main:telegram:chat:<numeric>``       ← telegram
+      - ``agent:main:main``                          ← no channel
+      - ``agent:main:cron:<uuid>:run:<sid>``         ← cron, not chat
+
+    For ``kind`` in ``_CHANNEL_KEY_KINDS`` (discord, telegram,
+    slack, signal, …), the channel id is the LAST numeric field
+    in the key — that's what we expose in the recent-sessions web
+    table so the operator can see *which* channel each session
+    came from.
+
+    For ``kind`` = ``cron``, the 4th field is the cron job id
+    (a UUID, not a number) — already surfaced as ``cronJobId``;
+    we return None here so this helper doesn't confuse a cron
+    job id with a channel id.
+
+    For ``kind`` = ``main`` / ``direct`` / ``subagent`` etc., the
+    key has no chat channel — return None.
+
+    Examples::
+
+        >>> _extract_channel_id_from_key(
+        ...     "agent:main:discord:channel:1511700519582695456"
+        ... )
+        '1511700519582695456'
+        >>> _extract_channel_id_from_key(
+        ...     "agent:main:cron:ea0aa9e8-1234-..."
+        ... )
+        None
+        >>> _extract_channel_id_from_key("agent:main:main")
+        None
+
+    Returns ``None`` for malformed / unknown kinds. The channel id
+    is accepted only if it is digit-only (Discord / Telegram /
+    Slack channel ids are numeric). Anything else (a UUID, a human
+    label) is rejected so a misparsed cron job id is never shown
+    as a channel id.
+    """
+    if not key:
+        return None
+    parts = key.split(":")
+    if len(parts) < 3:
+        return None
+    kind = parts[2]
+    if kind not in _CHANNEL_KEY_KINDS:
+        return None
+    # Find the LAST numeric segment. We look from the end of the
+    # key backwards because some shapes put a label between the
+    # kind and the id ("channel", "chat", "dm", ...).
+    for seg in reversed(parts):
+        if seg and seg.isdigit():
+            return seg
+    return None
 
 
 def _infer_kind_from_path(path: str) -> str:
@@ -549,8 +638,15 @@ def _process_one(
         # was upgraded after the row was written, so re-emit to
         # upgrade it. Default to False so older state entries
         # (pre-v3) get re-recorded.
+        # v4 fields check (added 2026-06-12 per Arcurus #project-selena):
+        # channelId is now in the rec so the web UI's recent-sessions
+        # table can show the *actual* Discord channel. If the prior
+        # state entry is pre-v4 (no `has_v4_fields` flag), we re-record
+        # on the next sync to upgrade the rec. Once `has_v4_fields`
+        # is set, the normal updatedAt / mtime rules apply.
         prior_has_v3 = bool(prior.get("has_v3_fields", False))
-        if prior.get("updatedAt", -1) >= updated_at and prior_has_v3:
+        prior_has_v4 = bool(prior.get("has_v4_fields", False))
+        if prior.get("updatedAt", -1) >= updated_at and prior_has_v3 and prior_has_v4:
             return sid, "skipped"
 
     # If prior was a "no-tokens" placeholder, allow update
@@ -580,6 +676,13 @@ def _process_one(
         "sessionId": sid,
         "kind": kind,
         "channel": channel,
+        # channelId: the actual chat-channel id (e.g. Discord
+        # channel id) parsed from the session key. None for cron /
+        # main / direct / unknown kinds (those don't have a
+        # chat channel). Added 2026-06-12 per Arcurus
+        # #project-selena so the recent-sessions web table can
+        # show *which* channel each session came from.
+        "channelId": _extract_channel_id_from_key(sess.get("_key")) if sess else None,
         "cronJobId": cron_job_id,
         "agentId": agent_id,
         "model": model,
@@ -610,6 +713,7 @@ def _process_one(
         "updatedAt": updated_at,
         "fileMtime": file_mtime_ms,
         "has_v3_fields": True,
+        "has_v4_fields": True,  # channelId is in the rec (2026-06-12)
     }
     return sid, status
 
