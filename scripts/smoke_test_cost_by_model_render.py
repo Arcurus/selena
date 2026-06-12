@@ -180,6 +180,21 @@ def render_cost_by_model_py(data: dict, canvas_w: int = 500, canvas_h: int = 240
         "drift_threshold": drift_threshold,
     }
 
+    # Per-model token prices (added 2026-06-12 per Arcurus #cost-tracker 10:39 CEST:
+    # "display under price audit also the token prices for each model that we use.
+    # in, out, cached. like 30 cents in and so on.")
+    price_rows = []
+    for m in sorted_m:
+        price_rows.append({
+            "model": m["model"],
+            "known": m.get("known", True),
+            "in":  m.get("price_in_usd_per_1m"),
+            "out": m.get("price_out_usd_per_1m"),
+            "cache_read":  m.get("price_cache_read_usd_per_1m"),
+            "cache_write": m.get("price_cache_write_usd_per_1m"),
+        })
+    audit["price_rows"] = price_rows
+
     return {
         "errors": errors,
         "kpis": kpis,
@@ -242,6 +257,21 @@ def main() -> int:
     print(f"OK audit: window={a['window_hours']}h, events={a['events_count']}, "
           f"mmx_quota={a['mmx_quota_pulled']}, "
           f"missing={len(a['missing'])}, drift_flags={len(a['drift_flags'])}")
+
+    # 6b. Price rows (added 2026-06-12 per Arcurus)
+    assert a["price_rows"], "no price rows produced"
+    for pr in a["price_rows"]:
+        if pr["known"]:
+            for k in ("in", "out", "cache_read", "cache_write"):
+                v = pr[k]
+                if v is not None and v < 0:
+                    print(f"FAIL: model {pr['model']} has negative {k} price: {v}")
+                    return 1
+        else:
+            # Unknown models: all four price fields should be None
+            if any(pr[k] is not None for k in ("in", "out", "cache_read", "cache_write")):
+                print(f"WARN: model {pr['model']} flagged unknown but has some prices: {pr}")
+    print(f"OK price table: {len(a['price_rows'])} models, all known-model prices valid")
 
     # 7. Sanity-check that the JS file no longer references Chart (the bug we just fixed)
     index_html = (Path(__file__).resolve().parent.parent / "web" / "index.html").read_text()

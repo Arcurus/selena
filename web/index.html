@@ -6382,6 +6382,37 @@
             if (!missing.length && !drift.length) {
                 html += `<div style="color:#4ec9b0; margin-top:6px;">✓ No drift, no missing prices</div>`;
             }
+            // Per-model token prices ($/1M tokens) for in / out / cache_read / cache_write.
+            // Source: data/by_model[*].price_*_usd_per_1m (server-side from llm_pricing.py).
+            // Unknown models (no price row) get "—". Per Arcurus 2026-06-12 10:39 CEST
+            // #cost-tracker: "display under price audit also the token prices for each
+            // model that we use. in, out, cached. like 30 cents in and so on."
+            const _fmtPrice = (v) => (v == null) ? '—' : '$' + v.toFixed(2);
+            if (sorted.length) {
+                html += `<div style="margin-top:12px;"><strong>Token prices</strong> `
+                     + `<span style="color:var(--text-secondary); font-size:0.8rem;">(USD per 1M tokens, from <code>code/llm_pricing.py</code>)</span></div>`;
+                html += `<table style="width:100%; font-size:0.85rem; border-collapse: collapse; margin-top:6px;">`
+                     + `<thead>`
+                     + `<tr style="text-align:left; border-bottom:1px solid var(--border);">`
+                     + `<th style="padding:6px;">Model</th>`
+                     + `<th style="padding:6px; text-align:right;">In</th>`
+                     + `<th style="padding:6px; text-align:right;">Out</th>`
+                     + `<th style="padding:6px; text-align:right;">Cache read</th>`
+                     + `<th style="padding:6px; text-align:right;">Cache write</th>`
+                     + `</tr></thead><tbody>`;
+                sorted.forEach(m => {
+                    const known = m.known !== false;
+                    const color = known ? '' : 'color:#f48771;';
+                    html += `<tr style="border-bottom:1px solid var(--border);">`
+                          + `<td style="padding:6px; ${color}">${m.model}${known ? '' : ' ⚠'}</td>`
+                          + `<td style="padding:6px; text-align:right;">${_fmtPrice(m.price_in_usd_per_1m)}</td>`
+                          + `<td style="padding:6px; text-align:right;">${_fmtPrice(m.price_out_usd_per_1m)}</td>`
+                          + `<td style="padding:6px; text-align:right;">${_fmtPrice(m.price_cache_read_usd_per_1m)}</td>`
+                          + `<td style="padding:6px; text-align:right;">${_fmtPrice(m.price_cache_write_usd_per_1m)}</td>`
+                          + `</tr>`;
+                });
+                html += `</tbody></table>`;
+            }
             audit.innerHTML = html;
 
             document.getElementById('cbmLastUpdate').textContent =
