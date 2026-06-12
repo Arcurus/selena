@@ -6801,10 +6801,144 @@
             return h + 'h ' + m + 'm';
         }
 
+        // Render the MiniMax provider card using the LIVE
+        // /api/discord-lookup/llm-minimax response (same data as the
+        // top-right widget). Falls back to the snapshot data on
+        // error.
+        //
+        // The previous version of this card read
+        // `providers.minimax.models[*].window_5h.remaining_percent`
+        // from /api/llm-usage, but that field was stale/broken
+        // (used_percent=None, remaining_percent=0) so the user
+        // always saw "0% remaining" on the MiniMax card even when
+        // the top-right widget was showing 76%. Per Arcurus
+        // 2026-06-12 10:40 CEST #cost-tracker: "use the same data
+        // you use for the minimax budget display on top right,
+        // which works now perfectly".
+        //
+        // Shape we expect on window._lastMinimaxQuota:
+        //   { windows: [{ model, name, remaining_percent, used_percent,
+        //                 status, resets_in_s }], fetched_at, cached }
+        // and we display one card section per model with two windows
+        // each (window_5h and weekly), matching the top-right
+        // widget's source.
+        function _renderMinimaxProviderCard(p, polling) {
+            const poll = polling || {};
+            const stateBadge = _pollStateBadge(poll.state);
+            const local5h = p.local_5h_calls || 0;
+            const live = (typeof window !== 'undefined') ? window._lastMinimaxQuota : null;
+            const windows = (live && live.windows) || [];
+            const fetchedAt = live && live.fetched_at;
+
+            let quotaHtml = '';
+            if (!windows.length) {
+                // No live data yet (first load failed) — fall back to
+                // the snapshot's stale fields and warn the user.
+                quotaHtml = `<div style="color:var(--warning);font-size:0.8rem;margin-top:6px;">⚠️ live quota unavailable (top-right widget hasn't loaded yet); showing stale snapshot</div>`;
+                if (p.quota && p.quota.ok && p.models) {
+                    quotaHtml += Object.entries(p.models).map(([mname, m]) => {
+                        const w = m.window_5h || {};
+                        return `<div style="background:var(--bg-dark);border-radius:6px;padding:8px;margin-top:6px;font-size:0.85rem;">
+                            <div><strong>${mname}</strong> · ${w.remaining_percent ?? '?'}% remaining (stale)</div>
+                        </div>`;
+                    }).join('');
+                } else if (p.quota) {
+                    quotaHtml += `<div style="color:var(--text-secondary);font-size:0.8rem;margin-top:6px;">⚠️ ${p.quota.error || 'no data'}</div>`;
+                }
+            } else {
+                // Group windows by model (the same shape the top-right
+                // widget uses: general + video, each with window_5h +
+                // weekly).
+                const byModel = {};
+                windows.forEach(w => {
+                    if (!byModel[w.model]) byModel[w.model] = {};
+                    byModel[w.model][w.name] = w;
+                });
+                const focusModel = byModel.general ? 'general'
+                                 : byModel.video   ? 'video'
+                                 : Object.keys(byModel)[0];
+                const focusW5h = focusModel ? byModel[focusModel].window_5h : null;
+                // Use the 5h window for the status badge color (matches
+                // the top-right widget's tier logic).
+                let badgeColor = 'var(--text-secondary)';
+                let badgeLabel = 'unknown';
+                if (focusW5h) {
+                    const rem = focusW5h.remaining_percent;
+                    const used = focusW5h.used_percent;
+                    if (typeof rem === 'number') {
+                        if (rem >= 60)      { badgeColor = 'var(--success)'; badgeLabel = rem + '% left'; }
+                        else if (rem >= 30) { badgeColor = 'var(--warning)'; badgeLabel = rem + '% left'; }
+                        else                { badgeColor = 'var(--danger,#e05555)'; badgeLabel = rem + '% left'; }
+                    } else if (typeof used === 'number') {
+                        if (used < 40)      { badgeColor = 'var(--success)'; badgeLabel = used + '% used'; }
+                        else if (used < 70) { badgeColor = 'var(--warning)'; badgeLabel = used + '% used'; }
+                        else                { badgeColor = 'var(--danger,#e05555)'; badgeLabel = used + '% used'; }
+                    }
+                }
+                // Build a sub-card per model, each listing both
+                // windows (5h + weekly).
+                quotaHtml = Object.entries(byModel).map(([mname, w]) => {
+                    const w5h = w.window_5h || {};
+                    const wk  = w.weekly    || {};
+                    const row = (label, win) => {
+                        if (!win || typeof win.remaining_percent !== 'number') {
+                            return `<div style="color:var(--text-secondary);font-size:0.78rem;margin-top:2px;">${label}: —</div>`;
+                        }
+                        const rem = win.remaining_percent;
+                        const used = win.used_percent;
+                        const reset = win.resets_in_s != null
+                            ? ` · resets in ${_formatDuration(win.resets_in_s)}` : '';
+                        const stColor = (win.status === 1) ? 'var(--success)'
+                                      : (win.status === 2) ? 'var(--warning)'
+                                      : (win.status != null) ? 'var(--danger,#e05555)'
+                                      : 'var(--text-secondary)';
+                        const stLabel = (win.status != null) ? `status=${win.status}` : 'status=—';
+                        return `<div style="font-size:0.85rem;margin-top:2px;">
+                            <strong>${label}:</strong> ${rem}% remaining
+                            ${typeof used === 'number' ? `(${used}% used)` : ''}
+                            <span style="color:${stColor};">· ${stLabel}</span>${reset}
+                        </div>`;
+                    };
+                    return `<div style="background:var(--bg-dark);border-radius:6px;padding:8px;margin-top:6px;font-size:0.85rem;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <strong>${mname}</strong>
+                            <span style="color:${badgeColor};font-size:0.78rem;">${badgeLabel}</span>
+                        </div>
+                        ${row('5h',     w5h)}
+                        ${row('weekly', wk)}
+                    </div>`;
+                }).join('');
+            }
+            // Live-fetched timestamp + cache indicator
+            const fetchedLine = fetchedAt
+                ? `<div style="color:var(--text-secondary);font-size:0.72rem;margin-top:6px;">
+                       live API · fetched ${new Date(fetchedAt).toLocaleTimeString()}${live && live.cached ? ' (cached)' : ''}
+                   </div>`
+                : '';
+            return `<div class="cost-card" style="margin-bottom:10px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+                    <div><strong>${p.name}</strong> <span style="color:var(--text-secondary);font-size:0.8rem;">local 5h: ${local5h}</span></div>
+                    <div style="display:flex;align-items:center;gap:8px;">${stateBadge}</div>
+                </div>
+                ${quotaHtml}
+                ${fetchedLine}
+            </div>`;
+        }
+
         async function loadProviderUsage(force) {
             if (!token) return;
             const infoEl = document.getElementById('providerUsageSyncInfo');
             if (infoEl) infoEl.textContent = 'Loading…';
+            // Same parallel fetch as loadLLMUsage: get the live
+            // MiniMax data from the top-right widget's endpoint so
+            // the Provider Usage sub-tab shows the real 5h budget
+            // too (per Arcurus 2026-06-12 10:40 CEST #cost-tracker).
+            try {
+                const mmR = await fetch('api/discord-lookup/llm-minimax', { headers: { 'Authorization': 'Bearer ' + token } });
+                if (mmR.ok) {
+                    window._lastMinimaxQuota = await mmR.json();
+                }
+            } catch (_) { /* leave the old one */ }
             try {
                 const url = 'api/llm-usage' + (force ? '?sync=1' : '');
                 const r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
@@ -6874,9 +7008,42 @@
                 </div>
             `;
 
-            // Per-provider quota
+            // Per-provider quota. The MiniMax card uses the live data
+            // path (window._lastMinimaxQuota) so it matches the
+            // top-right widget; the other providers still read from
+            // the snapshot.
             const provEl = document.getElementById('providerUsageProviders');
             const providerCards = Object.entries(providers).map(([name, p]) => {
+                if (name === 'minimax') {
+                    // Use the shared helper, then wrap it in the same
+                    // .cost-card chrome as the other providers (with
+                    // the pause/resume buttons that only this tab
+                    // surfaces).
+                    const inner = _renderMinimaxProviderCard(p, polling[name] || {});
+                    // Inject the pause/resume buttons into the inner
+                    // card (the helper is also used by the LLM Usage
+                    // tab which doesn't have those buttons).
+                    return inner.replace(
+                        /<div style="display:flex;align-items:center;gap:8px;">([^<]*)<\/div>\s*<div style="display:flex/,
+                        (m) => {
+                            // Find the right side action div and inject
+                            // the pause/resume buttons. We do this
+                            // with a second map below for safety; this
+                            // replace is intentionally a no-op fallback.
+                            return m;
+                        }
+                    ).replace(
+                        // Inject pause/resume into the right-side action row.
+                        /(<div style="display:flex;align-items:center;gap:8px;">)([\s\S]*?)(<\/div>)(\s*<\/div>)/,
+                        (m, open, middle, close, end) => {
+                            return open
+                                + middle
+                                + `<button class="save-btn" style="width:auto;padding:4px 10px;font-size:0.8rem;" onclick="providerUsageAction('pause','${name}')">⏸ pause 30m</button>`
+                                + `<button class="save-btn" style="width:auto;padding:4px 10px;font-size:0.8rem;" onclick="providerUsageAction('resume','${name}')">▶ resume</button>`
+                                + close + end;
+                        }
+                    );
+                }
                 const poll = polling[name] || {};
                 const stateBadge = _pollStateBadge(poll.state);
                 const lastErr = poll.last_error ? `<div style="color:var(--text-secondary);font-size:0.8rem;margin-top:4px;">err: ${poll.last_error}</div>` : '';
@@ -7025,6 +7192,25 @@
                     window._lastProjects = projData.projects || [];
                 }
             } catch (_) { /* leave the old one */ }
+            // Fetch the live MiniMax quota in parallel with the main
+            // /api/llm-usage call. We use the SAME endpoint as the
+            // top-right widget (`/api/discord-lookup/llm-minimax`,
+            // which runs `mmx quota` live + 10s server-side cache) so
+            // the Per-Provider Quota panel shows the same numbers as
+            // the budget widget — not the stale snapshot values, which
+            // the broken `providers.minimax.models[*].window_5h` path
+            // was returning (used_percent=None, remaining_percent=0).
+            // Per Arcurus 2026-06-12 10:40 CEST #cost-tracker: "the
+            // minimax token plan there does not display the right 5h
+            // budget. please use the same data you use for the
+            // minimax budget display on top right, which works now
+            // perfectly".
+            try {
+                const mmR = await fetch('api/discord-lookup/llm-minimax', { headers: { 'Authorization': `Bearer ${token}` } });
+                if (mmR.ok) {
+                    window._lastMinimaxQuota = await mmR.json();
+                }
+            } catch (_) { /* leave the old one */ }
             try {
                 const url = 'api/llm-usage' + (force ? '?sync=1' : '');
                 const r = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
@@ -7164,9 +7350,18 @@
             // because renderLLMUsage() is not async.
             drawLLMProjectBarChart(perProj5h);
 
-            // Provider quota cards
+            // Provider quota cards. The MiniMax card now uses the
+            // same data path as the top-right widget
+            // (window._lastMinimaxQuota, populated by the parallel
+            // fetch in loadLLMUsage) so the user sees the real 5h
+            // budget instead of the stale snapshot's 0% remaining.
+            // All other providers (xai / openrouter / openai) still
+            // come from providers.{name}.models in /api/llm-usage.
             const provEl = document.getElementById('llmUsageProviders');
             const providerCards = Object.entries(providers).map(([name, p]) => {
+                if (name === 'minimax') {
+                    return _renderMinimaxProviderCard(p, polling[name] || {});
+                }
                 const poll = polling[name] || {};
                 const stateBadge = _pollStateBadge(poll.state);
                 let quotaHtml = '';
