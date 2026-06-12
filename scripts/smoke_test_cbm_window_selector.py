@@ -133,26 +133,50 @@ def main() -> int:
         return 1
     print("OK 24h window has non-zero cache_read tokens (regression check)")
 
-    # 5. HTML has 6 window buttons
+    # 5. HTML has 6 window buttons PER selector (top of sub-tab + top of
+    # Detail table = 12 total). Per Arcurus 2026-06-12 12:00 CEST
+    # #cost-tracker: "display also in top of Detail table. it can still
+    # affect also the current selector if you press there."
     btn_pattern = re.compile(
         r'<button[^>]*class="save-btn cbm-window-btn"[^>]*data-hours="(\d+)"[^>]*onclick="setCostByModelWindow\(([^,]+),[^"]+\)"[^>]*>([^<]+)</button>'
     )
     btns = btn_pattern.findall(src)
-    if len(btns) != 6:
-        print(f"FAIL: expected 6 window buttons, found {len(btns)}: {btns}")
+    if len(btns) != 12:
+        print(f"FAIL: expected 12 window buttons (6 top + 6 Detail table), found {len(btns)}")
         return 1
-    print(f"OK 6 window buttons present in web/index.html")
+    print(f"OK 12 window buttons present in web/index.html (6 top + 6 Detail table)")
 
-    # 5b. The 6 buttons cover exactly the 6 expected (label, hours) pairs
+    # 5b. The 12 buttons cover exactly the 6 expected (label, hours) pairs,
+    # each appearing twice (once in each selector).
     actual_btns = [(label.strip(), dh) for dh, _arg, label in btns]
-    expected_set = set((label, dh) for label, dh, _wh in EXPECTED_WINDOWS)
-    actual_set = set(actual_btns)
-    if actual_set != expected_set:
-        print(f"FAIL: button set mismatch")
-        print(f"  expected: {sorted(expected_set)}")
-        print(f"  actual:   {sorted(actual_set)}")
+    from collections import Counter
+    pair_counts = Counter(actual_btns)
+    expected_pairs = [(label, dh) for label, dh, _wh in EXPECTED_WINDOWS]
+    for pair in expected_pairs:
+        if pair_counts.get(pair, 0) != 2:
+            print(f"FAIL: (label, hours) pair {pair} appears {pair_counts.get(pair, 0)} times, expected 2 (top + Detail table)")
+            return 1
+    print(f"OK all 6 (label, hours) pairs appear exactly twice (top + Detail table)")
+
+    # 5c. The second selector is INSIDE the Detail table panel (between
+    # the <h3>🔍 Detail table</h3> heading and the <div id="cbmTable">).
+    m = re.search(r'<h3>[^<]*Detail table</h3>', src)
+    if not m:
+        print("FAIL: couldn't find the Detail table heading")
         return 1
-    print(f"OK 6 buttons cover the 6 expected (label, hours) pairs exactly")
+    detail_panel_start = m.start()
+    detail_table_div = src.find('id="cbmTable"', detail_panel_start)
+    if detail_panel_start < 0 or detail_table_div < 0:
+        print("FAIL: couldn't locate the Detail table panel markers")
+        return 1
+    detail_panel = src[detail_panel_start:detail_table_div]
+    if 'class="save-btn cbm-window-btn"' not in detail_panel:
+        print("FAIL: second selector is NOT inside the Detail table panel")
+        return 1
+    if 'setCostByModelWindow' not in detail_panel:
+        print("FAIL: second selector doesn't use setCostByModelWindow")
+        return 1
+    print("OK second selector is inside the Detail table panel and uses setCostByModelWindow (stays in sync with top selector)")
 
     # 6. Each button has the expected data-hours, function arg, and label
     for (expected_label, expected_dh, expected_wh), (got_dh, got_arg, got_label) in zip(EXPECTED_WINDOWS, btns):

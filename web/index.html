@@ -702,6 +702,26 @@
 
                     <div class="services-panel" style="margin-top: 20px;">
                         <h3>🔍 Detail table</h3>
+                        <!-- Second time-range selector (added 2026-06-12
+                             per Arcurus #cost-tracker: "display also in
+                             top of Detail table. it can still affect
+                             also the current selector if you press
+                             there"). Uses the same .cbm-window-btn class
+                             + the same setCostByModelWindow() function
+                             as the top selector, so both stay in sync:
+                             clicking one updates both highlight states
+                             and re-fetches. The `View:` label is just a
+                             hint that this is the same selector as at
+                             the top, scoped to the Detail table. -->
+                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:10px;">
+                            <span style="color:var(--text-secondary); font-size:0.8rem; margin-right:4px;">View:</span>
+                            <button class="save-btn cbm-window-btn" data-hours="1"    onclick="setCostByModelWindow(1,    this)" style="width:auto;padding:3px 10px;font-size:0.78rem;">1h</button>
+                            <button class="save-btn cbm-window-btn" data-hours="24"   onclick="setCostByModelWindow(24,   this)" style="width:auto;padding:3px 10px;font-size:0.78rem;">24h</button>
+                            <button class="save-btn cbm-window-btn" data-hours="168"  onclick="setCostByModelWindow(168,  this)" style="width:auto;padding:3px 10px;font-size:0.78rem;">7d</button>
+                            <button class="save-btn cbm-window-btn" data-hours="720"  onclick="setCostByModelWindow(720,  this)" style="width:auto;padding:3px 10px;font-size:0.78rem;">1mo</button>
+                            <button class="save-btn cbm-window-btn" data-hours="8760" onclick="setCostByModelWindow(8760, this)" style="width:auto;padding:3px 10px;font-size:0.78rem;">1y</button>
+                            <button class="save-btn cbm-window-btn" data-hours="0"    onclick="setCostByModelWindow(0,    this)" style="width:auto;padding:3px 10px;font-size:0.78rem;">all</button>
+                        </div>
                         <div id="cbmTable" style="max-height: 480px; overflow-y: auto;"></div>
                     </div>
 
