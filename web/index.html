@@ -367,6 +367,19 @@
                         </button>
                         <div id="todoFilterCounts" style="color: var(--text-secondary); font-size: 0.8rem; margin-left: auto;"></div>
                     </div>
+
+                    <!-- v0.1.4: Task follow-up counters panel (state transitions by source) -->
+                    <div id="taskFollowupCounters" style="background: var(--bg-dark); border-radius: 8px; padding: 10px 15px; margin-bottom: 15px; border: 1px solid var(--accent-blue); display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.8rem;">
+                        <span style="color: var(--text-secondary); font-weight: bold;">Change counters:</span>
+                        <span id="counter-set-done" style="color: var(--text-secondary);" title="Todos set to status=done, by source (agent / human)">set done: 0 / 0</span>
+                        <span id="counter-set-in-progress" style="color: var(--text-secondary);" title="Todos set to status=in_progress, by source">in_progress: 0 / 0</span>
+                        <span id="counter-set-completed" style="color: var(--text-secondary);" title="Todos set to status=completed, by source">completed: 0 / 0</span>
+                        <span id="counter-set-blocked" style="color: var(--text-secondary);" title="Todos set to status=blocked, by source">blocked: 0 / 0</span>
+                        <span id="counter-set-open" style="color: var(--text-secondary);" title="Todos re-opened, by source">re-open: 0 / 0</span>
+                        <span id="counter-priority" style="color: var(--text-secondary);" title="Priority changes (any transition), by source">priority: 0 / 0</span>
+                        <span id="counter-other" style="color: var(--text-secondary);" title="Description / title / add_todo / no_action, by source">other: 0 / 0</span>
+                        <span style="color: var(--text-secondary); margin-left: auto;" id="counter-source-summary">agent: 0 | human: 0</span>
+                    </div>
                     
                     <!-- Add Todo Form -->
                     <div id="addTaskForm" style="background: var(--bg-dark); border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid var(--accent-blue); display: none;">
@@ -3049,6 +3062,8 @@
             document.getElementById('btn-new-task').classList.remove('active');
             document.getElementById('todoSummary').style.display = 'grid';
             document.getElementById('todoList').style.display = 'block';
+            // v0.1.4: refresh the task follow-up counters panel.
+            loadTaskFollowupCounters();
             // Switching status resets the user-selected sort override so
             // the per-status default (priority / date) takes over.
             currentTodoSort = '';
@@ -3063,7 +3078,67 @@
             loadTodos();
         }
 
-        // Sort + filter handlers (added 2026-06-04 per Arcurus)
+        // v0.1.4: Task follow-up counters panel — fetches /api/task_followup/stats
+        // and renders the per-target-state counters (set done / in_progress / etc.)
+        // with "agent / human" attribution, plus priority and other change totals.
+        async function loadTaskFollowupCounters() {
+            try {
+                const response = await fetch('api/task_followup/stats', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!response.ok) return;
+                const stats = await response.json();
+                // Aggregate by target state (any transition ending in that state)
+                const targetStateCount = (state) => {
+                    let agent = 0, human = 0;
+                    for (const [transition, bySource] of Object.entries(stats.by_state_transition_by_source || {})) {
+                        const target = transition.split('->')[1];
+                        if (target === state) {
+                            agent += bySource['task_followup_agent'] || 0;
+                            human += bySource['human-web'] || 0;
+                        }
+                    }
+                    return { agent, human };
+                };
+                const setDone = targetStateCount('done');
+                const setInProgress = targetStateCount('in_progress');
+                const setCompleted = targetStateCount('completed');
+                const setBlocked = targetStateCount('blocked');
+                const setOpen = targetStateCount('open');  // re-opens
+                // Priority changes
+                let prioAgent = 0, prioHuman = 0;
+                for (const bySource of Object.values(stats.by_priority_change_by_source || {})) {
+                    prioAgent += bySource['task_followup_agent'] || 0;
+                    prioHuman += bySource['human-web'] || 0;
+                }
+                // Other changes (description, add_todo, no_action)
+                let otherAgent = 0, otherHuman = 0;
+                for (const bySource of Object.values(stats.by_other_change_by_source || {})) {
+                    otherAgent += bySource['task_followup_agent'] || 0;
+                    otherHuman += bySource['human-web'] || 0;
+                }
+                const set = (id, agent, human) => {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = el.textContent.split(':')[0] + ': ' + agent + ' / ' + human;
+                };
+                set('counter-set-done', setDone.agent, setDone.human);
+                set('counter-set-in-progress', setInProgress.agent, setInProgress.human);
+                set('counter-set-completed', setCompleted.agent, setCompleted.human);
+                set('counter-set-blocked', setBlocked.agent, setBlocked.human);
+                set('counter-set-open', setOpen.agent, setOpen.human);
+                set('counter-priority', prioAgent, prioHuman);
+                set('counter-other', otherAgent, otherHuman);
+                const summaryEl = document.getElementById('counter-source-summary');
+                if (summaryEl) {
+                    const bySource = stats.by_source || {};
+                    summaryEl.textContent = `agent: ${bySource['task_followup_agent'] || 0} | human: ${bySource['human-web'] || 0}`;
+                }
+            } catch (e) {
+                // Silently ignore — the panel is non-critical
+            }
+        }
+
+// Sort + filter handlers (added 2026-06-04 per Arcurus)
         function handleTodoSortChange(value) {
             currentTodoSort = value || '';
             updateTodoFilterCounts();
@@ -4180,7 +4255,9 @@
 
         async function markTodoStatus(todoId, status) {
             try {
-                const response = await fetch(`api/todos/update?id=${todoId}&status=${status}`, {
+                // v0.1.4: pass source=human-web so the audit log attributes
+                // the change to the human operator (not the LLM agent).
+                const response = await fetch(`api/todos/update?id=${todoId}&status=${status}&source=human-web`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 

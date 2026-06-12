@@ -594,6 +594,131 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_cors_headers()
         self.end_headers()
+
+    # -----------------------------------------------------------------------
+    # v0.1.4: Task follow-up audit log helpers + stats endpoint
+    # -----------------------------------------------------------------------
+    # The task follow-up agent (selena-project-2) writes its own audit
+    # rows. When the web UI (or any non-agent caller) makes a change, we
+    # mirror it into the same log so the daily auditor and the web UI
+    # counters can aggregate by source.
+    # -----------------------------------------------------------------------
+
+    def _task_followup_audit_path(self):
+        """Absolute path to the task follow-up audit log JSONL."""
+        return os.path.join(ROOT_DIR, '..', 'selena-project-2', 'data', 'task_followup_log.jsonl')
+
+    def _write_task_followup_audit(self, todo_id, updates, source, todo):
+        """Append a row to the task follow-up audit log for a web-UI-driven
+        change. Best-effort: if the log dir doesn't exist or the write
+        fails, we log a stderr note and continue (the update still
+        succeeded in the main todos.json)."""
+        try:
+            import sys as _sys
+            from datetime import datetime as _dt, timezone as _tz
+            log_path = self._task_followup_audit_path()
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            now = _dt.now(_tz.utc).isoformat()
+            # Determine action type from what was updated
+            action = 'update'
+            before = None
+            after = None
+            if 'status' in updates:
+                action = 'update_state'
+                before = todo.get('status')  # current after the update
+                after = updates['status']
+                # The todo we got back has the NEW status. For "before" we
+                # don't have the old value here; the daily auditor will
+                # show source=human-web with the new state.
+                before = '?'
+                after = updates['status']
+            elif 'priority' in updates:
+                action = 'update_priority'
+                before = '?'
+                after = str(updates['priority'])
+            elif 'short_desc' in updates or 'long_desc' in updates:
+                action = 'update_description'
+                before = '?'
+                after = 'updated'
+            row = {
+                'ts': now,
+                'run_id': f'web-{now}',
+                'msg_id': 'web-ui',
+                'msg_author': 'human-web',
+                'msg_content': f'web UI update via /api/todos/update',
+                'channel_id': 'web-ui',
+                'action': action,
+                'todo_id': todo_id,
+                'before': before,
+                'after': after,
+                'source': source,
+                'llm_reason': 'web UI change by human operator',
+                'llm_model': 'human',
+                'prompt_tokens': 0,
+                'completion_tokens': 0,
+                'cost_usd': 0.0,
+                'idempotency_key': f'web:{todo_id}:{action}:{now}',
+            }
+            with open(log_path, 'a') as f:
+                f.write(json.dumps(row) + '\n')
+        except Exception as e:
+            sys.stderr.write(f'[api_server] audit log write failed: {e}\n')
+
+    def _aggregate_task_followup_stats(self):
+        """Read the task follow-up audit log and aggregate by source +
+        action + transition. Returns a dict for the web UI counters panel."""
+        try:
+            log_path = self._task_followup_audit_path()
+            if not os.path.exists(log_path):
+                return self._empty_stats()
+            from collections import Counter, defaultdict
+            by_source = Counter()
+            by_state_transition_by_source = defaultdict(lambda: Counter())  # transition -> {source: count}
+            by_priority_change_by_source = defaultdict(lambda: Counter())
+            by_other_change_by_source = defaultdict(lambda: Counter())
+            with open(log_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        row = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    action = row.get('action', '')
+                    source = row.get('source', '?')
+                    by_source[source] += 1
+                    if action == 'update_state':
+                        before = row.get('before') or '?'
+                        after = row.get('after') or '?'
+                        by_state_transition_by_source[f'{before}->{after}'][source] += 1
+                    elif action == 'update_priority':
+                        before = row.get('before') or '?'
+                        after = row.get('after') or '?'
+                        by_priority_change_by_source[f'{before}->{after}'][source] += 1
+                    elif action in ('update_description',):
+                        by_other_change_by_source[action][source] += 1
+                    elif action == 'add_todo':
+                        by_other_change_by_source['add_todo'][source] += 1
+                    elif action == 'no_action':
+                        by_other_change_by_source['no_action'][source] += 1
+            return {
+                'by_source': dict(by_source),
+                'by_state_transition_by_source': {k: dict(v) for k, v in by_state_transition_by_source.items()},
+                'by_priority_change_by_source': {k: dict(v) for k, v in by_priority_change_by_source.items()},
+                'by_other_change_by_source': {k: dict(v) for k, v in by_other_change_by_source.items()},
+            }
+        except Exception as e:
+            sys.stderr.write(f'[api_server] stats aggregation failed: {e}\n')
+            return self._empty_stats()
+
+    def _empty_stats(self):
+        return {
+            'by_source': {},
+            'by_state_transition_by_source': {},
+            'by_priority_change_by_source': {},
+            'by_other_change_by_source': {},
+        }
     
     def do_GET(self):
         """Handle GET requests - delegates to _dispatch_routes for the
@@ -1980,7 +2105,18 @@ class RequestHandler(BaseHTTPRequestHandler):
                 log_error(f'Failed to load biggest files', str(e))
                 self.send_json({'error': str(e)}, 500)
             return
-        
+
+        # Task follow-up stats (v0.1.4): aggregated audit log counters
+        # by source (task_followup_agent vs human-web) for the web UI
+        # counters panel.
+        if path == '/api/task_followup/stats':
+            if not self.authenticate():
+                self.send_json({'error': 'Unauthorized'}, 401)
+                return
+            stats = self._aggregate_task_followup_stats()
+            self.send_json(stats)
+            return
+
         # Todo Manager endpoints
         if path == '/api/todos':
             if not self.authenticate():
@@ -4740,13 +4876,22 @@ class RequestHandler(BaseHTTPRequestHandler):
                 _ca = query.get('completed_at', [''])[0]
                 updates['completed_at'] = _ca if _ca else None
             if 'restore' in query: updates['restore'] = query['restore'][0].lower() == 'true'
+            # Source attribution (v0.1.4): web UI passes source=human-web
+            # so the audit log can distinguish human-driven changes from
+            # task_followup_agent LLM-driven changes.
+            source = query.get('source', [''])[0] or 'human-web'
             todo = todo_manager.update_todo(todo_id, **updates)
             if todo:
+                # Write to the task_followup audit log for non-agent sources.
+                # The agent module writes its own rows; we only need to
+                # capture web UI / other human-driven changes here.
+                if source and source != 'task_followup_agent':
+                    self._write_task_followup_audit(todo_id, updates, source, todo)
                 self.send_json({'success': True, 'todo': todo})
             else:
                 self.send_json({'success': False, 'error': 'Todo not found'}, 404)
             return
-        
+
         # 404 for unsupported PUT endpoints
         self._dispatch_routes(path, 'PUT')
 
