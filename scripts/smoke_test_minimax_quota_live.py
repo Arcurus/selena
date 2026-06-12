@@ -169,14 +169,27 @@ def main() -> int:
         print("FAIL: no general/window_5h window in live response")
         return 1
     rem = gen_5h.get("remaining_percent")
-    if not isinstance(rem, (int, float)) or rem <= 0:
-        print(f"FAIL: general/window_5h remaining_percent is {rem!r}, expected > 0")
-        return 1
     used = gen_5h.get("used_percent")
-    if used is not None and used < 0:
-        print(f"FAIL: general/window_5h used_percent is negative: {used}")
-        return 1
-    print(f"OK live endpoint: general/window_5h remaining={rem}%, used={used}%")
+    status = gen_5h.get("status")
+    # The MiniMax 5h window can legitimately be at 0% remaining with
+    # status=2 ("no_credits / exhausted") — this happens during heavy
+    # usage days. The test's job is to catch regressions of the OLD
+    # bug (used_percent=None, remaining_percent=0 from a stale
+    # snapshot), not the case where the window is genuinely empty.
+    # So we accept (0, 100, 2) as a legitimate state and skip the
+    # nonzero assertion in that case.
+    if rem == 0 and used == 100 and status == 2:
+        print(f"OK live endpoint: general/window_5h is fully consumed "
+              f"(remaining=0, used=100, status=2) — skipping nonzero "
+              f"check; this is a legitimate state, not the old bug")
+    else:
+        if not isinstance(rem, (int, float)) or rem <= 0:
+            print(f"FAIL: general/window_5h remaining_percent is {rem!r}, expected > 0")
+            return 1
+        if used is not None and used < 0:
+            print(f"FAIL: general/window_5h used_percent is negative: {used}")
+            return 1
+        print(f"OK live endpoint: general/window_5h remaining={rem}%, used={used}%")
 
     # 5. The OLD broken data path is still 0 — proving the bug exists
     #    and the fix is necessary.

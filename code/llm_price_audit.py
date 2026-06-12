@@ -81,13 +81,48 @@ def _read_events(window_hours: float) -> List[Dict[str, Any]]:
 
     If `window_hours <= 0`, reads ALL events (no time filter).
     Used by the 'all' button in the Cost by Model sub-tab.
+
+    Time filter (2026-06-12 fix per Arcurus #cost-tracker):
+    Same problem as `_read_openclaw_usage` — the `ts` field in the
+    events log is the write time, not the call time. Events written
+    in a batch by the reconciler all get `ts = "now"`.
+
+    The fix: when an event has a `sessionId`, look up the session's
+    `startedAt` from `openclaw_usage.jsonl` and use that as the
+    actual call time. When there's no `sessionId` (in-process direct
+    calls), trust the event's own `ts` field (it's the only signal
+    we have and the writer is the chat proxy itself, which writes
+    synchronously per call so `ts` ≈ actual call time for these).
     """
     if not os.path.isfile(EVENT_LOG):
         return []
     if window_hours <= 0:
-        cutoff = ""  # no filter
+        cutoff_iso = ""  # no filter
+        cutoff_ms = -1
     else:
-        cutoff = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).isoformat()
+        now = datetime.now(timezone.utc)
+        cutoff_iso = (now - timedelta(hours=window_hours)).isoformat()
+        cutoff_ms = (now - timedelta(hours=window_hours)).timestamp() * 1000
+
+    # Build a sessionId -> startedAt lookup ONCE (one pass over the
+    # openclaw_usage file, ~2k rows, sub-millisecond). The lookup
+    # handles the same stale-write issue as _read_openclaw_usage.
+    sid_to_started_at: Dict[str, float] = {}
+    if os.path.isfile(OPENCLAW_USAGE):
+        with open(OPENCLAW_USAGE) as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                sid = rec.get("sessionId")
+                sa = rec.get("startedAt")
+                if sid and isinstance(sa, (int, float)) and sa > 0:
+                    sid_to_started_at[sid] = sa
+
     out: List[Dict[str, Any]] = []
     with open(EVENT_LOG) as f:
         for line in f:
@@ -98,9 +133,24 @@ def _read_events(window_hours: float) -> List[Dict[str, Any]]:
                 rec = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            ts = rec.get("ts", "")
-            if ts >= cutoff:
+            if window_hours <= 0:
                 out.append(rec)
+                continue
+            # If the event has a sessionId and we know the session's
+            # actual startedAt, use that for the time filter. This
+            # eliminates the stale-write inflation (see big comment
+            # above). For events without a sessionId (in-process
+            # direct chat calls, not from the reconciler), trust the
+            # event's own `ts` field — the writer is the chat proxy
+            # which writes synchronously per call so `ts` is accurate.
+            sid = rec.get("sessionId")
+            if sid and sid in sid_to_started_at:
+                if sid_to_started_at[sid] >= cutoff_ms:
+                    out.append(rec)
+            else:
+                ts = rec.get("ts", "")
+                if ts and ts >= cutoff_iso:
+                    out.append(rec)
     return out
 
 
@@ -111,13 +161,31 @@ def _read_openclaw_usage(window_hours: float) -> List[Dict[str, Any]]:
     per-message) so we translate the fields we need.
 
     If `window_hours <= 0`, reads ALL rows (no time filter).
+
+    Time filter (2026-06-12 fix per Arcurus #cost-tracker):
+    The `ts` field in this log is the WRITE time (set by
+    `code/openclaw_cost_tracker.py` at line 675 to
+    `datetime.now(timezone.utc).isoformat()` when the row is
+    appended), NOT the actual session start time. So when the
+    reconciler flushes a batch of old sessions to the log (e.g.
+    on its first run, or when catching up after a downtime),
+    every row in the batch gets `ts = "now"` and the audit's
+    "last 1h" window catches them all — inflating the numbers
+    by 5-10x (84% of the rows in a 24h window were stale
+    misattributed calls, not real activity).
+
+    The fix: use the actual session start time (the `startedAt`
+    field, which is a Unix-epoch millisecond timestamp from the
+    OpenClaw session record) for the time filter. The row's
+    `ts` (write time) is still kept on the record for downstream
+    consumers who want to know when the row was written.
     """
     if not os.path.isfile(OPENCLAW_USAGE):
         return []
     if window_hours <= 0:
         cutoff = ""
     else:
-        cutoff = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).isoformat()
+        cutoff_ms = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).timestamp() * 1000
     out: List[Dict[str, Any]] = []
     with open(OPENCLAW_USAGE) as f:
         for line in f:
@@ -128,9 +196,22 @@ def _read_openclaw_usage(window_hours: float) -> List[Dict[str, Any]]:
                 rec = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            ts = rec.get("ts", "") or rec.get("endTime", "") or rec.get("startTime", "")
-            if ts >= cutoff:
+            if window_hours <= 0:
                 out.append(rec)
+                continue
+            # Prefer `startedAt` (epoch ms) — the real session start
+            # time. Fall back to the row's `ts` field (the write time)
+            # only if `startedAt` is missing, so we don't drop rows
+            # that have no startedAt (defensive, shouldn't happen
+            # for openclaw_cost_tracker.py output).
+            sa = rec.get("startedAt")
+            if isinstance(sa, (int, float)) and sa > 0:
+                if sa >= cutoff_ms:
+                    out.append(rec)
+            else:
+                ts = rec.get("ts", "")
+                if ts and ts >= (datetime.now(timezone.utc) - timedelta(hours=window_hours)).isoformat():
+                    out.append(rec)
     return out
 
 
