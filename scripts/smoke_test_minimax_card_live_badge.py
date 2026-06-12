@@ -274,6 +274,31 @@ def main() -> int:
         return 1
     print("OK _renderMinimaxProviderCard uses _liveStateBadge when live data is present, falls back to snapshot otherwise")
 
+    # 7b. Per-model badges are computed from each model's own 5h
+    # window, NOT the focus model's badge (the bug Arcurus reported
+    # on 2026-06-12 18:09 CEST: 'the video plan says 60% left even
+    # if 100% is left'). The fix introduced a `thisModelBadge` local
+    # in the per-model map and uses it for the per-card badge span.
+    if "thisModelBadge" not in src:
+        print("FAIL: per-model sub-cards don't compute their own badge (the 'video shows general's percent' bug is back)")
+        return 1
+    if "_liveStateBadge(w5h.remaining_percent != null ? w5h" not in src:
+        print("FAIL: thisModelBadge isn't computed from each model's own w5h window")
+        return 1
+    print("OK per-model sub-cards compute their own badge from each model's own 5h window (fixes 'video shows general's percent' bug)")
+
+    # 7c. The prominent bar uses the words 'credits' and the focus
+    # model name so the user can find the credit display
+    # ('i dont see the minimax credits displayed where are they?').
+    # Look for '5h credits used' in the prominent bar label.
+    if "5h credits used" not in src:
+        print("FAIL: prominent '5h credits used' bar missing")
+        return 1
+    if "% of credits left" not in src:
+        print("FAIL: '% of credits left' label missing (should appear under the bar)")
+        return 1
+    print("OK prominent '5h credits used' bar is labeled with 'credits' so the user can find the display")
+
     # 8. AGENTS.md relative-path discipline
     abs_fetch = re.findall(r"fetch\(['\"]/", src)
     if abs_fetch:

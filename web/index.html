@@ -7479,10 +7479,19 @@
 
             // Build the prominent "5h used" bar for the focus model's
             // 5h window (per Arcurus 2026-06-12 17:50 CEST: 'MiniMax
-            // API 5h used should also display the % used'). This is
-            // the visual centerpiece of the card — same data the
-            // top-right widget shows, but in a per-card view with
-            // the wall-clock reset date + countdown underneath.
+            // API 5h used should also display the % used'; and
+            // 2026-06-12 18:09 CEST: 'i dont see the minimax credits
+            // displayed where are they?'). This is the visual
+            // centerpiece of the card — same data the top-right
+            // widget shows, but in a per-card view with the
+            // wall-clock reset date + countdown underneath.
+            //
+            // The label includes "credits" so it's clear this is
+            // the credit-usage display the user was looking for
+            // ("5h credits used: 42% used" + bar + "58% left of
+            // credits" + "resets ..."). Since the API only
+            // exposes percent (not raw credit counts), the
+            // percent IS the credits display.
             const usedBar = (() => {
                 if (!focusW5hForBadge) return '';
                 const rem = focusW5hForBadge.remaining_percent;
@@ -7494,16 +7503,17 @@
                             : usedPct < 70 ? 'var(--warning)'
                             : 'var(--danger,#e05555)';
                 const resetDetail = _formatResetDetail(focusW5hForBadge.resets_in_s);
-                return `<div style="background:var(--bg-dark);border-radius:6px;padding:10px;margin-top:8px;">
+                const focusLabel = (focusW5hForBadge && focusW5hForBadge.model) || 'general';
+                return `<div style="background:var(--bg-dark);border-radius:6px;padding:10px;margin-top:8px;" title="MiniMax 5h window credits for the ${focusLabel} model. The percent is the share of the 5h credit budget that has been used in the current rolling window.">
                     <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
-                        <strong style="font-size:0.9rem;">5h used</strong>
-                        <span style="font-size:1.05rem;font-weight:bold;color:${color};">${usedPct}% used</span>
+                        <strong style="font-size:0.9rem;">5h credits used <span style="color:var(--text-secondary);font-size:0.75rem;font-weight:normal;">(${focusLabel})</span></strong>
+                        <span style="font-size:1.15rem;font-weight:bold;color:${color};">${usedPct}%</span>
                     </div>
-                    <div style="background:var(--bg);border-radius:4px;height:8px;overflow:hidden;margin-bottom:6px;">
+                    <div style="background:var(--bg);border-radius:4px;height:10px;overflow:hidden;margin-bottom:6px;">
                         <div style="width:${usedPct}%;height:100%;background:${color};transition:width .3s;"></div>
                     </div>
                     <div style="display:flex;justify-content:space-between;font-size:0.78rem;color:var(--text-secondary);">
-                        <span>${typeof rem === 'number' ? rem + '% left' : ''}</span>
+                        <span>${typeof rem === 'number' ? rem + '% of credits left' : ''}</span>
                         <span>resets ${resetDetail}</span>
                     </div>
                 </div>`;
@@ -7540,9 +7550,24 @@
                 // The prominent "5h used" bar above is for the
                 // *focus* model (general, falling back to video);
                 // these per-model rows show the rest of the data.
+                //
+                // Per Arcurus 2026-06-12 18:09 CEST #cost-tracker:
+                // 'the video plan says 60% left even if 100% is
+                // left'. Bug: I was reusing the focus model's
+                // `liveBadge` for every per-model sub-card, so the
+                // video card showed the general model's percent
+                // (e.g. '58% left' when video was actually 100%
+                // left). The fix: compute each card's badge from
+                // its OWN 5h window data (weekly if 5h missing).
                 quotaHtml = Object.entries(byModel).map(([mname, w]) => {
                     const w5h = w.window_5h || {};
                     const wk  = w.weekly    || {};
+                    // Per-model badge from this model's own 5h
+                    // window (falling back to weekly if 5h is
+                    // missing). This is the fix for the
+                    // 'video shows general's percent' bug.
+                    const thisModelBadge = _liveStateBadge(w5h.remaining_percent != null ? w5h
+                                                        : (wk.remaining_percent != null ? wk : null));
                     const row = (label, win) => {
                         if (!win || typeof win.remaining_percent !== 'number') {
                             return `<div style="color:var(--text-secondary);font-size:0.78rem;margin-top:2px;">${label}: —</div>`;
@@ -7565,7 +7590,7 @@
                     return `<div style="background:var(--bg-dark);border-radius:6px;padding:8px;margin-top:6px;font-size:0.85rem;">
                         <div style="display:flex;justify-content:space-between;align-items:center;">
                             <strong>${mname}</strong>
-                            <span style="color:${liveBadge.color};font-size:0.78rem;">${liveBadge.label}</span>
+                            <span style="color:${thisModelBadge.color};font-size:0.78rem;">${thisModelBadge.label}</span>
                         </div>
                         ${row('5h',     w5h)}
                         ${row('weekly', wk)}
