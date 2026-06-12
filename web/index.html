@@ -6446,10 +6446,27 @@
                     qs.push('window_hours=' + _cbmWindowHours);
                 }
                 const url = 'api/llm-usage/per-model-cost' + (qs.length ? '?' + qs.join('&') : '');
-                const r = await fetch(url);
-                if (!r.ok) {
+                // IMPORTANT: the endpoint requires auth
+                // (api_server.py::authenticate() at the route handler).
+                // We must send the Bearer token or the server returns
+                // 401 Unauthorized. This was missing before 2026-06-12,
+                // so the sub-tab silently failed with "Failed to load:
+                // HTTP 401" for any logged-in user. The other loaders
+                // in this file (loadLLMUsage, loadProviderUsage,
+                // refreshMinimaxTopWidget) all use safeFetchJson() or
+                // pass `headers: { 'Authorization': 'Bearer ' + token }`
+                // — we follow the same pattern here.
+                if (typeof token === 'undefined' || !token) {
                     document.getElementById('cbmKpis').innerHTML =
-                        '<div class="empty-state">Failed to load: HTTP ' + r.status + '</div>';
+                        '<div class="empty-state">Not logged in. Please refresh and log in again.</div>';
+                    return;
+                }
+                const r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+                if (!r.ok) {
+                    let detail = '';
+                    try { detail = ' — ' + (await r.text()).slice(0, 200); } catch (_) {}
+                    document.getElementById('cbmKpis').innerHTML =
+                        '<div class="empty-state">Failed to load: HTTP ' + r.status + detail + '</div>';
                     return;
                 }
                 const data = await r.json();
