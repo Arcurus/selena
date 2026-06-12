@@ -1,0 +1,56 @@
+{
+  "_comment": [
+    "Explicit allowlist of Discord channel IDs the selena-project actively uses.",
+    "Read by code/discord_client.py::collect_known_channels() as a 5th source",
+    "(after env-var default, openclaw.json guild channels, AGENT_DEFAULT_CHANNELS,",
+    "and ANNOUNCE_CHANNEL). Used by the service-manager watchdog's 30s cycle to",
+    "catch 404s proactively — see loose-end todo c700f895 (2026-06-06 mass-misroute).",
+    "",
+    "Update this file when:",
+    "  - a Discord channel is deleted and recreated with a new ID (the watchdog",
+    "    will surface the 404 within 5 min, but updating here lets the next probe",
+    "    find the new ID by name only — see notes column).",
+    "  - you add a new channel that selena-project should monitor.",
+    "",
+    "Format: a list of {id, name, note} objects. `id` and `name` are required;",
+    "`note` is free-form (purpose, fallback ID, etc.). The function reads this",
+    "file and adds each id (deduped) to the channel-health probe list."
+  ],
+  "channels": [
+    {
+      "id": "1495170712397152367",
+      "name": "#selena-project",
+      "note": "Primary worker report channel (default)"
+    },
+    {
+      "id": "1495187458776891483",
+      "name": "#selena-project-important",
+      "note": "Escalation channel for blockers / questions / security"
+    },
+    {
+      "id": "1511700519582695456",
+      "name": "#cost-tracker",
+      "note": "Daily LLM cost report (cost_tracker.py)"
+    },
+    {
+      "id": "1511805575380471939",
+      "name": "#selena-memory",
+      "note": "Notable loose-end items from selena-memory-loose-ends cron"
+    },
+    {
+      "id": "1511805577221636136",
+      "name": "#selena-memory-log",
+      "note": "Every-run digest from selena-memory-loose-ends cron"
+    },
+    {
+      "id": "1495738472378667058",
+      "name": "#project-lunaris",
+      "note": "Project Lunaris main channel (renamed from #selena-lunar-project on 2026-06-12; the project was previously known as selena-project-2 / selena-project-lunarisis). Per Arcurus 2026-06-12: use 'project-lunaris' as the canonical user-facing name; legacy aliases (selena-project-lunarisis, selena-project-2) should not appear in user-facing labels."
+    },
+    {
+      "id": "1511696307905892393",
+      "name": "#openworld",
+      "note": "Adjacent project; selena-open-world-worker channel — ID was rotated 2026-06-06"
+    }
+  ]
+}
