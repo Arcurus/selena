@@ -1573,10 +1573,17 @@
             // but never called, so the widget rendered as static placeholders.
             startMinimaxTopWidget();
             // Start the dedup stats panel auto-refresh (added 2026-06-11
-            // per Arcurus #selena-project-lunarisis; todo 21cfce43 P5).  Polls
+            // per Arcurus #selena-lunar-project; todo 21cfce43 P5).  Polls
             // /api/dedup/stats every 30s and refreshes the 5-tile counter
             // + top-3 most-blocked list.
             startDedupStatsAutoRefresh();
+            // Start the similar-counts auto-refresh (added 2026-06-11
+            // per Arcurus #selena-lunar-project; bulk endpoint at
+            // /api/dedup/similar-counts?min_score=0.5).  Polls every 60s
+            // — counts only change when a new todo is added or a status
+            // flips, so 60s is plenty.  Powers the "🔍 similar (N)"
+            // badge on each todo card.
+            startSimilarCountsAutoRefresh();
             // Set up services polling by showing the services tab
             showTab('services');
         }
@@ -2951,6 +2958,13 @@
                 }
                 
                 renderTodos(data.todos, data.summary);
+                // Apply similar-count badges to the newly-rendered cards.
+                // This is cheap (just DOM lookups) and runs after every
+                // loadTodos call so the badge stays in sync when the user
+                // adds/deletes/changes a todo.  The actual count data is
+                // fetched separately by refreshSimilarCounts (started
+                // from showDashboard) and refreshed every 60s.
+                applySimilarCounts();
             } catch (e) {
                 console.error('Failed to load todos:', e);
                 document.getElementById('todoList').innerHTML = '<p style="color: var(--danger);">Failed to load tasks: Network error. Is the API server running?</p>';
@@ -3690,6 +3704,64 @@
             }
         }
 
+        // -----------------------------------------------------------------
+        // Similar-counts bulk loader (added 2026-06-11 per Arcurus
+        // #selena-lunar-project).  On page load + every 60s thereafter,
+        // fetch /api/dedup/similar-counts?min_score=0.5 and update the
+        // badge next to every "🔍 similar" button.  A todo with
+        // count > 0 shows the badge as a cyan pill (e.g. "🔍 similar (4)");
+        // a todo with count == 0 leaves the badge hidden.  The whole
+        // computation is server-side numpy (~100ms for ~70 active todos)
+        // so a single bulk request covers all cards.
+        // -----------------------------------------------------------------
+
+        let _similarCounts = {};  // todo_id -> count
+
+        function applySimilarCounts() {
+            let nWithSimilar = 0;
+            for (const [tid, count] of Object.entries(_similarCounts)) {
+                const el = document.querySelector(`[data-similar-count="${tid}"]`);
+                if (!el) continue;
+                if (count > 0) {
+                    el.textContent = count;
+                    el.style.display = '';
+                    nWithSimilar++;
+                } else {
+                    el.style.display = 'none';
+                }
+            }
+            return nWithSimilar;
+        }
+
+        async function refreshSimilarCounts() {
+            try {
+                const r = await fetch('api/dedup/similar-counts?min_score=0.5', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (r.status === 401) { handleAuthError('load similar counts'); return; }
+                const data = await r.json();
+                if (!data.success) return;
+                _similarCounts = data.counts || {};
+                const n = applySimilarCounts();
+                console.log(`similar-counts: refreshed, ${n} cards have ≥1 similar`);
+            } catch (e) {
+                // Silent fail — the panel is informational, not critical.
+            }
+        }
+
+        let _similarCountsTimer = null;
+        function startSimilarCountsAutoRefresh() {
+            if (_similarCountsTimer) return;  // idempotent
+            refreshSimilarCounts();
+            _similarCountsTimer = setInterval(refreshSimilarCounts, 60000);
+        }
+        function stopSimilarCountsAutoRefresh() {
+            if (_similarCountsTimer) {
+                clearInterval(_similarCountsTimer);
+                _similarCountsTimer = null;
+            }
+        }
+
         function escapeHtml(s) {
             if (s == null) return '';
             return String(s)
@@ -3896,11 +3968,11 @@
                                 </div>
                             </div>
                             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                ${!todo.deleted_at ? `<button onclick="openSimilarModal('${todo.id}')" class="service-btn" style="background: var(--bg-dark); color: var(--accent-cyan); border: 1px solid var(--accent-cyan); padding: 4px 10px; font-size: 0.78rem;" title="Show similar tasks (semantic dedup drill-down)">🔍 similar<span data-similar-count="${todo.id}" style="margin-left: 4px; padding: 1px 6px; background: var(--accent-cyan); color: var(--bg-dark); border-radius: 9px; font-size: 0.7rem; font-weight: bold;">0</span></button>` : ''}
                                 ${todo.deleted_at ?
                                     `<button onclick="restoreTodo('${todo.id}')" class="service-btn restart" title="Restore task">↩️</button>` :
                                     `<button onclick="deleteTodo('${todo.id}')" class="service-btn danger" title="Delete task"></button>`
                                 }
-                                ${!todo.deleted_at ? `<button onclick="openSimilarModal('${todo.id}')" class="service-btn" style="background: var(--bg-dark); color: var(--accent-cyan); border: 1px solid var(--accent-cyan); padding: 4px 10px; font-size: 0.78rem;" title="Show similar tasks (semantic dedup drill-down)">🔍 similar</button>` : ''}
                                 ${!todo.deleted_at && todo.status === 'in_progress' ? `<button onclick="markTodoStatus('${todo.id}', 'completed')" class="service-btn start" title="Mark Completed (pending review)">⏳</button>` : ''}
                                 ${!todo.deleted_at && todo.status === 'completed' ? `<button onclick="markTodoStatus('${todo.id}', 'done')" class="service-btn start" title="Approve & Done">✓</button>` : ''}
                                 ${!todo.deleted_at && todo.status !== 'done' && todo.status !== 'in_progress' && todo.status !== 'completed' ? `<button onclick="markTodoStatus('${todo.id}', 'done')" class="service-btn start" title="Mark Done">✓</button>` : ''}
@@ -6143,44 +6215,118 @@
             // Sort by cost descending for the charts
             const sorted = [...models].sort((a, b) => (b.hardcoded_cost_usd || 0) - (a.hardcoded_cost_usd || 0));
 
-            // Cost chart
-            if (window.costByModelBarChart) window.costByModelBarChart.destroy();
-            const costCtx = document.getElementById('cbmCostChart').getContext('2d');
-            window.costByModelBarChart = new Chart(costCtx, {
-                type: 'bar',
-                data: {
-                    labels: sorted.map(m => m.model),
-                    datasets: [{
-                        label: '$ cost',
-                        data: sorted.map(m => m.hardcoded_cost_usd || 0),
-                        backgroundColor: '#4ec9b0',
-                    }]
-                },
-                options: { responsive: true, plugins: { legend: { display: false } } }
-            });
+            // Cost chart — horizontal bars per model (plain Canvas 2D,
+            // matching the rest of this file's chart pattern; no Chart.js
+            // dependency).
+            const costCanvas = document.getElementById('cbmCostChart');
+            if (costCanvas) {
+                const cctx = costCanvas.getContext('2d');
+                const cw = costCanvas.width = costCanvas.offsetWidth || 400;
+                const ch = costCanvas.height = 240;
+                cctx.clearRect(0, 0, cw, ch);
+                if (sorted.length === 0) {
+                    cctx.fillStyle = '#888';
+                    cctx.fillText('No data yet', 10, ch/2);
+                } else {
+                    const maxV = Math.max(0.0001, ...sorted.map(m => m.hardcoded_cost_usd || 0));
+                    const labelW = 180;
+                    const valueW = 70;
+                    const barAreaW = cw - labelW - valueW - 20;
+                    const rowH = Math.min(26, Math.floor((ch - 16) / sorted.length));
+                    cctx.font = '11px sans-serif';
+                    sorted.forEach((m, i) => {
+                        const y = 8 + i * rowH;
+                        const v = m.hardcoded_cost_usd || 0;
+                        // model label (truncate)
+                        cctx.fillStyle = '#ccc';
+                        const lbl = m.model.length > 24 ? m.model.slice(0, 22) + '…' : m.model;
+                        cctx.fillText(lbl, 4, y + rowH/2 + 4);
+                        // bar
+                        const barW = (v / maxV) * barAreaW;
+                        cctx.fillStyle = '#4ec9b0';
+                        cctx.fillRect(labelW, y + 4, barW, rowH - 8);
+                        // value
+                        cctx.fillStyle = '#ccc';
+                        cctx.fillText('$' + v.toFixed(4), labelW + barW + 6, y + rowH/2 + 4);
+                    });
+                }
+            }
             document.getElementById('cbmCostList').innerHTML = sorted
                 .map(m => `<div>${m.model}: $${(m.hardcoded_cost_usd || 0).toFixed(4)} ` +
                           `(${(m.calls||0).toLocaleString()} calls)</div>`).join('');
 
-            // Tokens chart (stacked: in / out / cache_read / cache_write)
-            if (window.cbmTokensChart) window.cbmTokensChart.destroy();
-            const tCtx = document.getElementById('cbmTokensChart').getContext('2d');
-            window.cbmTokensChart = new Chart(tCtx, {
-                type: 'bar',
-                data: {
-                    labels: sorted.map(m => m.model),
-                    datasets: [
-                        { label: 'in',         data: sorted.map(m => (m.tokens_in||0)/1e6),          backgroundColor: '#569cd6' },
-                        { label: 'out',        data: sorted.map(m => (m.tokens_out||0)/1e6),         backgroundColor: '#4ec9b0' },
-                        { label: 'cache_read', data: sorted.map(m => (m.cache_read_tokens||0)/1e6),  backgroundColor: '#c586c0' },
-                        { label: 'cache_write',data: sorted.map(m => (m.cache_write_tokens||0)/1e6), backgroundColor: '#dcdcaa' },
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    scales: { x: { stacked: true }, y: { stacked: true, title: { display: true, text: 'M tokens' } } }
+            // Tokens chart — horizontal stacked bars per model:
+            // in + out + cache_read + cache_write (each colored).
+            const tCanvas = document.getElementById('cbmTokensChart');
+            if (tCanvas) {
+                const tctx = tCanvas.getContext('2d');
+                const tw = tCanvas.width = tCanvas.offsetWidth || 400;
+                const th = tCanvas.height = 240;
+                tctx.clearRect(0, 0, tw, th);
+                if (sorted.length === 0) {
+                    tctx.fillStyle = '#888';
+                    tctx.fillText('No data yet', 10, th/2);
+                } else {
+                    // Per-model totals (for scaling)
+                    const totals = sorted.map(m =>
+                        (m.tokens_in||0) + (m.tokens_out||0) +
+                        (m.cache_read_tokens||0) + (m.cache_write_tokens||0)
+                    );
+                    const maxT = Math.max(1, ...totals);
+                    const labelW = 180;
+                    const valueW = 70;
+                    const barAreaW = tw - labelW - valueW - 20;
+                    const rowH = Math.min(26, Math.floor((th - 16) / sorted.length));
+                    const segs = [
+                        { key: 'tokens_in',          color: '#569cd6' },
+                        { key: 'tokens_out',         color: '#4ec9b0' },
+                        { key: 'cache_read_tokens',  color: '#c586c0' },
+                        { key: 'cache_write_tokens', color: '#dcdcaa' },
+                    ];
+                    tctx.font = '11px sans-serif';
+                    sorted.forEach((m, i) => {
+                        const y = 8 + i * rowH;
+                        const total = totals[i] || 0;
+                        // model label
+                        tctx.fillStyle = '#ccc';
+                        const lbl = m.model.length > 24 ? m.model.slice(0, 22) + '…' : m.model;
+                        tctx.fillText(lbl, 4, y + rowH/2 + 4);
+                        // stacked segments
+                        let xCursor = labelW;
+                        segs.forEach(s => {
+                            const v = m[s.key] || 0;
+                            if (v <= 0) return;
+                            const w = (v / maxT) * barAreaW;
+                            tctx.fillStyle = s.color;
+                            tctx.fillRect(xCursor, y + 4, Math.max(1, w), rowH - 8);
+                            xCursor += w;
+                        });
+                        // total at end (formatted as M/K)
+                        tctx.fillStyle = '#ccc';
+                        const label = total >= 1e6 ? (total/1e6).toFixed(2) + 'M'
+                                    : total >= 1e3 ? (total/1e3).toFixed(1) + 'K'
+                                    : String(total);
+                        tctx.fillText(label, labelW + (total/maxT) * barAreaW + 6, y + rowH/2 + 4);
+                    });
+                    // legend
+                    tctx.font = '10px sans-serif';
+                    let lx = 4;
+                    const ly = th - 12;
+                    const legend = [
+                        { c: '#569cd6', t: 'in' },
+                        { c: '#4ec9b0', t: 'out' },
+                        { c: '#c586c0', t: 'cache_read' },
+                        { c: '#dcdcaa', t: 'cache_write' },
+                    ];
+                    legend.forEach(L => {
+                        tctx.fillStyle = L.c;
+                        tctx.fillRect(lx, ly - 8, 10, 10);
+                        tctx.fillStyle = '#ccc';
+                        tctx.fillText(L.t, lx + 14, ly);
+                        lx += 14 + tctx.measureText(L.t).width + 12;
+                    });
                 }
-            });
+            }
             document.getElementById('cbmTokensList').innerHTML = sorted
                 .map(m => `<div>${m.model}: in=${(m.tokens_in||0).toLocaleString()} ` +
                           `out=${(m.tokens_out||0).toLocaleString()} ` +
